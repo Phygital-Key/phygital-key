@@ -104,6 +104,7 @@ async function approvePage() {
   $("type").textContent = view.first_key ? "Trust this key (your first key)"
     : view.adds_key ? "Add a new key to your trusted keys"
     : view.removes_key ? "Remove a key from your trusted keys"
+    : view.standing ? "Standing permission for: " + view.standing.for_type
     : request.type;
   $("aud").textContent = (view.adds_key || view.removes_key) ? "This approval gate (your list of trusted keys)" : view.aud;
   $("level").textContent = view.level === "high" ? "Fingerprint, face or PIN" : "A touch on your key";
@@ -131,6 +132,25 @@ async function approvePage() {
     cancelled: ["Cancelled", "The request was withdrawn."],
     expired: ["Expired", "Nobody decided in time, so the answer is no."],
   };
+  const until = view.standing ? new Date(view.standing.until * 1000).toLocaleString() : "";
+  if (view.standing && view.status === "approved") {
+    $("title").textContent = "Standing permission active";
+    $("lead").textContent = "Used " + view.standing.uses + " of " + view.standing.max_uses + " times. Ends " + until + ".";
+    if (view.standing.usable) {
+      $("actions").hidden = false;
+      $("approve").hidden = true;
+      $("deny").textContent = "Revoke now";
+      $("deny").onclick = async () => {
+        try {
+          await api("/api/r/" + encodeURIComponent(id) + "/revoke", {});
+          $("actions").hidden = true;
+          $("title").textContent = "Revoked";
+          $("lead").textContent = "No more uses can be made.";
+        } catch (e) { note(friendly(e), "bad"); }
+      };
+    }
+    return;
+  }
   if (view.status !== "pending") {
     const [t, l] = done[view.status] || ["Closed", ""];
     $("title").textContent = t;
@@ -145,6 +165,7 @@ async function approvePage() {
   $("title").textContent = view.first_key ? "Confirm your key"
     : view.adds_key ? "Approve a new key?"
     : view.removes_key ? "Remove this key?"
+    : view.standing ? "Give a standing permission?"
     : "Approve this request?";
   $("lead").textContent = view.first_key
     ? "Sign once with the key you just made. This proves it works and starts your signed key list."
@@ -152,6 +173,9 @@ async function approvePage() {
     ? "Someone is adding a new key. Approve only if you are adding it yourself, right now."
     : view.removes_key
     ? "This key will no longer be able to approve anything."
+    : view.standing
+    ? "The AI may do this on its own, up to " + view.standing.max_uses + " times until " + until +
+      ", only within the limits below (\"fixed\" values exactly, \"vary\" values within their limits). You can revoke it at any time."
     : "Check every detail. Your key will sign exactly what is shown here.";
   countdown($("deadline"), view.deadline, () => { $("actions").hidden = true; note("Time is up. The answer is no.", "bad"); });
   if (!webauthnSupported()) {

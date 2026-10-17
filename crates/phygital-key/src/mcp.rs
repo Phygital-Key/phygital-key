@@ -52,6 +52,32 @@ pub struct GetArgs {
     pub wait_seconds: Option<u64>,
 }
 
+/// Arguments for `request_standing_approval`.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct StandingArgs {
+    /// The action type each use will have, e.g. "payment".
+    pub for_type: String,
+    /// Params that must be exactly these values every time, e.g. {"to": "ACME Ltd", "currency": "EUR"}.
+    pub fixed: serde_json::Map<String, Value>,
+    /// Params that may change, with limits: {"amount_cents": {"max": 2000, "min": 1}} or {"memo": {"one_of": ["coffee", "lunch"]}}.
+    pub vary: std::collections::BTreeMap<String, Value>,
+    /// How many times it may be used (1 to 1000).
+    pub max_uses: u32,
+    /// How many days it lasts (1 to 30).
+    pub days: i64,
+    /// Who will act on each use.
+    pub aud: String,
+}
+
+/// Arguments for `use_standing_approval`.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct UseArgs {
+    /// The standing approval's id.
+    pub id: String,
+    /// The exact request for this use: {"type": ..., "params": {...}}, inside the approved limits.
+    pub request: Value,
+}
+
 /// Arguments for `record_receipt`.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ReceiptArgs {
@@ -188,7 +214,79 @@ impl GateMcp {
         }
     }
 
-    #[tool(description = "Withdraw a request that is still waiting.")]
+    #[tool(
+        description = "Ask a person once for a standing approval: the same kind of action, within fixed limits, a few times, for a few days. Each use then needs no new approval. Use sparingly; the person sees every limit."
+    )]
+    async fn request_standing_approval(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(args): Parameters<StandingArgs>,
+    ) -> CallToolResult {
+        let mut vary = std::collections::BTreeMap::new();
+        for (k, v) in args.vary {
+            match serde_json::from_value(v) {
+                Ok(limit) => {
+                    vary.insert(k, limit);
+                }
+                Err(_) => {
+                    return fail(format!(
+                        "vary.{k}: use {{\"max\": n, \"min\": n}} or {{\"one_of\": [\"a\", \"b\"]}}"
+                    ));
+                }
+            }
+        }
+        let view = match self.gate.create_standing(
+            &args.for_type,
+            args.fixed,
+            vary,
+            args.max_uses,
+            args.days,
+            &args.aud,
+        ) {
+            Ok(v) => v,
+            Err(e) => return fail(e),
+        };
+        let opened = match url::Url::parse(&view.approve_url) {
+            Ok(url) => peer
+                .elicit_url_with_timeout(
+                    "A person must approve this standing permission with their key. Open the page to review every limit.",
+                    url,
+                    view.id.clone(),
+                    Some(Duration::from_secs(300)),
+                )
+                .await
+                .is_ok(),
+            Err(_) => false,
+        };
+        let mut out = summary(&view, None);
+        if let Some(o) = out.as_object_mut() {
+            o.insert("next".into(), Value::from(if opened {
+                "The page was offered to the person. Call get_approval to wait, then use_standing_approval for each action."
+            } else {
+                "Show the person approve_url. Call get_approval to wait, then use_standing_approval for each action."
+            }));
+        }
+        text(out)
+    }
+
+    #[tool(
+        description = "Use an approved standing approval for one exact request inside its limits. Returns `approval` and `use_token`: send both to the service (headers Phygital-Approval and Phygital-Use)."
+    )]
+    async fn use_standing_approval(&self, Parameters(args): Parameters<UseArgs>) -> CallToolResult {
+        match self.gate.use_standing(&args.id, &args.request) {
+            Ok(u) => text(json!({
+                "approval": u.approval,
+                "use_token": u.use_token,
+                "uses_left": u.uses_left,
+                "next": "Send both to the service with this exact request. The token works once, within 60 seconds.",
+            })),
+            Err(e) => fail(e),
+        }
+    }
+
+    #[tool(
+        description = "Withdraw a request that is still waiting, or revoke an approved standing approval."
+    )]
     async fn cancel_approval(&self, Parameters(args): Parameters<IdArgs>) -> CallToolResult {
         match self.gate.cancel(&args.id) {
             Ok(v) => text(summary(&v, None)),

@@ -86,7 +86,7 @@ try {
   const mcp = new Client({ name: "e2e-agent", version: "1.0.0" });
   await mcp.connect(new StreamableHTTPClientTransport(new URL(GATE + "/mcp")));
   const tools = (await mcp.listTools()).tools.map((t) => t.name).sort();
-  check("MCP lists exactly 4 tools, none can approve", JSON.stringify(tools) === JSON.stringify(["cancel_approval", "get_approval", "record_receipt", "request_approval"]), tools.join(","));
+  check("MCP lists exactly 6 tools, none can approve", JSON.stringify(tools) === JSON.stringify(["cancel_approval", "get_approval", "record_receipt", "request_approval", "request_standing_approval", "use_standing_approval"]), tools.join(","));
   const early = await tool(mcp, "request_approval", { request: { type: "deploy", params: deploy }, aud: DEMO, level: "high" });
   check("no key enrolled: request refused", early.isError && /enroll/.test(early.error));
   const noToken = await fetch(GATE + "/api/enroll/begin", { method: "POST", headers: { "Content-Type": "application/json", Origin: GATE }, body: JSON.stringify({ token: "guess", name: "x" }) });
@@ -138,6 +138,19 @@ try {
   check("service returns a signed receipt", typeof ok.body.receipt === "string" && ok.body.receipt.split(".").length === 3);
   const rec = await tool(mcp, "record_receipt", { id: req.id, receipt: ok.body.receipt });
   check("gate records the receipt for this approval", rec.service_reported === "success", JSON.stringify(rec));
+  const parts = ok.body.receipt.split(".");
+  const fakeReceipt = parts[0] + "." + parts[1] + "." + "A".repeat(86);
+  const r2fake = await tool(mcp, "request_approval", { request: { type: "send_message", params: { to: "a@b.c", text: "fake receipt test" } }, aud: DEMO, level: "medium" });
+  const w2fake = tool(mcp, "get_approval", { id: r2fake.id, wait_seconds: 30 });
+  await approveInBrowser(page, r2fake.approve_url);
+  const a2fake = (await w2fake).approval;
+  const sent = await demo("send_message", { to: "a@b.c", text: "fake receipt test" }, a2fake);
+  const forgedBody = JSON.parse(Buffer.from(sent.body.receipt.split(".")[1], "base64url").toString());
+  forgedBody.status = "success";
+  const forgedReceipt = sent.body.receipt.split(".")[0] + "." + Buffer.from(JSON.stringify(forgedBody)).toString("base64url") + "." + "A".repeat(86);
+  const fakeRec = await tool(mcp, "record_receipt", { id: r2fake.id, receipt: forgedReceipt });
+  check("a receipt the agent made up is refused (signature checked)", fakeRec.isError && /not accepted/.test(fakeRec.error), fakeRec.error);
+  void fakeReceipt;
   const recAgain = await tool(mcp, "record_receipt", { id: req.id, receipt: ok.body.receipt });
   check("a receipt is recorded only once", recAgain.isError);
   const svc = await (await fetch(DEMO + "/.well-known/phygital-key-service.json")).json();
@@ -219,6 +232,48 @@ try {
   const cancelled = await tool(mcp, "cancel_approval", { id: c.id });
   check("cancel works", cancelled.status === "cancelled");
 
+  // Standing approvals: approve once, use a few times within limits.
+  const payParams = (cents) => ({ to: "ACME Ltd", currency: "EUR", amount_cents: cents });
+  const st = await tool(mcp, "request_standing_approval", {
+    for_type: "payment", fixed: { to: "ACME Ltd", currency: "EUR" }, vary: { amount_cents: { max: 2000, min: 1 } },
+    max_uses: 2, days: 1, aud: DEMO,
+  });
+  check("standing approval requested", !!st.id && !st.isError, st.error);
+  const earlyUse = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(450) } });
+  check("cannot use a standing approval before the person approves", earlyUse.isError);
+  const stWait = tool(mcp, "get_approval", { id: st.id, wait_seconds: 30 });
+  await page.goto(st.approve_url);
+  await page.locator("#actions").waitFor({ state: "visible" });
+  check("page explains the standing permission", (await page.locator("#lead").innerText()).includes("up to 2 times"));
+  await page.click("#approve");
+  await page.waitForFunction(() => /Approved|active/.test(document.getElementById("title").textContent), null, { timeout: 15000 });
+  check("standing approval approved", (await stWait).status === "approved");
+  const use1 = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(450) } });
+  check("first use signed, one left", !!use1.use_token && use1.uses_left === 1, use1.error);
+  const standingAlone = await demo("payment", payParams(450), use1.approval);
+  check("standing approval alone is not a one-time approval", standingAlone.body.error === "MALFORMED");
+  const pay1 = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use1.approval, "Phygital-Use": use1.use_token }, body: JSON.stringify(payParams(450)) });
+  check("service accepts a use inside the limits", pay1.status === 200);
+  const pay1again = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use1.approval, "Phygital-Use": use1.use_token }, body: JSON.stringify(payParams(450)) });
+  check("the same use token twice is refused", (await pay1again.json()).error === "REPLAYED");
+  const payOther = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use1.approval, "Phygital-Use": use1.use_token }, body: JSON.stringify(payParams(999)) });
+  check("a use token for 450 cannot pay 999", (await payOther.json()).error === "REQUEST_MISMATCH");
+  const over = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(5000) } });
+  check("gate refuses a use over the limit", over.isError && /outside the limits/.test(over.error));
+  const otherPayee = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: { to: "Mallory", currency: "EUR", amount_cents: 100 } } });
+  check("gate refuses another payee", otherPayee.isError);
+  const use2 = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(2000) } });
+  check("second use signed, none left", use2.uses_left === 0);
+  const use3 = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(10) } });
+  check("third use refused (max 2)", use3.isError && /No uses left/.test(use3.error));
+  await page.goto(st.approve_url);
+  await page.waitForFunction(() => /active/.test(document.getElementById("title").textContent), null, { timeout: 5000 });
+  check("page shows uses so far", (await page.locator("#lead").innerText()).includes("Used 2 of 2"));
+  await page.click("#deny");
+  await page.waitForFunction(() => document.getElementById("title").textContent === "Revoked", null, { timeout: 5000 });
+  const afterRevoke = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(10) } });
+  check("revoked: no more uses", afterRevoke.isError);
+
   // Bad input from the agent.
   const floaty = await tool(mcp, "request_approval", { request: { type: "payment", params: { amount: 10.5 } }, aud: DEMO, level: "high" });
   check("floats are refused at the gate", floaty.isError);
@@ -283,15 +338,29 @@ try {
   const forgedPath = join(home, "forged-keyring.json");
   writeFileSync(forgedPath, JSON.stringify(forgedRing));
   let forgedRefused = false;
-  try { execFileSync(BIN, args(["keys", "--check", rootFp, "--file", forgedPath]), { stdio: ["ignore", "pipe", "ignore"] }); }
+  try { execFileSync(BIN, args(["keys", "--check", rootFp, "--file", forgedPath, "--signed-on", GATE]), { stdio: ["ignore", "pipe", "ignore"] }); }
   catch (e) { forgedRefused = e.status === 1 && /NOT ok/.test(e.stdout.toString()); }
   check("a key slipped into the file without a signature is caught", forgedRefused);
+  // A rollback to an older copy is caught when the previous copy is kept.
+  const olderPath = join(home, "older-keyring.json");
+  writeFileSync(olderPath, JSON.stringify({ ...ringDoc, keys: ringDoc.keys.slice(0, 1), history: ringDoc.history.slice(0, 1) }));
+  let rollbackRefused = false;
+  try { execFileSync(BIN, args(["keys", "--check", rootFp, "--file", olderPath, "--signed-on", GATE, "--previous", ringFile]), { stdio: ["ignore", "pipe", "ignore"] }); }
+  catch (e) { rollbackRefused = e.status === 1 && /rollback|NOT ok/.test(e.stdout.toString()); }
+  check("an older copy of the key list (rollback) is caught", rollbackRefused);
+  let wrongOrigin = false;
+  try { execFileSync(BIN, args(["keys", "--check", rootFp, "--file", ringFile, "--signed-on", "https://other.example"]), { stdio: ["ignore", "pipe", "ignore"] }); }
+  catch (e) { wrongOrigin = e.status === 1; }
+  check("a key list signed on another gate is refused", wrongOrigin);
 
   // Remove the second key: needs approval by a trusted key.
+  const secondCred = afterApproval.keys.find((k) => k.name === "E2E second key").credential_id;
   await page.goto(GATE + "/");
   await page.locator("button.link").first().waitFor({ state: "visible" });
   await page.locator("li", { hasText: "E2E second key" }).locator("button.link").click();
   await page.waitForURL(/\/r\//, { timeout: 15000 });
+  const rm2 = await fetch(GATE + "/api/keys/remove", { method: "POST", headers: { "Content-Type": "application/json", Origin: GATE }, body: JSON.stringify({ credential_id: secondCred }) });
+  check("a second removal of the same key is refused while one waits", rm2.status === 400);
   await page.locator("#actions").waitFor({ state: "visible" });
   check("remove page says so", (await page.locator("#title").innerText()).includes("Remove this key"));
   check("key is still trusted before approval", (await (await fetch(GATE + "/api/status")).json()).keys.length === 2);

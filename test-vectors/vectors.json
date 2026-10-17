@@ -2201,6 +2201,44 @@
       "name": "approval_16386_chars"
     },
     {
+      "description": "A request of type standing is never a one-time approval.",
+      "expected": {
+        "error": "MALFORMED",
+        "ok": false
+      },
+      "input": {
+        "approval": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjA3MDAwNjAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3IiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnt9LCJ0eXBlIjoic3RhbmRpbmcifSwicmVxdWVzdF9oYXNoIjoidHU4dmlmRU5jZjQzeWtnRi1tY1BuUlBraHp0dmw0OEtRY1U4WHJIQm96VSIsInYiOiJwa2EuMSJ9LCJzaWduYXR1cmVzIjpbeyJhdXRoZW50aWNhdG9yX2RhdGEiOiJfcGdMdUhRRlBKZUZzLUEtSDN4Q3FfUmZZODdIdzdhM0wzeDRMcjdyRUtrRkFBQUFBQSIsImNsaWVudF9kYXRhX2pzb24iOiJleUpqYUdGc2JHVnVaMlVpT2lJM2MyVmljVjlSWm14V1JEQnJTMHhzYzFGWlgxbFlkalJ2TTNOWVVVRnViV3BpVUdVME5VWnBhVk5aSWl3aVkzSnZjM05QY21sbmFXNGlPbVpoYkhObExDSnZjbWxuYVc0aU9pSm9kSFJ3Y3pvdkwyRndjSEp2ZG1VdVpYaGhiWEJzWlM1amIyMGlMQ0owZVhCbElqb2lkMlZpWVhWMGFHNHVaMlYwSW4wIiwiY3JlZGVudGlhbF9pZCI6InZTelVHU0Q3QUJHemdScms1RmlqQWciLCJzaWduYXR1cmUiOiJNRVVDSUQ3M2stY1gtSUYwN0tLdXJHZ0UzaGlIZjc0ZUdWUmpsd0gzTmtnbjRFdVNBaUVBOEVGRlVpajM4N2NlNkxNMXNlTlFXZU5PWXJSUzBmVU1MczM2eXkwNHgwdyJ9XX0",
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1760700010,
+        "request": {
+          "params": {},
+          "type": "standing"
+        },
+        "seen_ids": []
+      },
+      "name": "standing_as_one_time"
+    },
+    {
       "description": "The id was already used.",
       "expected": {
         "error": "REPLAYED",

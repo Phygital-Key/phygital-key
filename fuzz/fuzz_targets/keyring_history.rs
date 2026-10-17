@@ -6,7 +6,7 @@ use phygital_key_verify::{Keyring, history};
 fuzz_target!(|data: &[u8]| {
     if let Ok(text) = std::str::from_utf8(data) {
         if let Ok(ring) = serde_json::from_str::<Keyring>(text) {
-            assert!(history::verify_history(&ring, "not-a-real-fingerprint").is_err());
+            assert!(history::verify_history(&ring, "not-a-real-fingerprint", "https://approve.example.com").is_err());
         }
     }
 });

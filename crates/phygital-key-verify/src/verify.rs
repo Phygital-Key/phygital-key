@@ -38,6 +38,10 @@ pub enum ErrorCode {
     Replayed,
     /// The person said no (returned by gates, never by `verify`).
     Denied,
+    /// Outside the limits of a standing approval.
+    NotAllowed,
+    /// A standing approval has no uses left.
+    UsedUp,
 }
 
 impl ErrorCode {
@@ -54,11 +58,13 @@ impl ErrorCode {
             ErrorCode::AssuranceTooLow => "ASSURANCE_TOO_LOW",
             ErrorCode::Replayed => "REPLAYED",
             ErrorCode::Denied => "DENIED",
+            ErrorCode::NotAllowed => "NOT_ALLOWED",
+            ErrorCode::UsedUp => "USED_UP",
         }
     }
 
     /// Every code, for tests and docs.
-    pub const ALL: [ErrorCode; 10] = [
+    pub const ALL: [ErrorCode; 12] = [
         ErrorCode::ApprovalRequired,
         ErrorCode::Malformed,
         ErrorCode::WrongAudience,
@@ -69,6 +75,8 @@ impl ErrorCode {
         ErrorCode::AssuranceTooLow,
         ErrorCode::Replayed,
         ErrorCode::Denied,
+        ErrorCode::NotAllowed,
+        ErrorCode::UsedUp,
     ];
 }
 
@@ -143,6 +151,22 @@ pub fn check(
     config: &Config,
     now: i64,
 ) -> Result<Verified, ErrorCode> {
+    check_kind(approval, expected, keyring, config, now, false)
+}
+
+/// The type name reserved for standing approvals. Never an action.
+pub const STANDING_TYPE: &str = "standing";
+
+/// [`check`] for one-time approvals (`standing == false`) or standing ones.
+/// A standing approval can never pass as a one-time approval, or the reverse.
+pub(crate) fn check_kind(
+    approval: &str,
+    expected: &Expected,
+    keyring: &Keyring,
+    config: &Config,
+    now: i64,
+    standing: bool,
+) -> Result<Verified, ErrorCode> {
     use ErrorCode as E;
 
     // 1. Present, well formed, within limits.
@@ -160,6 +184,15 @@ pub fn check(
     if claims.v != VERSION || !id_ok(&claims.id) || !request_shape_ok(&claims.request) {
         return Err(E::Malformed);
     }
+    let is_standing = claims.request.get("type").and_then(Value::as_str) == Some(STANDING_TYPE);
+    if is_standing != standing {
+        return Err(E::Malformed);
+    }
+    let max_life = if standing {
+        crate::standing::MAX_STANDING_SECS
+    } else {
+        MAX_LIFETIME_SECS
+    };
     let [sig] = obj.signatures.as_slice() else {
         return Err(E::Malformed);
     };
@@ -189,7 +222,7 @@ pub fn check(
     if claims.iat > now.saturating_add(MAX_CLOCK_SKEW_SECS)
         || now >= claims.exp
         || claims.exp <= claims.iat
-        || claims.exp.saturating_sub(claims.iat) > MAX_LIFETIME_SECS
+        || claims.exp.saturating_sub(claims.iat) > max_life
     {
         return Err(E::Expired);
     }

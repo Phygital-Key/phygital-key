@@ -113,9 +113,10 @@ async fn status(State(gate): State<Shared>) -> Response {
     match gate.keyring() {
         Ok(ring) => {
             let root = phygital_key_verify::history::root_fingerprint(&ring);
-            let signed = root
-                .as_deref()
-                .is_some_and(|fp| phygital_key_verify::history::verify_history(&ring, fp).is_ok());
+            let signed = root.as_deref().is_some_and(|fp| {
+                phygital_key_verify::history::verify_history(&ring, fp, &gate.settings.origin)
+                    .is_ok()
+            });
             ok(json!({
                 "keys": ring.keys.iter().map(|k| json!({"name": k.name, "credential_id": k.credential_id, "created": k.created, "fingerprint": k.fingerprint()})).collect::<Vec<_>>(),
                 "rp_id": gate.settings.rp_id,
@@ -167,6 +168,13 @@ async fn finish(
 
 async fn deny(State(gate): State<Shared>, Path(id): Path<String>) -> Response {
     match gate.deny(&id) {
+        Ok(v) => ok(v),
+        Err(e) => err(StatusCode::CONFLICT, e),
+    }
+}
+
+async fn revoke(State(gate): State<Shared>, Path(id): Path<String>) -> Response {
+    match gate.cancel(&id) {
         Ok(v) => ok(v),
         Err(e) => err(StatusCode::CONFLICT, e),
     }
@@ -250,6 +258,7 @@ pub fn router(gate: Shared, extra: Option<Router>) -> Router {
         .route("/api/r/{id}/start", post(start))
         .route("/api/r/{id}/finish", post(finish))
         .route("/api/r/{id}/deny", post(deny))
+        .route("/api/r/{id}/revoke", post(revoke))
         .route("/api/enroll/begin", post(enroll_begin))
         .route("/api/enroll/finish", post(enroll_finish))
         .route("/api/keys/remove", post(remove_key))

@@ -14,6 +14,7 @@ use axum::{Json, Router};
 use p256::ecdsa::SigningKey;
 use p256::pkcs8::EncodePublicKey;
 use phygital_key_verify::receipt::{self, Receipt};
+use phygital_key_verify::standing::{MemoryUseStore, verify_use};
 use phygital_key_verify::{
     Config, Expected, Keyring, Level, MemorySeenStore, b64, canonical, verify,
 };
@@ -30,6 +31,7 @@ pub struct Demo {
     /// Where approvals may come from.
     pub config: Config,
     seen: MemorySeenStore,
+    uses: MemoryUseStore,
     /// The service's own receipt key (a fresh one each run: it is a demo).
     key: SigningKey,
 }
@@ -44,6 +46,7 @@ impl Demo {
             keyring_path,
             config,
             seen: MemorySeenStore::new(),
+            uses: MemoryUseStore::new(),
             key,
         }))
     }
@@ -102,10 +105,10 @@ async fn info(State(d): State<Arc<Demo>>) -> Response {
         "aud": d.aud,
         "actions": {
             "POST /deploy": "level high. Body: params, e.g. {\"service\":\"api\",\"env\":\"production\",\"version\":\"2.4.1\"}",
-            "POST /payment": "level high. Body: params, e.g. {\"to\":\"ACME Ltd\",\"amount\":\"120.00\",\"currency\":\"EUR\"}",
+            "POST /payment": "level high. Body: params, e.g. {\"to\":\"ACME Ltd\",\"amount_cents\":12000,\"currency\":\"EUR\"}",
             "POST /send_message": "level medium. Body: params, e.g. {\"to\":\"sam@example.com\",\"text\":\"Hi\"}"
         },
-        "how": "First get an approval for {\"type\": <action>, \"params\": <body>} with aud set to this service's aud. Then POST the body with header `Phygital-Approval: <approval>`."
+        "how": "First get an approval for {\"type\": <action>, \"params\": <body>} with aud set to this service's aud. Then POST the body with header `Phygital-Approval: <approval>`. With a standing approval, also send `Phygital-Use: <use_token>`."
     }))
     .into_response()
 }
@@ -136,7 +139,21 @@ async fn act(
         request: &request,
         level,
     };
-    match verify(approval, &expected, &keyring, &d.seen, &d.config, now()) {
+    let use_token = headers.get("phygital-use").and_then(|h| h.to_str().ok());
+    let result = match use_token {
+        Some(token) => verify_use(
+            approval,
+            token,
+            &expected,
+            &keyring,
+            &d.uses,
+            &d.config,
+            now(),
+        )
+        .map(|u| u.standing),
+        None => verify(approval, &expected, &keyring, &d.seen, &d.config, now()),
+    };
+    match result {
         Ok(ok) => Json(json!({
             "ok": true,
             "done": format!("{verb} (demo: nothing real happened)"),

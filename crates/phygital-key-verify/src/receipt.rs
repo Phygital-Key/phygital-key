@@ -104,11 +104,10 @@ pub fn verify(
     else {
         return Err(R::Malformed);
     };
-    let header = b64::decode(h)
-        .and_then(|b| strict::parse(&b))
-        .ok_or(R::Malformed)?;
-    let want = json!({"alg": "ES256", "typ": RECEIPT_TYP});
-    if header != want {
+    // The header must be exactly these bytes: no reordering, no extras, no other alg.
+    let want = canonical::canonical_bytes(&json!({"alg": "ES256", "typ": RECEIPT_TYP}))
+        .map_err(|_| R::Malformed)?;
+    if b64::decode(h).as_deref() != Some(want.as_slice()) {
         return Err(R::Malformed);
     }
     let sig_bytes = b64::decode(s).ok_or(R::Malformed)?;
@@ -120,11 +119,27 @@ pub fn verify(
         .and_then(|b| strict::parse(&b))
         .ok_or(R::Malformed)?;
     let receipt: Receipt = serde_json::from_value(payload).map_err(|_| R::Malformed)?;
-    if receipt.v != "pka.receipt.1" || !matches!(receipt.status.as_str(), "success" | "error") {
+    let status_ok = match receipt.status.as_str() {
+        "success" => receipt.error.is_none(),
+        "error" => true,
+        _ => false,
+    };
+    if receipt.v != "pka.receipt.1" || !status_ok {
         return Err(R::Malformed);
     }
     let reference = reference_of(approval);
-    if receipt.iss != iss || !bool::from(receipt.reference.as_bytes().ct_eq(reference.as_bytes())) {
+    // The approval's own claims: the receipt must name the same id, request and service.
+    let claims = b64::decode(approval)
+        .and_then(|b| strict::parse(&b))
+        .and_then(|v| v.get("claims").cloned())
+        .ok_or(R::Mismatch)?;
+    let same = |k: &str, v: &str| claims.get(k).and_then(Value::as_str) == Some(v);
+    if receipt.iss != iss
+        || !bool::from(receipt.reference.as_bytes().ct_eq(reference.as_bytes()))
+        || !same("id", &receipt.approval_id)
+        || !same("request_hash", &receipt.request_hash)
+        || !same("aud", &receipt.iss)
+    {
         return Err(R::Mismatch);
     }
     Ok(receipt)
@@ -152,6 +167,14 @@ mod tests {
         })
     }
 
+    /// A stand-in approval string with the claims a receipt is checked against.
+    fn approval_text() -> String {
+        b64::encode(
+            json!({"claims": {"id": "BwcHBwcHBwcHBwcHBwcHBw", "request_hash": "x", "aud": "https://deploy.example.com"}})
+                .to_string(),
+        )
+    }
+
     fn sample(approval: &str) -> Receipt {
         Receipt {
             v: "pka.receipt.1".into(),
@@ -168,12 +191,12 @@ mod tests {
     #[test]
     fn round_trip_and_refusals() -> Result<(), ReceiptError> {
         let (k, other) = (key(1), key(2));
-        let jws = sign(&sample("APPROVAL"), &k)?;
+        let jws = sign(&sample(&approval_text()), &k)?;
         let r = verify(
             &jws,
             k.verifying_key(),
             "https://deploy.example.com",
-            "APPROVAL",
+            &approval_text(),
         )?;
         assert_eq!(r.status, "success");
         assert_eq!(
@@ -181,12 +204,17 @@ mod tests {
                 &jws,
                 other.verifying_key(),
                 "https://deploy.example.com",
-                "APPROVAL"
+                &approval_text()
             ),
             Err(ReceiptError::BadSignature)
         );
         assert_eq!(
-            verify(&jws, k.verifying_key(), "https://other.example", "APPROVAL"),
+            verify(
+                &jws,
+                k.verifying_key(),
+                "https://other.example",
+                &approval_text()
+            ),
             Err(ReceiptError::Mismatch)
         );
         assert_eq!(
@@ -194,7 +222,7 @@ mod tests {
                 &jws,
                 k.verifying_key(),
                 "https://deploy.example.com",
-                "OTHER"
+                &b64::encode("{}")
             ),
             Err(ReceiptError::Mismatch)
         );
@@ -207,7 +235,7 @@ mod tests {
                 &parts.join("."),
                 k.verifying_key(),
                 "https://deploy.example.com",
-                "APPROVAL"
+                &approval_text()
             ),
             Err(ReceiptError::BadSignature)
         );
@@ -221,9 +249,51 @@ mod tests {
                 &none_alg,
                 k.verifying_key(),
                 "https://deploy.example.com",
-                "APPROVAL"
+                &approval_text()
             ),
             Err(ReceiptError::Malformed)
+        );
+        // Same header, keys in another order: refused (must be exact bytes).
+        let mut r2 = sample(&approval_text());
+        let signed = sign(&r2, &k)?;
+        let body = signed.split('.').nth(1).unwrap_or_default().to_string();
+        let reordered_h = b64::encode(br#"{"typ":"pka-receipt+jwt","alg":"ES256"}"#);
+        let input = format!("{reordered_h}.{body}");
+        let sig: Signature = k.sign(input.as_bytes());
+        let reordered = format!("{input}.{}", b64::encode(sig.to_bytes()));
+        assert_eq!(
+            verify(
+                &reordered,
+                k.verifying_key(),
+                "https://deploy.example.com",
+                &approval_text()
+            ),
+            Err(ReceiptError::Malformed)
+        );
+        // "success" with an error code: refused.
+        r2.error = Some("x".into());
+        let contradictory = sign(&r2, &k)?;
+        assert_eq!(
+            verify(
+                &contradictory,
+                k.verifying_key(),
+                "https://deploy.example.com",
+                &approval_text()
+            ),
+            Err(ReceiptError::Malformed)
+        );
+        // About another approval id: refused.
+        let mut r3 = sample(&approval_text());
+        r3.approval_id = "AAAAAAAAAAAAAAAAAAAAAA".into();
+        let other_id = sign(&r3, &k)?;
+        assert_eq!(
+            verify(
+                &other_id,
+                k.verifying_key(),
+                "https://deploy.example.com",
+                &approval_text()
+            ),
+            Err(ReceiptError::Mismatch)
         );
         Ok(())
     }

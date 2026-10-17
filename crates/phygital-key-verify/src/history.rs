@@ -7,11 +7,14 @@
 //!    Whoever checks the history pins this key's fingerprint once.
 //! 2. Every later entry is `add_key` or `remove_key`, signed by a key that is
 //!    trusted at that point.
-//! 3. Replaying the history must give exactly the keys listed in the keyring.
+//! 3. Entries are in time order (`iat` never goes back), and replaying the
+//!    history must give exactly the key cards listed in the keyring.
 //!
-//! So a keyring fetched from a website can be trusted with one short
-//! fingerprint, and nobody who controls the website (or the file) can slip in
-//! an extra key without a signature from a key already trusted.
+//! A checked history proves every listed key was approved by an earlier
+//! trusted key, back to one pinned fingerprint. It cannot prove it is the
+//! *latest* history: an old copy (from before a key was removed) is also a valid
+//! history. So whoever fetches a keyring more than once must keep the last one
+//! they accepted and take only extensions of it: [`verify_history_update`].
 
 use std::collections::HashSet;
 
@@ -46,6 +49,10 @@ pub enum HistoryError {
     BadEntry(usize, &'static str),
     /// The keys listed are not the keys the history produces.
     KeysDoNotMatch,
+    /// Signed on another gate's approval page.
+    WrongOrigin,
+    /// The new history does not extend the one accepted before (rollback or fork).
+    NotAnUpdate,
 }
 
 impl HistoryError {
@@ -56,6 +63,8 @@ impl HistoryError {
             HistoryError::WrongRoot => "WRONG_ROOT",
             HistoryError::BadEntry(..) => "BAD_ENTRY",
             HistoryError::KeysDoNotMatch => "KEYS_DO_NOT_MATCH",
+            HistoryError::WrongOrigin => "WRONG_ORIGIN",
+            HistoryError::NotAnUpdate => "NOT_AN_UPDATE",
         }
     }
 }
@@ -71,6 +80,12 @@ impl std::fmt::Display for HistoryError {
             HistoryError::KeysDoNotMatch => {
                 f.write_str("the listed keys are not the keys the history signs")
             }
+            HistoryError::WrongOrigin => {
+                f.write_str("the history was signed on another approval page")
+            }
+            HistoryError::NotAnUpdate => f.write_str(
+                "the new history does not extend the one accepted before (rollback or fork)",
+            ),
         }
     }
 }
@@ -87,12 +102,8 @@ fn peek(approval: &str) -> Option<(Value, i64)> {
 }
 
 fn same_keys(a: &[KeyCard], b: &[KeyCard]) -> bool {
-    let set = |k: &[KeyCard]| -> HashSet<(String, String)> {
-        k.iter()
-            .map(|c| (c.credential_id.clone(), c.public_key.clone()))
-            .collect()
-    };
-    a.len() == b.len() && set(a) == set(b)
+    // Whole cards: id, key, RP ID, name and date must all match what was signed.
+    a.len() == b.len() && a.iter().all(|x| b.iter().filter(|y| *y == x).count() == 1)
 }
 
 /// Check a keyring's signed history against a pinned root fingerprint
@@ -101,17 +112,29 @@ fn same_keys(a: &[KeyCard], b: &[KeyCard]) -> bool {
 /// Expiry is not checked: each entry is checked as of its own `iat`.
 /// Everything else is: signature, trusted key, level `high`, audience,
 /// exact request, single use within the history.
-pub fn verify_history(ring: &Keyring, root_fingerprint: &str) -> Result<(), HistoryError> {
+pub fn verify_history(
+    ring: &Keyring,
+    root_fingerprint: &str,
+    origin: &str,
+) -> Result<(), HistoryError> {
     use HistoryError as H;
-    let origin = ring.origin.as_deref().ok_or(H::Unsigned)?;
+    let listed = ring.origin.as_deref().ok_or(H::Unsigned)?;
     if ring.history.is_empty() {
         return Err(H::Unsigned);
     }
+    if listed != origin {
+        return Err(H::WrongOrigin);
+    }
+    let mut last_iat = i64::MIN;
     let aud = keyring_aud(origin);
     let mut trusted: Vec<KeyCard> = Vec::new();
     let mut seen = HashSet::new();
     for (n, approval) in ring.history.iter().enumerate() {
         let (claims, iat) = peek(approval).ok_or(H::BadEntry(n, "not an approval"))?;
+        if iat < last_iat {
+            return Err(H::BadEntry(n, "out of time order"));
+        }
+        last_iat = iat;
         let id = claims
             .get("id")
             .and_then(Value::as_str)
@@ -196,6 +219,23 @@ pub fn verify_history(ring: &Keyring, root_fingerprint: &str) -> Result<(), Hist
     } else {
         Err(H::KeysDoNotMatch)
     }
+}
+
+/// Accept a refetched keyring only if it extends the one accepted before:
+/// same entries first, byte for byte, then any new ones, and the whole thing valid.
+/// This is what stops an old copy (rollback) or a branch signed by a removed key (fork).
+pub fn verify_history_update(
+    accepted: &Keyring,
+    new: &Keyring,
+    root_fingerprint: &str,
+    origin: &str,
+) -> Result<(), HistoryError> {
+    if new.history.len() < accepted.history.len()
+        || new.history.get(..accepted.history.len()) != Some(accepted.history.as_slice())
+    {
+        return Err(HistoryError::NotAnUpdate);
+    }
+    verify_history(new, root_fingerprint, origin)
 }
 
 /// The fingerprint of the key that started a signed history (the one to pin).

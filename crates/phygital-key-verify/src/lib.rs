@@ -16,6 +16,7 @@ pub mod canonical;
 pub mod history;
 mod model;
 pub mod receipt;
+pub mod standing;
 pub mod strict;
 mod verify;
 pub mod webauthn;
@@ -25,4 +26,6 @@ pub use model::{
     Level, MAX_APPROVAL_BYTES, MAX_CLOCK_SKEW_SECS, MAX_LIFETIME_SECS, MAX_REQUEST_BYTES, VERSION,
     id_ok, request_shape_ok,
 };
-pub use verify::{ErrorCode, MemorySeenStore, SeenStore, Verified, Verifier, check, verify};
+pub use verify::{
+    ErrorCode, MemorySeenStore, STANDING_TYPE, SeenStore, Verified, Verifier, check, verify,
+};

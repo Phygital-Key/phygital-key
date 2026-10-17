@@ -70,6 +70,12 @@ enum Command {
         /// Keyring file to print or check [default: <home>/keyring.json].
         #[arg(long)]
         file: Option<PathBuf>,
+        /// The approval page origin the history must be signed on (needed with --file).
+        #[arg(long = "signed-on", value_name = "ORIGIN")]
+        signed_on: Option<String>,
+        /// The keyring you accepted last time: the new one must extend it (stops rollbacks).
+        #[arg(long)]
+        previous: Option<PathBuf>,
     },
     /// Check an approval from the command line (any language can call this).
     Verify {
@@ -106,6 +112,15 @@ enum Command {
         /// The approval the receipt is about (or @file).
         #[arg(long)]
         approval: String,
+    },
+    /// Pin a service's receipt key, so the gate only shows receipts that service really signed.
+    TrustService {
+        /// The service's audience id.
+        #[arg(long)]
+        aud: String,
+        /// Its receipt public key, SPKI DER base64url (from its /.well-known/phygital-key-service.json).
+        #[arg(long)]
+        key: String,
     },
     /// Check that the audit log has not been changed.
     AuditCheck,
@@ -224,7 +239,24 @@ async fn run(cli: Cli) -> Result<(), String> {
             );
             Ok(())
         }
-        Command::Keys { check, file } => {
+        Command::Keys {
+            check,
+            file,
+            signed_on,
+            previous,
+        } => {
+            let origin = match (&file, signed_on) {
+                (_, Some(o)) => o,
+                (None, None) => s.origin.clone(),
+                (Some(_), None) => return Err("with --file, say where it must be signed: --signed-on https://approve.example.com".into()),
+            };
+            let previous = match previous {
+                Some(path) => Some(Keyring::from_json(
+                    &std::fs::read_to_string(&path)
+                        .map_err(|e| format!("{}: {e}", path.display()))?,
+                )?),
+                None => None,
+            };
             let ring = match file {
                 Some(path) => Keyring::from_json(
                     &std::fs::read_to_string(&path)
@@ -233,7 +265,12 @@ async fn run(cli: Cli) -> Result<(), String> {
                 None => Gate::open(s)?.keyring()?,
             };
             match check {
-                Some(fp) => match phygital_key_verify::history::verify_history(&ring, &fp) {
+                Some(fp) => match match &previous {
+                    Some(old) => phygital_key_verify::history::verify_history_update(
+                        old, &ring, &fp, &origin,
+                    ),
+                    None => phygital_key_verify::history::verify_history(&ring, &fp, &origin),
+                } {
                     Ok(()) => {
                         println!(
                             "keyring ok: {} keys, every change signed, starting from {fp}",
@@ -287,6 +324,27 @@ async fn run(cli: Cli) -> Result<(), String> {
                     std::process::exit(1);
                 }
             }
+        }
+        Command::TrustService { aud, key } => {
+            if phygital_key_verify::webauthn::parse_public_key(&key).is_none() {
+                return Err("--key is not a P-256 public key (SPKI DER, base64url)".into());
+            }
+            util::private_dir(&s.home)?;
+            let path = s.home.join("services.json");
+            let mut doc: serde_json::Value = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|t| serde_json::from_str(&t).ok())
+                .unwrap_or_else(|| serde_json::json!({"services": []}));
+            let list = doc
+                .get_mut("services")
+                .and_then(|v| v.as_array_mut())
+                .ok_or("services.json is damaged")?;
+            list.retain(|e| e.get("aud").and_then(|a| a.as_str()) != Some(aud.as_str()));
+            list.push(serde_json::json!({"aud": aud, "receipt_public_key": key}));
+            let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n";
+            util::write_private(&path, text.as_bytes())?;
+            println!("pinned the receipt key of {aud}");
+            Ok(())
         }
         Command::AuditCheck => {
             let (n, last) = audit::verify_file(&s.home.join("audit.log"))?;
@@ -370,7 +428,7 @@ async fn run(cli: Cli) -> Result<(), String> {
             prune_every_minute(&gate);
             let demo_port = s.port.checked_add(1).ok_or("port too high")?;
             let demo_aud = format!("http://localhost:{demo_port}");
-            let demo = demo::Demo::new(
+            let demo_for_pin = demo::Demo::new(
                 demo_aud.clone(),
                 s.home.join("keyring.json"),
                 Config {
@@ -378,6 +436,9 @@ async fn run(cli: Cli) -> Result<(), String> {
                     rp_ids: vec![s.rp_id.clone()],
                 },
             )?;
+            let demo = demo_for_pin;
+            // The demo service runs in this process, so the gate can pin its receipt key directly.
+            gate.pin_service(&demo_aud, &demo.public_key());
             let listener = tokio::net::TcpListener::bind(format!("{}:{demo_port}", s.bind))
                 .await
                 .map_err(|e| format!("demo service port {demo_port}: {e}"))?;
