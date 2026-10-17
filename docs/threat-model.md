@@ -1,0 +1,51 @@
+# Threat model (v0.1, pre-audit)
+
+Plain words first: Phygital Key makes sure **a real person said yes to this exact request**, and that **the yes cannot be faked, changed or reused**. It does not make a bad request safe, and it cannot protect a service that does not check the approval.
+
+## What we protect
+
+1. **The yes itself.** Only the person's key can make it. It covers one exact request, for one audience, for up to 5 minutes, once.
+2. **The approver's keys.** They never leave the person's device. The gate only ever sees public keys.
+3. **The record.** Every request, approval, denial and new key is in a hash-chained audit log.
+
+## Who we defend against
+
+| Attacker | Example | Defense |
+|---|---|---|
+| A misled or hostile AI agent | Prompt injection makes it want to deploy, pay or delete | It can only ask. It never holds a key. Text inside a request is shown as data and never counts as a yes. |
+| An agent that changes the request after approval | Approved 2.4.1, sends 2.4.2, adds `force: true`, swaps the action type | The verifier hashes the request it is about to run. Any change is `REQUEST_MISMATCH`. |
+| An agent that reuses or stretches an approval | Replays it, uses it later, uses it at another service | Single-use `id` (`REPLAYED`), short `exp` (`EXPIRED`), `aud` (`WRONG_AUDIENCE`). |
+| An agent that asks for too little | Requests `medium` for a production deploy | The **verifier** sets the level it needs (`ASSURANCE_TOO_LOW`). |
+| An agent that forges | Sends a made-up signature to the gate or the service | Signatures are checked against trusted public keys (`BAD_SIGNATURE`, `UNTRUSTED_KEY`). The gate checks before it stores anything. |
+| An agent that adds its own key | Calls the enrollment API with a software key | Enrollment needs a one-time token printed only on the person's terminal. After the first key, every new key must be approved (`high`) by an existing key. |
+| A phishing page | A copy of the approval page on another domain | WebAuthn binds keys to the real domain (RP ID). Wrong origin or RP ID is `BAD_SIGNATURE`. |
+| A web page in the person's browser | CSRF, DNS rebinding, framing the page | Origin check on every POST, Host check on every request, `frame-ancestors 'none'`, cross-origin assertions refused. |
+| Look-alike text | `аpi` with a Cyrillic a, invisible characters | The exact canonical text is signed; the page highlights mixed scripts and invisible characters; the verifier compares bytes, not looks. |
+| Approval fatigue | Hundreds of requests so the person clicks yes | 30 requests per minute, 50 waiting at most, every field always shown, fingerprint or PIN for `high`. |
+| Parser tricks | Duplicate keys, floats, huge or deeply nested JSON, lone surrogates, base64 padding | Strict parsing refuses all of these (`MALFORMED`), before any signature work. |
+
+## What we trust
+
+- **The person's device and authenticator.** If the phone or laptop is fully compromised, an attacker can trigger signatures.
+- **The machine that runs the gate.** The approval page is served by the gate. Whoever controls that machine controls what the page shows, and could show one request while asking the key to sign another. Authenticators do not display what they sign. This is the same role as AP2's Trusted Surface.
+- **The verifier's keyring.** Whoever can write the keyring decides which keys are trusted.
+
+## Where to run it (important)
+
+The safety holds only if **the agent cannot change the gate's code, the gate's data folder or the verifier's keyring**.
+
+- **Good:** the gate runs on another machine or as another OS user, the verifier keeps its own read-only copy of the keyring, the agent reaches the gate only through MCP.
+- **Demo and personal use:** everything on one laptop, under one user. This shows the flow, but an agent with full shell access as that user could edit the files. Use a separate OS user or a small server for anything real.
+
+## Known limits in v0.1
+
+- **Signed, not encrypted.** Whoever holds an approval can read the request. Keep secrets out of requests. Encrypted requests are planned (spec section 9).
+- **Bearer for up to 60 s.** A stolen approval works once, only for that request and audience, until it expires. Binding to the requester's key is planned (v0.2).
+- **The audit log detects changes, not truncation of its end.** Anchor the last hash somewhere else (a backup, a ticket) if you need that.
+- **The command-line verifier cannot remember used ids.** Record ids yourself, or use the library with a shared seen store.
+- **Pending requests live in memory.** A restart drops them (the answer becomes no).
+- **No outside review yet.** Treat it as pre-audit.
+
+## Reporting
+
+See [SECURITY.md](../SECURITY.md).

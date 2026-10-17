@@ -92,8 +92,12 @@ fn settings(cli: &Cli) -> Result<Settings, String> {
         Some(h) => h.clone(),
         None => match std::env::var_os("PHYGITAL_KEY_HOME") {
             Some(h) => PathBuf::from(h),
-            None => PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set; use --home")?)
-                .join(".phygital-key"),
+            None => PathBuf::from(
+                std::env::var_os("HOME")
+                    .or_else(|| std::env::var_os("USERPROFILE"))
+                    .ok_or("no home folder found; use --home")?,
+            )
+            .join(".phygital-key"),
         },
     };
     let origin = cli

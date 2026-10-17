@@ -1,5 +1,6 @@
 [package]
 name = "phygital-key-verify"
+readme = "README.md"
 description = "Check a Phygital Key approval: a person's signed yes for one exact request. Pure, offline, fail closed."
 version.workspace = true
 edition.workspace = true

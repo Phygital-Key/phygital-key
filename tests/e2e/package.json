@@ -1,0 +1,13 @@
+{
+  "name": "phygital-key-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end and red-team tests: real browser with a virtual passkey, real MCP client, demo service.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "playwright": "1.64.1"
+  }
+}
