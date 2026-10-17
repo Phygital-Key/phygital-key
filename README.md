@@ -73,7 +73,7 @@ Claude Desktop (`claude_desktop_config.json`), and most other apps take the same
 
 Add your key once: `phygital-key enroll` prints a one-time link (valid 10 minutes).
 
-The agent gets four tools: `request_approval`, `get_approval`, `cancel_approval` and `record_receipt` (to pass back the service's signed "done"). It can ask, wait, cancel and report. It can never approve.
+The agent gets six tools: `request_approval`, `get_approval`, `cancel_approval`, `record_receipt` (pass back the service's signed "done"), and `request_standing_approval` / `use_standing_approval` (see below). It can ask, wait, cancel and report. It can never approve.
 
 ## Check approvals in your service
 
@@ -102,10 +102,26 @@ It prints `{"ok": true, ...}` and exits 0, or prints `{"ok": false, "error": "RE
 
 **Give services your public keys:** `phygital-key keys` prints them, and the gate serves them at `/.well-known/phygital-key.json`. They are public key cards only. Private keys never leave your devices.
 
-**Signed key list:** every key you add or remove is approved with a key you already trust, starting with your first key signing itself. Share your first key's fingerprint once (the home page shows it), and anyone can check your whole key list:
+**Signed key list:** every key you add or remove is approved with a key you already trust, starting with your first key signing itself. Share your first key's fingerprint once (the home page shows it), and anyone can check your whole key list. Keep the copy you accepted, so an old copy can't be passed off later:
 
 ```bash
-phygital-key keys --check <fingerprint> --file keyring.json
+phygital-key keys --check <fingerprint> --file new.json --signed-on https://approve.example.com --previous accepted.json
+```
+
+## Standing approvals
+
+For small repeated actions, the person can approve once, with limits:
+
+> Allow **payment** to **ACME Ltd** in **EUR**, **up to 20.00** each, **at most 5 times**, **for 7 days**.
+
+The agent then asks the gate for a one-minute **use token** for each payment, and sends it with the approval (`Phygital-Approval` and `Phygital-Use` headers). The service checks both with `verify_use` and counts the uses itself. Anything outside the limits (another payee, a bigger amount, an extra field) is refused. The person can revoke it on the approval page at any time.
+
+## Receipts
+
+After acting, a service can answer with a signed receipt ("done" or "failed"). The agent passes it back to the gate, which shows it to the person only if it is signed by the service's pinned key:
+
+```bash
+phygital-key trust-service --aud https://deploy.example.com --key <its receipt_public_key>
 ```
 
 ## Levels
@@ -134,10 +150,11 @@ Run the gate where the AI agent cannot change its files (another machine, or ano
 | [`docs/spec.md`](docs/spec.md) | The open spec (PKA v0.1): format, checks, error codes |
 | [`crates/phygital-key-verify`](crates/phygital-key-verify) | The verifier library. Pure, offline, fail closed |
 | [`crates/phygital-key`](crates/phygital-key) | The gate: MCP server, approval page, enrollment, audit log, demo |
-| [`test-vectors/`](test-vectors) | 54 approval and 19 key-list test cases every implementation must pass |
+| [`test-vectors/`](test-vectors) | 55 approval, 24 key-list and 29 standing-approval test cases every implementation must pass |
 | [`tests/e2e/`](tests/e2e) | End-to-end and red-team tests: real browser, virtual passkey, real MCP client |
 | [`docs/threat-model.md`](docs/threat-model.md) | What it defends against, what it trusts, known limits |
 | [`docs/decisions.md`](docs/decisions.md) | Why each choice was made |
+| [`docs/ap2.md`](docs/ap2.md) | How it maps to AP2 and Mastercard's Verifiable Intent |
 | [`docs/research.md`](docs/research.md) | Landscape: AP2, MCP, similar projects |
 
 ## Data and privacy
@@ -146,7 +163,7 @@ The gate keeps three things in its data folder (`~/.phygital-key`): the public k
 
 ## Status
 
-v0.1: single approver, one approval per action, MCP adapter. Next: Python and JavaScript wrappers of the same verifier, standing approvals, 2-of-3 approvers, and end-to-end encrypted requests. See the [spec](docs/spec.md#11-open-questions).
+v0.2: one-time and standing approvals, signed key list, receipts, MCP adapter. Possible next steps: end-to-end encrypted requests, a hardware-keys-only setting, Python and JavaScript wrappers of the same verifier, 2-of-3 approvers, an AP2 export. See the [spec](docs/spec.md#11-open-questions).
 
 ## License
 

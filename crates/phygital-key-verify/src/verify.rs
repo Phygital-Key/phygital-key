@@ -133,7 +133,8 @@ impl SeenStore for MemorySeenStore {
         let Ok(mut seen) = self.seen.lock() else {
             return false;
         };
-        seen.retain(|_, e| *e > now);
+        // Keep ids a little past expiry, so a clock that steps back cannot replay them.
+        seen.retain(|_, e| e.saturating_add(MAX_CLOCK_SKEW_SECS) > now);
         if seen.contains_key(id) {
             return false;
         }
@@ -187,6 +188,10 @@ pub(crate) fn check_kind(
     let is_standing = claims.request.get("type").and_then(Value::as_str) == Some(STANDING_TYPE);
     if is_standing != standing {
         return Err(E::Malformed);
+    }
+    // Standing approvals always need fingerprint, face or PIN, whatever the service asks.
+    if standing && claims.level != Level::High {
+        return Err(E::AssuranceTooLow);
     }
     let max_life = if standing {
         crate::standing::MAX_STANDING_SECS

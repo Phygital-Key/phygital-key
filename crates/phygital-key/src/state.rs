@@ -130,9 +130,16 @@ struct Request {
     until: Option<i64>,
     uses: u32,
     usable: bool,
+    /// Standing approvals: use tokens handed out, by use id.
+    issued: HashMap<String, String>,
 }
 
 impl Request {
+    /// Forget it after this time: an hour after it ended, or after a standing approval's end.
+    fn keep_until(&self) -> i64 {
+        (self.deadline + 3600).max(self.until.map_or(0, |u| u + 3600))
+    }
+
     fn current_status(&self, t: i64) -> Status {
         match self.status {
             Status::Pending if t >= self.deadline => Status::Expired,
@@ -362,6 +369,19 @@ impl Gate {
         level: Level,
         kind: Kind,
     ) -> Result<View, String> {
+        self.create_full(request, aud, level, kind, None)
+    }
+
+    /// Create a request. `standing` is the end time and use key of a standing
+    /// approval, set in the same step so the page never sees it half made.
+    fn create_full(
+        &self,
+        request: Value,
+        aud: &str,
+        level: Level,
+        kind: Kind,
+        standing: Option<(i64, SigningKey)>,
+    ) -> Result<View, String> {
         if !request_shape_ok(&request) {
             return Err(
                 "request must be {\"type\": \"<lowercase name>\", \"params\": {...}}".into(),
@@ -389,6 +409,13 @@ impl Gate {
                 "aud must be 1 to 256 visible ASCII characters naming who will act on the yes (a URL, domain or id)".into(),
             );
         }
+        // A standing request can only be made through create_standing, so the person
+        // never signs one that looks like a normal request, with a key the agent chose.
+        if request.get("type").and_then(Value::as_str) == Some(phygital_key_verify::STANDING_TYPE)
+            && !matches!(kind, Kind::Standing(_))
+        {
+            return Err("\"standing\" is reserved: use request_standing_approval".into());
+        }
         if aud == self.settings.keyring_aud() && matches!(kind, Kind::Action | Kind::Standing(_)) {
             return Err("this audience is reserved for the gate itself".into());
         }
@@ -401,7 +428,7 @@ impl Gate {
         if first_key && matches!(kind, Kind::Action | Kind::Standing(_)) {
             return Err("No key is enrolled yet. Ask the person to run `phygital-key enroll` and add their passkey first.".into());
         }
-        inner.requests.retain(|_, r| t < r.deadline + 3600);
+        Self::forget_old(&mut inner, t);
         while inner.recent.front().is_some_and(|&x| x <= t - 60) {
             inner.recent.pop_front();
         }
@@ -435,10 +462,14 @@ impl Gate {
             approved_by: None,
             exp: None,
             receipt: None,
-            until: None,
+            until: standing.as_ref().map(|(days, _)| t + days * 86_400),
             uses: 0,
             usable: false,
+            issued: HashMap::new(),
         };
+        if let Some((_, key)) = standing {
+            inner.use_keys.insert(id.clone(), key);
+        }
         inner.audit.append(
             "requested",
             json!({"id": id, "aud": aud, "level": level.as_str(), "request_hash": request_hash}),
@@ -483,11 +514,19 @@ impl Gate {
         }
     }
 
+    fn forget_old(inner: &mut Inner, t: i64) {
+        inner.requests.retain(|_, r| t < r.keep_until());
+        let Inner {
+            requests, use_keys, ..
+        } = inner;
+        use_keys.retain(|id, _| requests.contains_key(id));
+    }
+
     /// Forget requests that ended more than an hour ago. Called on a timer.
     pub fn prune(&self) {
         let t = now();
         if let Ok(mut inner) = self.inner.lock() {
-            inner.requests.retain(|_, r| t < r.deadline + 3600);
+            Self::forget_old(&mut inner, t);
             if inner.enroll.as_ref().is_some_and(|e| t >= e.expires) {
                 inner.enroll = None;
             }
@@ -694,20 +733,36 @@ impl Gate {
             .approval
             .clone()
             .ok_or("This request was never approved.")?;
-        if r.receipt.is_some() {
-            return Err("A receipt was already recorded.".into());
-        }
         // Only a receipt signed by the service's own pinned key counts. Without a
         // pinned key the gate cannot tell a real receipt from one the agent made up.
         let key = self.service_key(&r.aud).ok_or(
             "No receipt key is pinned for this service, so the receipt cannot be checked. \
              Pin it with `phygital-key trust-service`.",
         )?;
-        let rec = receipt::verify(jws, &key, &r.aud, &approval)
-            .map_err(|e| format!("The receipt was not accepted ({e})."))?;
+        let rec = if matches!(r.kind, Kind::Standing(_)) {
+            // One receipt per use, for a use token this gate handed out.
+            let use_id = receipt::peek(jws)
+                .and_then(|x| x.use_id)
+                .ok_or("This receipt names no use.")?;
+            let token = r
+                .issued
+                .get(&use_id)
+                .cloned()
+                .ok_or("This use was not handed out by this gate, or already has a receipt.")?;
+            let rec = receipt::verify_use_receipt(jws, &key, &r.aud, &approval, &token)
+                .map_err(|e| format!("The receipt was not accepted ({e})."))?;
+            r.issued.remove(&use_id);
+            rec
+        } else {
+            if r.receipt.is_some() {
+                return Err("A receipt was already recorded.".into());
+            }
+            receipt::verify(jws, &key, &r.aud, &approval)
+                .map_err(|e| format!("The receipt was not accepted ({e})."))?
+        };
         r.receipt = Some(jws.to_string());
         let view = self.view_of(r, t);
-        let entry = json!({"id": rec.approval_id, "aud": rec.iss, "status": rec.status, "reference": rec.reference, "verified": true});
+        let entry = json!({"id": rec.approval_id, "use_id": rec.use_id, "aud": rec.iss, "status": rec.status, "reference": rec.reference, "verified": true});
         inner.audit.append("receipt", entry, t)?;
         drop(inner);
         self.changed.notify_waiters();
@@ -912,17 +967,16 @@ impl Gate {
         let request = params.to_request();
         StandingParams::from_request(&request).map_err(|_| {
             "Not a valid standing approval: for_type is a lowercase action name, max_uses 1 to 1000, \
-             fixed and vary fields must not overlap, vary limits are {\"max\": n, \"min\": n} or {\"one_of\": [up to 20 strings]}."
+             fixed and vary fields must not overlap, vary limits are {\"min\": n, \"max\": n} or {\"one_of\": [up to 20 strings]}."
                 .to_string()
         })?;
-        let view = self.create_kind(request, aud, Level::High, Kind::Standing(params))?;
-        let mut inner = self.lock()?;
-        if let Some(r) = inner.requests.get_mut(&view.id) {
-            r.until = Some(r.created + days * 86_400);
-        }
-        inner.use_keys.insert(view.id.clone(), key);
-        let r = inner.requests.get(&view.id).ok_or("unknown request")?;
-        Ok(self.view_of(r, now()))
+        self.create_full(
+            request,
+            aud,
+            Level::High,
+            Kind::Standing(params),
+            Some((days, key)),
+        )
     }
 
     /// Sign one use of an approved standing approval for this exact request.
@@ -959,6 +1013,7 @@ impl Gate {
         };
         let use_token = standing::sign_use(&u, &key).map_err(|e| e.to_string())?;
         r.uses += 1;
+        r.issued.insert(u.id.clone(), use_token.clone());
         let out = SignedUse {
             approval: r.approval.clone().unwrap_or_default(),
             use_token,

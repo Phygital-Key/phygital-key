@@ -43,6 +43,10 @@ pub struct Receipt {
     /// Short error code when `status` is `error`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// For one use of a standing approval: the use token's id. Then
+    /// `request_hash` is that use's request, not the standing request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub use_id: Option<String>,
     /// When the service answered, Unix seconds.
     pub iat: i64,
 }
@@ -94,6 +98,53 @@ pub fn verify(
     iss: &str,
     approval: &str,
 ) -> Result<Receipt, ReceiptError> {
+    let receipt = signed(jws, service_key)?;
+    let claims = bound(&receipt, iss, approval)?;
+    let same = |k: &str, v: &str| claims.get(k).and_then(Value::as_str) == Some(v);
+    if receipt.use_id.is_some() || !same("request_hash", &receipt.request_hash) {
+        return Err(ReceiptError::Mismatch);
+    }
+    Ok(receipt)
+}
+
+/// Check a receipt for one use of a standing approval: signed by the service,
+/// about this standing approval, and about exactly this use token's request.
+pub fn verify_use_receipt(
+    jws: &str,
+    service_key: &VerifyingKey,
+    iss: &str,
+    standing_approval: &str,
+    use_token: &str,
+) -> Result<Receipt, ReceiptError> {
+    use ReceiptError as R;
+    let receipt = signed(jws, service_key)?;
+    let claims = bound(&receipt, iss, standing_approval)?;
+    if claims
+        .get("request")
+        .and_then(|r| r.get("type"))
+        .and_then(Value::as_str)
+        != Some(crate::STANDING_TYPE)
+    {
+        return Err(R::Mismatch);
+    }
+    let payload = use_token
+        .split('.')
+        .nth(1)
+        .and_then(b64::decode)
+        .and_then(|b| strict::parse(&b))
+        .ok_or(R::Mismatch)?;
+    let field = |k: &str| payload.get(k).and_then(Value::as_str);
+    if receipt.use_id.as_deref() != field("id")
+        || field("request_hash") != Some(receipt.request_hash.as_str())
+        || field("standing_id") != Some(receipt.approval_id.as_str())
+    {
+        return Err(R::Mismatch);
+    }
+    Ok(receipt)
+}
+
+/// Parse a receipt and check the service's signature over it.
+fn signed(jws: &str, service_key: &VerifyingKey) -> Result<Receipt, ReceiptError> {
     use ReceiptError as R;
     if jws.len() > 4096 {
         return Err(R::Malformed);
@@ -110,8 +161,9 @@ pub fn verify(
     if b64::decode(h).as_deref() != Some(want.as_slice()) {
         return Err(R::Malformed);
     }
-    let sig_bytes = b64::decode(s).ok_or(R::Malformed)?;
-    let sig = Signature::from_slice(&sig_bytes).map_err(|_| R::Malformed)?;
+    let sig = b64::decode(s)
+        .and_then(|b| Signature::from_slice(&b).ok())
+        .ok_or(R::Malformed)?;
     service_key
         .verify(format!("{h}.{p}").as_bytes(), &sig)
         .map_err(|_| R::BadSignature)?;
@@ -127,22 +179,25 @@ pub fn verify(
     if receipt.v != "pka.receipt.1" || !status_ok {
         return Err(R::Malformed);
     }
+    Ok(receipt)
+}
+
+/// Check the receipt points at `approval` (by hash, id and service). Returns its claims.
+fn bound(receipt: &Receipt, iss: &str, approval: &str) -> Result<Value, ReceiptError> {
     let reference = reference_of(approval);
-    // The approval's own claims: the receipt must name the same id, request and service.
     let claims = b64::decode(approval)
         .and_then(|b| strict::parse(&b))
         .and_then(|v| v.get("claims").cloned())
-        .ok_or(R::Mismatch)?;
+        .ok_or(ReceiptError::Mismatch)?;
     let same = |k: &str, v: &str| claims.get(k).and_then(Value::as_str) == Some(v);
     if receipt.iss != iss
         || !bool::from(receipt.reference.as_bytes().ct_eq(reference.as_bytes()))
         || !same("id", &receipt.approval_id)
-        || !same("request_hash", &receipt.request_hash)
         || !same("aud", &receipt.iss)
     {
-        return Err(R::Mismatch);
+        return Err(ReceiptError::Mismatch);
     }
-    Ok(receipt)
+    Ok(claims)
 }
 
 /// Read a receipt's payload WITHOUT checking its signature. Only for showing
@@ -184,6 +239,7 @@ mod tests {
             request_hash: "x".into(),
             status: "success".into(),
             error: None,
+            use_id: None,
             iat: 1_760_700_005,
         }
     }

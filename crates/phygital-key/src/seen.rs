@@ -36,8 +36,15 @@ impl FileSeenStore {
         Self { path }
     }
 
+    /// `<path><suffix>`, so the lock and temp files never collide with the data file.
+    fn sibling(&self, suffix: &str) -> PathBuf {
+        let mut name = self.path.clone().into_os_string();
+        name.push(suffix);
+        PathBuf::from(name)
+    }
+
     fn insert(&self, id: &str, exp: i64, now: i64) -> Result<bool, String> {
-        let lock = private_open(&self.path.with_extension("lock"), false)?;
+        let lock = private_open(&self.sibling(".lock"), false)?;
         lock.lock().map_err(|e| format!("lock: {e}"))?;
         let text = match std::fs::read_to_string(&self.path) {
             Ok(t) => t,
@@ -54,7 +61,8 @@ impl FileSeenStore {
             ) else {
                 return Err("seen file is damaged".into());
             };
-            if e > now {
+            // Kept a little past expiry, so a clock that steps back cannot replay them.
+            if e.saturating_add(phygital_key_verify::MAX_CLOCK_SKEW_SECS) > now {
                 keep.push((i.to_string(), e));
             }
         }
@@ -67,11 +75,16 @@ impl FileSeenStore {
             out.push_str(&json!({"id": i, "exp": e}).to_string());
             out.push('\n');
         }
-        let tmp = self.path.with_extension("tmp");
+        let tmp = self.sibling(".tmp");
         let mut f = private_open(&tmp, true)?;
         f.write_all(out.as_bytes()).map_err(|e| e.to_string())?;
         f.sync_all().map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, &self.path).map_err(|e| e.to_string())?;
+        // Make the rename itself durable (Linux needs the folder synced too).
+        #[cfg(unix)]
+        if let Some(dir) = self.path.parent().and_then(|d| File::open(d).ok()) {
+            let _ = dir.sync_all();
+        }
         // The lock is released when `lock` is dropped.
         Ok(true)
     }
@@ -102,7 +115,7 @@ mod tests {
             "survives a new process"
         );
         assert!(
-            s.insert_if_new("a", 300, 100),
+            s.insert_if_new("a", 300, 200),
             "forgotten after expiry (it can no longer verify anyway)"
         );
         // A damaged file refuses everything instead of forgetting.

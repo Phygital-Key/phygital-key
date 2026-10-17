@@ -239,6 +239,12 @@ try {
     max_uses: 2, days: 1, aud: DEMO,
   });
   check("standing approval requested", !!st.id && !st.isError, st.error);
+  const noMin = await tool(mcp, "request_standing_approval", {
+    for_type: "payment", fixed: { to: "ACME Ltd" }, vary: { amount_cents: { max: 2000 } }, max_uses: 2, days: 1, aud: DEMO,
+  });
+  check("a range without a minimum is refused (no negative amounts)", noMin.isError);
+  const disguised = await tool(mcp, "request_approval", { request: { type: "standing", params: { for_type: "payment" } }, aud: DEMO, level: "high" });
+  check("a standing request disguised as a normal one is refused", disguised.isError && /reserved/.test(disguised.error));
   const earlyUse = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(450) } });
   check("cannot use a standing approval before the person approves", earlyUse.isError);
   const stWait = tool(mcp, "get_approval", { id: st.id, wait_seconds: 30 });
@@ -253,7 +259,12 @@ try {
   const standingAlone = await demo("payment", payParams(450), use1.approval);
   check("standing approval alone is not a one-time approval", standingAlone.body.error === "MALFORMED");
   const pay1 = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use1.approval, "Phygital-Use": use1.use_token }, body: JSON.stringify(payParams(450)) });
-  check("service accepts a use inside the limits", pay1.status === 200);
+  const pay1body = await pay1.json();
+  check("service accepts a use inside the limits", pay1.status === 200 && pay1body.ok === true);
+  const useRec = await tool(mcp, "record_receipt", { id: st.id, receipt: pay1body.receipt });
+  check("receipt for one use of a standing approval is recorded", useRec.service_reported === "success", useRec.error);
+  const useRecAgain = await tool(mcp, "record_receipt", { id: st.id, receipt: pay1body.receipt });
+  check("the same use's receipt is recorded only once", useRecAgain.isError);
   const pay1again = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use1.approval, "Phygital-Use": use1.use_token }, body: JSON.stringify(payParams(450)) });
   check("the same use token twice is refused", (await pay1again.json()).error === "REPLAYED");
   const payOther = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use1.approval, "Phygital-Use": use1.use_token }, body: JSON.stringify(payParams(999)) });

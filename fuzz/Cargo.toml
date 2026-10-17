@@ -36,3 +36,10 @@ path = "fuzz_targets/keyring_history.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "standing"
+path = "fuzz_targets/standing.rs"
+test = false
+doc = false
+bench = false

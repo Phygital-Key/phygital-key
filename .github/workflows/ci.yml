@@ -72,7 +72,7 @@ jobs:
       - name: Run
         working-directory: fuzz
         run: |
-          for t in verify strict_json keyring_history; do
+          for t in verify strict_json keyring_history standing; do
             cargo +nightly fuzz run "$t" -- -max_total_time=60
           done
 

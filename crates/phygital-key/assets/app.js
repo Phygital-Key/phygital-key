@@ -145,7 +145,7 @@ async function approvePage() {
           await api("/api/r/" + encodeURIComponent(id) + "/revoke", {});
           $("actions").hidden = true;
           $("title").textContent = "Revoked";
-          $("lead").textContent = "No more uses can be made.";
+          $("lead").textContent = "No new uses can be signed. Uses already handed out may still work for up to a minute.";
         } catch (e) { note(friendly(e), "bad"); }
       };
     }
@@ -205,7 +205,8 @@ async function approvePage() {
       const shownHash = b64u(await sha256(utf8(view.request_jcs)));
       if (claims.aud !== view.aud || claims.level !== view.level || claims.request_hash !== shownHash ||
           claims.request_hash !== view.request_hash || JSON.stringify(claims.request) !== JSON.stringify(request) ||
-          claims.id !== view.id || claims.v !== "pka.1") {
+          claims.id !== view.id || claims.v !== "pka.1" ||
+          (view.standing && claims.exp !== view.standing.until)) {
         throw new Error("What would be signed does not match what is shown. Nothing was signed.");
       }
       const challenge = await sha256(concat(utf8(PREFIX), utf8(started.claims_jcs)));

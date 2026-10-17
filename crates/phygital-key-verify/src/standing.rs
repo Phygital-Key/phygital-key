@@ -8,7 +8,7 @@
 //!    {"type": "standing", "params": {
 //!       "for_type": "payment",
 //!       "fixed": {"to": "ACME Ltd", "currency": "EUR"},
-//!       "vary": {"amount_cents": {"max": 2000}, "memo": {"one_of": ["coffee", "lunch"]}},
+//!       "vary": {"amount_cents": {"min": 1, "max": 2000}, "memo": {"one_of": ["coffee", "lunch"]}},
 //!       "max_uses": 5,
 //!       "use_key": "<base64url SPKI of a P-256 key held by the gate>"}}
 //!    ```
@@ -20,7 +20,8 @@
 //!    counts uses itself ([`UseStore`]).
 //!
 //! The request must have exactly the `fixed` and `vary` fields: nothing missing,
-//! nothing extra. `vary` limits are integer ranges (`min`, `max`) or a short list
+//! nothing extra. `vary` limits are integer ranges (`min` and `max`, both required,
+//! so a forgotten lower limit can never let negative amounts through) or a short list
 //! of allowed strings (`one_of`). Anything else is refused.
 
 use std::collections::{HashMap, HashSet};
@@ -51,13 +52,12 @@ pub const USE_TYP: &str = "pka-use+jwt";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum Limit {
-    /// An integer between `min` (default: no lower limit) and `max`.
+    /// An integer from `min` to `max`, both included. Both are required.
     Range {
+        /// Smallest allowed value.
+        min: i64,
         /// Largest allowed value.
         max: i64,
-        /// Smallest allowed value.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        min: Option<i64>,
     },
     /// One of these strings.
     OneOf {
@@ -93,7 +93,7 @@ impl StandingParams {
                 .map_err(|_| ErrorCode::Malformed)?;
         let shape = json!({"type": p.for_type, "params": {}});
         let limits_ok = p.vary.values().all(|l| match l {
-            Limit::Range { max, min } => min.is_none_or(|m| m <= *max),
+            Limit::Range { max, min } => min <= max,
             Limit::OneOf { one_of } => !one_of.is_empty() && one_of.len() <= MAX_ONE_OF,
         });
         if !request_shape_ok(&shape)
@@ -134,9 +134,9 @@ impl StandingParams {
             .vary
             .iter()
             .all(|(k, limit)| match (params.get(k), limit) {
-                (Some(Value::Number(n)), Limit::Range { max, min }) => n
-                    .as_i64()
-                    .is_some_and(|v| v <= *max && min.is_none_or(|m| v >= m)),
+                (Some(Value::Number(n)), Limit::Range { max, min }) => {
+                    n.as_i64().is_some_and(|v| (*min..=*max).contains(&v))
+                }
                 (Some(Value::String(s)), Limit::OneOf { one_of }) => one_of.iter().any(|o| o == s),
                 _ => false,
             });
@@ -258,7 +258,7 @@ impl UseStore for MemoryUseStore {
         let Ok(mut all) = self.uses.lock() else {
             return Err(ErrorCode::UsedUp);
         };
-        all.retain(|_, (u, _)| *u > now);
+        all.retain(|_, (u, _)| u.saturating_add(MAX_CLOCK_SKEW_SECS) > now);
         let entry = all
             .entry(standing_id.to_string())
             .or_insert_with(|| (until, HashSet::new()));

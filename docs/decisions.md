@@ -26,3 +26,7 @@ Each entry: what we chose, and why. Newest last.
 22. **Signed key history instead of a signed file.** Each add or remove is a normal approval, kept in the keyring. One pinned fingerprint checks it all, rotation is just more entries, and no new signing format is needed.
 23. **The first key signs itself.** It proves the key works before it is trusted, and gives the history a root.
 24. **Fuzzing and mutation testing** (ideas from `ap2-evidence-pack`): coverage-guided fuzzing of the verifier, the parser and the key history, and `cargo-mutants` to prove each check is covered by a test.
+25. **Key history needs stored state** (security review 2). A valid history proves keys were approved, not that it is the latest. Refetching takes only extensions of the last accepted copy; the origin is pinned by the checker, never read from the file; cards are compared whole.
+26. **Receipts count only when signed by a pinned service key.** The agent carries them, so an unchecked one proves nothing.
+27. **Standing approvals stay narrow:** exact fixed values, integer ranges or short string lists, a use cap, at most 30 days, one gate-held use key per approval kept in memory. No policy language. Services count uses themselves.
+28. **No AP2 export yet.** It would move trust from the passkey to a gate key for plain AP2 verifiers. The mapping is written down in `docs/ap2.md`; the code waits for a real user.

@@ -59,7 +59,7 @@ pub struct StandingArgs {
     pub for_type: String,
     /// Params that must be exactly these values every time, e.g. {"to": "ACME Ltd", "currency": "EUR"}.
     pub fixed: serde_json::Map<String, Value>,
-    /// Params that may change, with limits: {"amount_cents": {"max": 2000, "min": 1}} or {"memo": {"one_of": ["coffee", "lunch"]}}.
+    /// Params that may change, with limits: integers {"amount_cents": {"min": 1, "max": 2000}} (both required) or strings {"memo": {"one_of": ["coffee", "lunch"]}}.
     pub vary: std::collections::BTreeMap<String, Value>,
     /// How many times it may be used (1 to 1000).
     pub max_uses: u32,
@@ -230,7 +230,7 @@ impl GateMcp {
                 }
                 Err(_) => {
                     return fail(format!(
-                        "vary.{k}: use {{\"max\": n, \"min\": n}} or {{\"one_of\": [\"a\", \"b\"]}}"
+                        "vary.{k}: use {{\"min\": n, \"max\": n}} (both) or {{\"one_of\": [\"a\", \"b\"]}}"
                     ));
                 }
             }

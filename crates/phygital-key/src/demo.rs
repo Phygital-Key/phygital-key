@@ -66,6 +66,7 @@ impl Demo {
         request: &Value,
         id: &str,
         error: Option<&str>,
+        use_id: Option<&str>,
     ) -> Option<String> {
         let r = Receipt {
             v: "pka.receipt.1".into(),
@@ -79,6 +80,7 @@ impl Demo {
                 "success".into()
             },
             error: error.map(String::from),
+            use_id: use_id.map(String::from),
             iat: now(),
         };
         receipt::sign(&r, &self.key).ok()
@@ -150,17 +152,18 @@ async fn act(
             &d.config,
             now(),
         )
-        .map(|u| u.standing),
-        None => verify(approval, &expected, &keyring, &d.seen, &d.config, now()),
+        .map(|u| (u.standing, Some(u.use_id))),
+        None => verify(approval, &expected, &keyring, &d.seen, &d.config, now()).map(|v| (v, None)),
     };
     match result {
-        Ok(ok) => Json(json!({
+        Ok((ok, use_id)) => Json(json!({
             "ok": true,
             "done": format!("{verb} (demo: nothing real happened)"),
             "request": request,
             "approval_id": ok.id,
             "approved_by": ok.approver,
-            "receipt": d.receipt(approval, &request, &ok.id, None),
+            "use_id": use_id,
+            "receipt": d.receipt(approval, &request, &ok.id, None, use_id.as_deref()),
         }))
         .into_response(),
         Err(code) => refuse(code.as_str(), StatusCode::FORBIDDEN),

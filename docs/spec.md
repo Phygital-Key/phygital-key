@@ -1,4 +1,4 @@
-# Phygital Key Approval (PKA), spec v0.1
+# Phygital Key Approval (PKA), spec (format `pka.1`, project v0.2)
 
 **Goal.** A small open base for one thing: a signed yes from a person, for one exact request, that anyone can check. The person approves with a passkey, fingerprint, face or hardware key. Any party can verify the yes offline in a few lines of code. It works between any two sides: person to person, person to business, business to business, person to system, AI agent to service. Built on WebAuthn (FIDO2) and aligned with AP2 (now at the FIDO Alliance). License: Apache-2.0.
 
@@ -105,13 +105,15 @@ Two clocks, so people are not rushed:
   { "keys": [ ...key cards ], "origin": "https://approve.example.com", "history": [ "<approval>", "<approval>" ] }
   ```
 
-  **Checking a keyring** (`verify_history(keyring, root_fingerprint)`): the first entry MUST be `add_key` of the key whose fingerprint (base64url SHA-256 of its SPKI) is pinned, signed by itself; each later entry MUST be a valid `add_key` or `remove_key` approval signed by a key trusted at that point (every verifier check except expiry, which is checked as of the entry's own `iat`); no entry may appear twice; and replaying the history MUST give exactly the listed keys. Anything else is refused (`UNSIGNED`, `WRONG_ROOT`, `BAD_ENTRY`, `KEYS_DO_NOT_MATCH`). Test vectors: `test-vectors/keyrings.json`.
+  **Checking a keyring** (`verify_history(keyring, root_fingerprint, origin)`): `origin` is given by the checker (never taken from the file) and MUST equal the keyring's; the first entry MUST be `add_key` of the key whose fingerprint (base64url SHA-256 of its SPKI) is pinned, signed by itself; each later entry MUST be a valid `add_key` or `remove_key` approval signed by a key trusted at that point (every verifier check except expiry, which is checked as of the entry's own `iat`); `iat` MUST never go back; no entry may appear twice; and replaying the history MUST give exactly the listed key cards (every field). Anything else is refused (`UNSIGNED`, `WRONG_ORIGIN`, `WRONG_ROOT`, `BAD_ENTRY`, `KEYS_DO_NOT_MATCH`). Test vectors: `test-vectors/keyrings.json`.
 
-  So a keyring fetched from anywhere can be trusted with one short fingerprint, learned once (in person, on a call, on a business card). Whoever controls the website or the file cannot add a key without a signature from a key already trusted.
+  **Refetching** (`verify_history_update(accepted, new, root_fingerprint, origin)`): a valid history proves every listed key was approved, but an *old* copy (from before a key was removed) is valid too. Whoever fetches a keyring more than once MUST keep the last one they accepted and take a new one only if it starts with exactly the same entries (`NOT_AN_UPDATE` otherwise). That stops rollbacks and forks signed by a removed key.
+
+  So a keyring can be trusted with one short fingerprint, learned once (in person, on a call, on a business card), plus the last copy you accepted. Whoever controls the website or the file cannot add a key without a signature from a key that was trusted at that point, and cannot bring back a removed key.
 - **Keyring:** a verifier keeps the key cards it trusts: `{"keys": [ ...key cards ]}`. The verifier only reads the keyring it is given. It never fetches anything.
 - **Sharing keys:**
   - Inside one team or system: copy the keyring file, or run `phygital-key keys`.
-  - Between parties: a party publishes its keyring (cards plus signed history) at `https://<domain>/.well-known/phygital-key.json`. The receiving app (not the verifier) fetches it over HTTPS, checks the history against the pinned root fingerprint, and only then stores it. Refetching picks up added and removed keys safely.
+  - Between parties: a party publishes its keyring (cards plus signed history) at `https://<domain>/.well-known/phygital-key.json`. The receiving app (not the verifier) fetches it over HTTPS, checks the history against the pinned root fingerprint and its expected origin, and stores it. Later fetches go through `verify_history_update` against the stored copy.
 - **Lost or retired key:** remove it with a `remove_key` approval from another trusted key. People SHOULD enroll two keys so one loss does not lock them out. If every key is lost, start a new keyring with a new root fingerprint.
 - **Synced passkeys:** `signCount` is not reliable, so it is never used. The single-use `id` stops replays.
 
@@ -140,7 +142,7 @@ The first failing check returns its code.
 9. **Replay** (`REPLAYED`): atomically record `id` until `exp`; refuse if already seen. Several verifier instances MUST share one store.
 10. Only then act. Log `id`, `request_hash`, time, the approver's credential and the result.
 
-**Error codes:** `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `BAD_SIGNATURE`, `UNTRUSTED_KEY`, `ASSURANCE_TOO_LOW`, `REPLAYED`, and `DENIED` (returned by relays when the person says no; never by `verify`).
+**Error codes:** `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `BAD_SIGNATURE`, `UNTRUSTED_KEY`, `ASSURANCE_TOO_LOW`, `REPLAYED`, `NOT_ALLOWED` and `USED_UP` (standing approvals, section 7c), and `DENIED` (returned by relays when the person says no; never by `verify`).
 
 **API:** `verify(approval, expected{aud, request, level}, keyring, seen_store, config{origins, rp_ids}, now) -> ok | error(code)`. The verifier is pure: no network, no clock reads, no global state except `seen_store`.
 
@@ -154,7 +156,34 @@ After acting, a verifier MAY answer with a **receipt**: a compact JWS signed wit
   "request_hash": "<claims.request_hash>", "status": "success", "iat": 1760700005 }
 ```
 
-`status` is `success` or `error` (then `error` holds a short code). Unknown fields are refused. Checking a receipt (`receipt::verify`) needs the service's public key, its `iss`, and the approval it is about. Like AP2 receipts, it points at the approval by hash. A service publishes its receipt key at `/.well-known/phygital-key-service.json` (`{"iss", "receipt_public_key"}`). The gate can record a receipt the agent passes back (`record_receipt`), so the person sees "the service reported: done" on the approval page; the gate checks the receipt is about that approval, and anyone holding the service key can check the signature (`phygital-key receipt-check`).
+`status` is `success` or `error` (then `error` holds a short code). Unknown fields are refused. Checking a receipt (`receipt::verify`) needs the service's public key, its `iss`, and the approval it is about. Like AP2 receipts, it points at the approval by hash. A service publishes its receipt key at `/.well-known/phygital-key-service.json` (`{"iss", "receipt_public_key"}`). The header MUST be exactly the canonical bytes above, `success` MUST NOT carry `error`, and `approval_id`, `request_hash` and `iss` MUST match the approval's own claims.
+
+The agent carries receipts back to the gate (`record_receipt`), so the agent could make one up. The gate therefore records a receipt **only if it is signed by a receipt key pinned for that service** (`phygital-key trust-service --aud ... --key ...`, kept in `services.json`; the demo pins its own service). Only then does the person see "the service reported: done". Anyone holding the service key can check a receipt too (`phygital-key receipt-check`).
+
+## 7c. Standing approvals
+
+A standing approval lets an agent do the same kind of action a few times, within limits, without asking each time. It is deliberately narrow (AP2's "open mandate" idea, without a policy language).
+
+1. **The person approves**, at level `high`, a request of type `standing` (reserved: never an action):
+
+   ```json
+   {"type": "standing", "params": {
+      "for_type": "payment",
+      "fixed": {"to": "ACME Ltd", "currency": "EUR"},
+      "vary": {"amount_cents": {"min": 1, "max": 2000}, "memo": {"one_of": ["coffee", "lunch"]}},
+      "max_uses": 5,
+      "use_key": "<base64url SPKI of a P-256 key made by the gate for this approval>"}}
+   ```
+
+   Its `exp` is when the permission ends: at most 30 days after `iat`. `max_uses` is 1 to 1000; `fixed` and `vary` must not share a field; integer limits need **both** `min` and `max` (so a forgotten lower limit can never allow negative amounts), with `min` not above `max`; `one_of` holds 1 to 20 strings. Standing approvals are always level `high`, whatever the service asks. A standing approval never passes as a one-time approval, and a one-time approval never passes as a standing one; a gate refuses a `standing` request made any other way than as a standing approval.
+2. **Each use** is a use token: an ES256 compact JWS, header exactly `{"alg":"ES256","typ":"pka-use+jwt"}`, payload `{"v":"pka.use.1","standing_id","id","aud","request","request_hash","iat","exp"}`, signed with `use_key`, living at most 60 s and never past the standing approval's `exp`. The gate keeps `use_key` in memory only and signs a token only for a request inside the limits.
+3. **The verifier** (`verify_use(standing, use_token, expected, keyring, use_store, config, now)`) checks the person's standing approval (all the checks of section 7, with the 30-day life), the use token (signature by `use_key`, same `standing_id`, same audience, time), that the request it is about to run is exactly the one in the token, that it has exactly the `fixed` fields with the same values and the `vary` fields within their limits and nothing else (`NOT_ALLOWED`), and counts uses itself: a use id seen before is `REPLAYED`, more than `max_uses` is `USED_UP`.
+
+**Revoking.** The person can revoke on the approval page (or the agent with `cancel_approval`). The gate then throws `use_key` away, so no new use tokens can be made. Use tokens already handed out still work for up to 60 seconds, and an agent could have collected every remaining use just before; services get no revocation signal, and the standing approval itself stays valid at the service until its `exp`. A restart of the gate also ends every standing approval it holds (fail closed). A service that wants to stop earlier can refuse that `standing_id`. Services MUST count uses in a durable store shared by all their instances, and keep entries a little past expiry (so a clock that steps back cannot reset the count).
+
+**Receipts for standing uses** carry the use token's `use_id`, and `request_hash` is that use's request. They are checked with `receipt::verify_use_receipt` (the gate records one per use token it handed out).
+
+Test vectors: `test-vectors/standing.json`.
 
 ## 8. Levels
 
@@ -194,12 +223,14 @@ A security key without a PIN can only approve `medium`.
 
 ## 12. AP2 alignment
 
+The full mapping, including Mastercard's Verifiable Intent and what an AP2 export would cost, is in [`docs/ap2.md`](ap2.md).
+
 | PKA | AP2 |
 |---|---|
 | Approval object | Closed mandate |
 | Approval page | Trusted Surface (must be non-agentic) |
 | Verifier | Merchant / credential provider verification |
-| v0.2: standing approval (rules, requester key, expiry) | Open mandate with constraints and `cnf` |
+| Standing approval (section 7c: limits, `use_key`, end date) | Open mandate with constraints and `cnf` |
 | v0.2: SD-JWT encoding for interop | SD-JWT mandates |
 
 ## 13. Tests
@@ -210,7 +241,7 @@ A security key without a PIN can only approve `medium`.
 
 ## 14. Out of scope for v0.1
 
-Standing approvals, 2 of 3 approvers (format ready), delegation between agents, private mode, payment settlement, adapters other than MCP.
+2 of 3 approvers (format ready), delegation between agents, private mode, payment settlement, an AP2 / SD-JWT export (see `docs/ap2.md`), adapters other than MCP.
 
 ## 15. v0.1 deliverables
 
