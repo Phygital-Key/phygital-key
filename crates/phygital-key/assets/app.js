@@ -115,7 +115,7 @@ async function approvePage() {
     const tr = document.createElement("tr");
     const th = document.createElement("th");
     const td = document.createElement("td");
-    th.textContent = k;
+    th.textContent = view.standing && k === "use_key" ? "use_key (technical: signs each use)" : k;
     td.textContent = v;
     if (suspicious(k) || suspicious(v)) {
       tr.classList.add("warn");
@@ -124,6 +124,27 @@ async function approvePage() {
     tr.append(th, td);
     body.append(tr);
   });
+  if (view.standing) {
+    // A plain summary of the limits. The full signed text is still shown below.
+    const p = request.params;
+    const lines = [];
+    const fixed = Object.entries(p.fixed || {}).map(([k, v]) => k + " = " + (typeof v === "string" ? v : JSON.stringify(v)));
+    if (fixed.length) lines.push("Always exactly: " + fixed.join(", "));
+    Object.entries(p.vary || {}).forEach(([k, lim]) => {
+      if (lim && lim.one_of) lines.push("Can change: " + k + ", only one of: " + lim.one_of.join(", "));
+      else if (lim) lines.push("Can change: " + k + ", from " + lim.min + " to " + lim.max);
+    });
+    lines.push("Anything else: refused");
+    lines.push("At most " + p.max_uses + " times, until " + new Date(view.standing.until * 1000).toLocaleString());
+    const ul = $("summary-list");
+    lines.forEach((t) => {
+      const li = document.createElement("li");
+      li.textContent = t;
+      if (suspicious(t)) li.classList.add("warn");
+      ul.append(li);
+    });
+    $("summary").hidden = false;
+  }
   $("card").hidden = false;
 
   const done = {
@@ -175,7 +196,7 @@ async function approvePage() {
     ? "This key will no longer be able to approve anything."
     : view.standing
     ? "The AI may do this on its own, up to " + view.standing.max_uses + " times until " + until +
-      ", only within the limits below (\"fixed\" values exactly, \"vary\" values within their limits). You can revoke it at any time."
+      ", only within the limits below. You can revoke it at any time."
     : "Check every detail. Your key will sign exactly what is shown here.";
   countdown($("deadline"), view.deadline, () => { $("actions").hidden = true; note("Time is up. The answer is no.", "bad"); });
   if (!webauthnSupported()) {

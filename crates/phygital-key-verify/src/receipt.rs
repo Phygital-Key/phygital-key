@@ -109,6 +109,9 @@ pub fn verify(
 
 /// Check a receipt for one use of a standing approval: signed by the service,
 /// about this standing approval, and about exactly this use token's request.
+///
+/// The use token's own signature is not checked here: pass a token you issued
+/// (a gate) or already checked with [`crate::standing::verify_use`] (a service).
 pub fn verify_use_receipt(
     jws: &str,
     service_key: &VerifyingKey,
@@ -134,7 +137,8 @@ pub fn verify_use_receipt(
         .and_then(|b| strict::parse(&b))
         .ok_or(R::Mismatch)?;
     let field = |k: &str| payload.get(k).and_then(Value::as_str);
-    if receipt.use_id.as_deref() != field("id")
+    if receipt.use_id.is_none()
+        || receipt.use_id.as_deref() != field("id")
         || field("request_hash") != Some(receipt.request_hash.as_str())
         || field("standing_id") != Some(receipt.approval_id.as_str())
     {

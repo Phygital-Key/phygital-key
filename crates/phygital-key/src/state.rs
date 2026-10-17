@@ -34,6 +34,8 @@ pub const ENROLL_SECS: i64 = 600;
 const MAX_PENDING: usize = 50;
 /// Most new requests per minute.
 const MAX_PER_MINUTE: usize = 30;
+/// Most requests held in memory at once (waiting, decided, or active standing).
+const MAX_STORED: usize = 5000;
 
 /// Where and how the gate runs.
 #[derive(Debug, Clone)]
@@ -137,7 +139,14 @@ struct Request {
 impl Request {
     /// Forget it after this time: an hour after it ended, or after a standing approval's end.
     fn keep_until(&self) -> i64 {
-        (self.deadline + 3600).max(self.until.map_or(0, |u| u + 3600))
+        // Only an approved standing approval is kept until its end; anything never
+        // approved is forgotten an hour after its deadline, like every other request.
+        let standing_end = if self.approval.is_some() {
+            self.until.map_or(0, |u| u + 3600)
+        } else {
+            0
+        };
+        (self.deadline + 3600).max(standing_end)
     }
 
     fn current_status(&self, t: i64) -> Status {
@@ -432,8 +441,8 @@ impl Gate {
         while inner.recent.front().is_some_and(|&x| x <= t - 60) {
             inner.recent.pop_front();
         }
-        if inner.recent.len() >= MAX_PER_MINUTE {
-            return Err("Too many requests this minute. Try again shortly.".into());
+        if inner.recent.len() >= MAX_PER_MINUTE || inner.requests.len() >= MAX_STORED {
+            return Err("Too many requests right now. Try again shortly.".into());
         }
         if inner
             .requests
