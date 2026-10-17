@@ -34,11 +34,11 @@ install.sh                         user install script: downloads a release, che
 bucket/phygital-key.json           Scoop manifest
 packaging/winget/0.2.0/*.yaml      winget manifests (installer, locale, version), generated, not submitted
 scripts/package-manifests.sh       writes the Homebrew, Scoop and winget manifests for a published release
-scripts/release-key.sh             maintainer only, once, on the maintainer's own Mac: makes the release signing key and the backup key, pins both public keys in the two installers
-scripts/sign-release.sh            maintainer only, per release: downloads the draft release, writes and signs release.txt, checks it, uploads it, publishes the release
+scripts/release-key.sh             maintainer only, once, in the maintainer's own terminal: makes the release signing key and the backup key (passphrases typed), pins both public keys in the two installers
+scripts/sign-release.sh            maintainer only, per release, in their own terminal: checks the build records against the local tag commit, writes and signs release.txt (passphrase typed), checks it, uploads it, publishes the release
 .gitignore                         build output, node_modules, test results, logs
 .github/workflows/ci.yml           CI on every push to main and every pull request (jobs listed below)
-.github/workflows/release.yml      on a v* tag: tests, builds the binaries for 5 targets, makes a DRAFT release (never published by CI)
+.github/workflows/release.yml      on a v* tag: tests, builds the binaries for 5 targets, publishes a build record (attestation) per archive, makes a DRAFT release (never published by CI)
 .github/ISSUE_TEMPLATE/*.yml       issue forms (bug, feature, question) and their config
 .github/PULL_REQUEST_TEMPLATE.md   pull request checklist
 
@@ -148,7 +148,7 @@ These are the product. A change that weakens one is a security bug.
 8. **Never log or print secrets.** The enrollment token is shown only by `phygital-key enroll` (and the demo), never in `mcp` or `serve` output. The audit log never stores the request itself. The MCP token lives only in `<home>/mcp-token` (0600).
 9. **The verifier decides.** Audience, the exact request and the level are set by the service, never taken from the requester. Keep `verify` pure: no network, no clock reads, no global state except the seen store.
 10. **Reserved names stay reserved.** Request types `standing` and `revoke`, and the audience `phygital-key:keyring:<origin>`, are made only by the gate.
-11. **Release signing keys never go into the repository or GitHub.** Not in a commit, not in GitHub Actions secrets, not in a workflow, not in an issue. They live encrypted on the maintainer's own computer (passphrase in the macOS Keychain), with a backup key offline. Only their public halves are in the repository, in the `# BEGIN RELEASE KEYS` blocks of `crates/phygital-key/assets/install-service.sh` and `install.sh`. CI only makes a draft release; the maintainer signs and publishes it with `scripts/sign-release.sh`. Never add a step that signs, or a secret that could sign, in CI.
+11. **Release signing keys never go into the repository or GitHub.** Not in a commit, not in GitHub Actions secrets, not in a workflow, not in an issue. They live encrypted on the maintainer's own computer, under passphrases the maintainer types and keeps in a password manager (never in the macOS Keychain), with a backup key offline. Never run `scripts/release-key.sh` or `scripts/sign-release.sh`, never ask for a passphrase, and never add a way to store one: both scripts refuse to run without a terminal so that an agent cannot use them. Only their public halves are in the repository, in the `# BEGIN RELEASE KEYS` blocks of `crates/phygital-key/assets/install-service.sh` and `install.sh`. CI only makes a draft release; the maintainer signs and publishes it with `scripts/sign-release.sh`. Never add a step that signs, or a secret that could sign, in CI.
 12. **Keep the credit.** `NOTICE` and `verifier-js/NOTICE` keep the line "Created by s17sh70x2jfl031ag". Never write any real person's name anywhere, and add no AI attribution lines to docs, commits or release notes.
 13. **Docs in plain words, no em dashes.** Not one em dash in any doc, page text or tool message. Follow the existing voice: short sentences, exact facts, every command one you ran. Say "pre-audit" until an outside security review exists. Relative links must resolve.
 
@@ -202,7 +202,7 @@ CI (`.github/workflows/ci.yml`) runs on every push to `main` and every pull requ
 
 Do not run `tests/secure-install.sh` on your own machine: it needs password-less sudo and installs a system service. Third-party actions are pinned to a commit; keep them pinned.
 
-The release workflow (`.github/workflows/release.yml`) runs `cargo test --workspace --locked` on each of the 5 targets, builds the binaries with a `.sha256` file each, and makes a draft release. Drafts are invisible to installers and to automatic updates. The maintainer then runs `scripts/sign-release.sh vX.Y.Z` on their own Mac, which signs `release.txt` and publishes. The Rust test `installer_pins_at_least_one_release_key` (in `src/update.rs`) fails until `scripts/release-key.sh` has pinned the release keys.
+The release workflow (`.github/workflows/release.yml`) runs `cargo test --workspace --locked` on each of the 5 targets, builds the binaries with a `.sha256` file each, publishes a build provenance attestation per archive (`actions/attest-build-provenance`, which needs `id-token: write` and `attestations: write` in that job), and makes a draft release. Drafts are invisible to installers and to automatic updates. The maintainer then runs `scripts/sign-release.sh vX.Y.Z` in their own terminal on their own Mac: it checks every build record with `gh attestation verify` against the commit of the tag in the maintainer's clone, then signs `release.txt` and publishes. The Rust test `installer_pins_at_least_one_release_key` (in `src/update.rs`) fails until `scripts/release-key.sh` has pinned the release keys.
 
 ## Changing the spec safely
 

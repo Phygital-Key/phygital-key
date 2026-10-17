@@ -117,10 +117,11 @@ When there is no `audit.log` at all, `audit-check` looks for `keyring.json` next
 
 | Data folder | Output | Exit code |
 |---|---|---|
-| Neither file | `no audit log yet: nothing has happened on this gate` | 0 |
-| `keyring.json` but no `audit.log` | `no audit log at <path>, but a key is enrolled: the log was deleted or moved` (printed after `phygital-key: `) | 1 |
+| Neither file, or a `keyring.json` with no keys | `no audit log yet: nothing has happened on this gate` | 0 |
+| `keyring.json` with a key, but no `audit.log` | `no audit log at <path>, but a key is enrolled: the log was deleted or moved` (printed after `phygital-key: `) | 1 |
+| `keyring.json` that cannot be read or is damaged, and no `audit.log` | `<path>: <error>` or `<path>: damaged keyring (<reason>)` (printed after `phygital-key: `) | 1 |
 
-The gate runs the same check every time it starts: a log that fails it stops the gate from starting, with the same message and exit code 1. With the secure install, run it as `phygital-key-admin audit-check`.
+The gate runs the chain check every time it starts: a log whose chain fails stops the gate from starting, with the same message and exit code 1. The checks for a missing log in the table above run only in `audit-check`; a gate started without `audit.log` begins a new one. With the secure install, run it as `phygital-key-admin audit-check`.
 
 ## What it detects, and what it does not
 

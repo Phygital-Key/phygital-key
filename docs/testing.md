@@ -27,7 +27,7 @@ This page lists every layer of tests in Phygital Key, with real counts and the c
 | Fuzz targets | 4, 60 s each | `fuzz/fuzz_targets/` | Yes, Linux |
 | Mutation testing | cargo-mutants on the verifier | by hand | No |
 | End-to-end and red team | 108 checks | `tests/e2e/run.mjs` | Yes, Linux |
-| Secure install | 28 checks | `tests/secure-install.sh` | Yes, macOS and Linux |
+| Secure install | 30 checks | `tests/secure-install.sh` | Yes, macOS and Linux |
 | JavaScript checker | 9 tests (3 of them run every vector) | `verifier-js/test/` | Yes, Linux |
 | Supply chain | cargo-deny: advisories, licences, bans, sources | `deny.toml` | Yes |
 
@@ -326,16 +326,18 @@ It uses ports 17468 (gate), 17469 (demo service), 17478 (stdio gate, also used f
 | 18 | refuses a release list signed by an unknown key |
 | 19 | update job leaves the gate running unless a newer signed release exists |
 | 20 | update job records its result |
-| 21 | a failed update switches back to the previous program |
-| 22 | --no-auto-update removes the job |
-| 23 | the off choice is kept on later installs |
-| 24 | --auto-update turns it back on |
-| 25 | uninstall stops it |
-| 26 | uninstall keeps keys |
-| 27 | purge removes everything |
-| 28 | uninstall removes the update job |
+| 21 | root ignores the user's ~/.curlrc |
+| 22 | root ignores programs early in the user's PATH |
+| 23 | a failed update switches back to the previous program |
+| 24 | --no-auto-update removes the job |
+| 25 | the off choice is kept on later installs |
+| 26 | --auto-update turns it back on |
+| 27 | uninstall stops it |
+| 28 | uninstall keeps keys |
+| 29 | purge removes everything |
+| 30 | uninstall removes the update job |
 
-How the update checks work: check 18 signs a made-up `release.txt` with a fresh key and runs the installed program's `release-check` on it. Check 19 runs the daily job once; with no newer signed release it must leave the same version running. Check 21 installs a program that exits at once and expects the previous gate to come back.
+How the update checks work: check 18 signs a made-up `release.txt` with a fresh key and runs the installed program's `release-check` on it. Check 19 runs the daily job once; with no newer signed release it must leave the same version running. Checks 21 and 22 plant a `~/.curlrc` that would write a file, and a fake `curl` early in `PATH` that would touch a file, then run the daily job with `sudo --preserve-env=HOME,PATH` and `phygital-key-admin update`; neither file may appear. Check 23 installs a program that exits at once and expects the previous gate to come back. The stop-and-restart of a program that takes the port during an update restart, and the wait for standing approvals, have no check here.
 
 > [!WARNING]
 > The release for a version does not exist yet when CI runs, so the test installs a root-owned copy of the fresh build with `--binary`. Downloading a published release, checking its signed `release.txt` and its SHA-256, and a real automatic update are not exercised by this test. They can run for real only once signed releases exist (the first real test is the release after v0.3.0).
@@ -392,7 +394,7 @@ flowchart TD
   T --> J6["licenses and advisories: cargo-deny"]
   J1 --> S1["fmt, clippy -D warnings, cargo test, vectors up to date"]
   Tag["Tag v*"] --> RB["release build: 5 targets, cargo test first"]
-  RB --> RD["draft release, each file with .sha256"]
+  RB --> RD["draft release, each file with .sha256 and a build record"]
   RD --> SG["maintainer runs scripts/sign-release.sh"]
   SG --> RP["release.txt and .sig uploaded, release published"]
 ```
@@ -407,7 +409,7 @@ flowchart TD
 | fuzz | `ubuntu-latest`, nightly Rust | `cargo install --locked cargo-fuzz`, then each of the 4 targets for 60 s |
 | licenses and advisories | `ubuntu-latest` | cargo-deny |
 
-`.github/workflows/release.yml` runs on a `v*` tag. It builds for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, runs `cargo test --workspace --locked` on each runner first, packages the program with `README.md`, `LICENSE` and `NOTICE`, writes a `.sha256` for each archive, and creates a draft release. Drafts are invisible to installers and to the daily update job. The maintainer then runs `scripts/sign-release.sh vX.Y.Z` on their own Mac: it downloads the files, computes each SHA-256 itself and compares it with the workflow's `.sha256`, writes and signs `release.txt`, checks the signature against the keys pinned in `install-service.sh`, uploads `release.txt` and `release.txt.sig`, and only then publishes. The release key never goes to GitHub. See [contributing](../CONTRIBUTING.md#releasing).
+`.github/workflows/release.yml` runs on a `v*` tag. It builds for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, runs `cargo test --workspace --locked` on each runner first, packages the program with `README.md`, `LICENSE` and `NOTICE`, writes a `.sha256` for each archive, publishes a build provenance attestation for each archive (`actions/attest-build-provenance`), and creates a draft release. Drafts are invisible to installers and to the daily update job. The maintainer then runs `scripts/sign-release.sh vX.Y.Z` on their own Mac, in their own terminal: it downloads the files, computes each SHA-256 itself and compares it with the workflow's `.sha256`, checks with `gh attestation verify` that each file was built by `release.yml` from the tag at the commit their own clone has for it, asks for the passphrase, writes and signs `release.txt`, checks the signature against the keys pinned in `install-service.sh`, uploads `release.txt` and `release.txt.sig`, and only then publishes. The release key never goes to GitHub. See [contributing](../CONTRIBUTING.md#releasing).
 
 ## The owner's hand test
 

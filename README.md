@@ -32,7 +32,7 @@
 </p>
 
 > [!WARNING]
-> **Pre-audit.** No outside security firm has reviewed it yet. It has had six independent AI security reviews with every finding fixed, and it is tested on every change. Read the [threat model](docs/threat-model.md) before you rely on it.
+> **Pre-audit.** No outside security firm has reviewed it yet. It has had seven independent AI security reviews with every finding fixed or documented as a limit, and it is tested on every change. Read the [threat model](docs/threat-model.md) before you rely on it.
 
 <p align="center">
 <img src="docs/images/approve-dark-desktop.png" alt="The approval page in the dark theme: a deploy request for service api, version 2.4.1, environment production, with every field listed, the SHA-256 fingerprint of the exact text being signed, and Approve and Deny buttons" width="640">
@@ -258,10 +258,11 @@ Each `phygital-key-admin` command asks for your administrator password. Details,
 
 The secure install updates itself once a day, and installs a release only if all of this holds:
 
-- [x] Its file list and SHA-256 sums (`release.txt`) are signed (ECDSA P-256) by a release key pinned in the installer. That key lives encrypted on the maintainer's computer, never on GitHub, so taking over the GitHub account is not enough to push an update.
+- [x] Its file list and SHA-256 sums (`release.txt`) are signed (ECDSA P-256) by a release key pinned in the installer. That key lives encrypted on the maintainer's computer under a passphrase they type, never in the macOS Keychain or on GitHub, so taking over the GitHub account is not enough to push an update. Before signing, the maintainer's script checks GitHub's build record of every file against the maintainer's own copy of the release tag.
 - [x] It is newer than the installed version. Older or unsigned releases are never installed.
-- [x] No standing approval is active and no request is waiting (a restart would end them). It waits up to 7 days for that, then installs anyway.
-- [x] The new gate starts and passes its checks. Otherwise the previous program comes back.
+- [x] No standing approval is active (a restart would end them). It waits up to 7 days for that, counted from the first wait on the installed version, then installs anyway. Requests still waiting for you do not hold an update back.
+- [x] The new gate starts and passes its checks. Otherwise the previous program comes back. A program that takes the gate's port during the restart is stopped and the gate started again.
+- [x] Root runs with a clean environment: your `~/.curlrc` and the programs in your `PATH` are never used.
 
 `phygital-key-admin status` shows the last result, `phygital-key-admin update` updates now, and `--no-auto-update` turns it off. Every way to install and update: [updates](docs/updates.md). Why: [decision 36](docs/decisions.md).
 
@@ -277,7 +278,7 @@ The secure install updates itself once a day, and installs a release only if all
 | Fuzzing | 4 targets (verifier, strict parser, key history, standing), 60 s each in CI |
 | Mutation testing | `cargo-mutants` on the verifier; surviving mutants became tests |
 | End to end | 108 checks with real Chromium, a virtual passkey and the official MCP SDK, including attacks |
-| Secure install | Installed for real on macOS and Linux in CI, then attacked as the user; update job, signature refusal and switch-back checked |
+| Secure install | 30 checks: installed for real on macOS and Linux in CI, then attacked as the user; update job, signature refusal, a planted `~/.curlrc` and `PATH`, and switch-back checked |
 | Supply chain | `cargo-deny`: advisories and a licence allowlist |
 
 Every push runs all of it on Linux, macOS and Windows. Details: [testing](docs/testing.md), [security reviews](docs/security-reviews.md), [threat model](docs/threat-model.md). Found a problem? [Report it privately](SECURITY.md).

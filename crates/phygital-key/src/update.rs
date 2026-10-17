@@ -222,7 +222,9 @@ fn run(cmd: &mut std::process::Command, what: &str) -> Result<(), String> {
 fn download(url: &str, to: &Path) -> Result<(), String> {
     run(
         std::process::Command::new("curl")
+            // -q first: never read a ~/.curlrc.
             .args([
+                "-q",
                 "--proto",
                 "=https",
                 "--tlsv1.2",
@@ -335,14 +337,23 @@ pub fn update(check_only: bool) -> Result<(), String> {
             return Err("the release does not contain the program".into());
         }
         // Swap in place: write next to this program, then rename over it.
+        // A fresh file (never one that was there before, or a link someone placed).
         let staged = exe.with_file_name(".phygital-key.update");
-        std::fs::copy(&new, &staged).map_err(|e| format!("{}: {e}", staged.display()))?;
+        let _ = std::fs::remove_file(&staged);
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))
-                .map_err(|e| e.to_string())?;
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o755);
         }
+        let mut out = opts
+            .open(&staged)
+            .map_err(|e| format!("{}: {e}", staged.display()))?;
+        let mut src = std::fs::File::open(&new).map_err(|e| e.to_string())?;
+        std::io::copy(&mut src, &mut out).map_err(|e| format!("{}: {e}", staged.display()))?;
+        out.sync_all().map_err(|e| e.to_string())?;
+        drop(out);
         std::fs::rename(&staged, &exe).map_err(|e| {
             let _ = std::fs::remove_file(&staged);
             format!("{}: {e}", exe.display())

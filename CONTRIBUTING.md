@@ -85,7 +85,7 @@ cd tests/e2e && npm ci && npx playwright install chromium
 PKA_BIN=../../target/release/phygital-key node run.mjs
 ```
 
-The secure install, including its automatic updates, is tested for real in CI on macOS and Linux (`tests/secure-install.sh`, 28 checks). It needs password-less sudo, so it runs only on CI machines. Do not set up password-less sudo on your own computer to run it.
+The secure install, including its automatic updates, is tested for real in CI on macOS and Linux (`tests/secure-install.sh`, 30 checks). It needs password-less sudo, so it runs only on CI machines. Do not set up password-less sudo on your own computer to run it.
 
 CI also checks the examples:
 
@@ -110,27 +110,27 @@ Only the maintainer can make a release that installs, because only the maintaine
 
 ```mermaid
 flowchart LR
-  T["Push tag vX.Y.Z"] --> CI["release.yml: test, build 5 targets"]
+  T["Push tag vX.Y.Z"] --> CI["release.yml: test, build 5 targets, build records"]
   CI --> D["Draft release with .sha256 files"]
-  D --> S["Maintainer's Mac: scripts/sign-release.sh vX.Y.Z"]
+  D --> S["Maintainer's own terminal: scripts/sign-release.sh vX.Y.Z, passphrase typed"]
   S --> P["release.txt and .sig uploaded, release published"]
 ```
 
 Once, before the first signed release, on the maintainer's own Mac:
 
-- [ ] Run `scripts/release-key.sh`. It makes two P-256 keys in `~/.phygital-key-release` (a signing key and a backup key), each encrypted with AES-256 under a random passphrase stored in the login Keychain, and pins both public keys in the two installers.
-- [ ] Move `backup-key.pem` and its passphrase off the Mac, as the script says.
+- [ ] Run `scripts/release-key.sh` yourself, in a terminal (it refuses to run without one). It makes two P-256 keys in `~/.phygital-key-release` (a signing key and a backup key), each encrypted with AES-256 under a passphrase you type (at least 16 characters), and pins both public keys in the two installers. Keep both passphrases in your password manager, never in the macOS Keychain, on the Mac in plain text or on GitHub. A program running as you, an AI agent included, can then copy the key files but cannot use them.
+- [ ] Move `backup-key.pem` off the Mac (into your password manager as an attachment, or onto a USB stick), as the script says.
 - [ ] Commit the two changed installers.
 
 For each release:
 
 1. Update the version (`Cargo.toml`, `verifier-js/package.json`, `CITATION.cff`, the default `VERSION` in `crates/phygital-key/assets/install-service.sh`) and add a `CHANGELOG.md` entry. CI must be green on `main`.
-2. Push the tag `vX.Y.Z`. `.github/workflows/release.yml` runs `cargo test` on each runner, builds the five targets, writes a `.sha256` for each archive and creates a draft release. Drafts are invisible to installers and to the daily update job.
-3. On the maintainer's Mac, run `scripts/sign-release.sh vX.Y.Z` (needs `gh`, `openssl` and the release key). It downloads the draft's files, computes each SHA-256 itself and compares it with the workflow's `.sha256`, writes and signs `release.txt`, checks the signature against the keys pinned in `install-service.sh`, uploads `release.txt` and `release.txt.sig`, and only then publishes the release as the latest. If any step fails, the release stays a draft.
+2. Push the tag `vX.Y.Z`. `.github/workflows/release.yml` runs `cargo test` on each runner, builds the five targets, writes a `.sha256` for each archive, publishes a build provenance attestation (build record) for each archive with `actions/attest-build-provenance`, and creates a draft release. Drafts are invisible to installers and to the daily update job.
+3. On the maintainer's Mac, in your own terminal, run `scripts/sign-release.sh vX.Y.Z` from a clone that has the tag (needs `gh`, which also checks the build records, `openssl` and the release key). It reads the tag's commit from your clone, downloads the draft's files, computes each SHA-256 itself and compares it with the workflow's `.sha256`, and runs `gh attestation verify` on each file: it must have been built by `.github/workflows/release.yml` from `refs/tags/vX.Y.Z` at that commit. Then it asks for the signing key passphrase, signs `release.txt`, checks the signature against the keys pinned in `install-service.sh`, uploads `release.txt` and `release.txt.sig`, and only then publishes the release as the latest. If any step fails, the release stays a draft. Never run it from an AI agent's session or let an agent type the passphrase: the script refuses to run without a terminal for that reason.
 4. Write the package manifests with `scripts/package-manifests.sh vX.Y.Z` (Homebrew formula, Scoop manifest, winget manifests).
 
 > [!CAUTION]
-> Never put a release key or its passphrase in GitHub: not in secrets, not in a workflow, not in the repository. The signature is what stops someone who takes over the GitHub account from shipping an update that installs as root. A key in GitHub would give them that power.
+> Never put a release key or its passphrase in GitHub (not in secrets, not in a workflow, not in the repository) or in the macOS Keychain. The signature is what stops someone who takes over the GitHub account from shipping an update that installs as root. A key in GitHub would give them that power, and a passphrase in the Keychain would let any program running as you sign.
 
 ## Docs style
 

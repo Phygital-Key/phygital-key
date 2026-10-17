@@ -33,7 +33,7 @@ An agent acting as you can then reach the gate only the way it is meant to: thro
 | Gate log | `/Library/Logs/PhygitalKey/gate.log` (folder 0700, gate user) | The system journal: `journalctl -u phygital-key` |
 | Gate service | launchd LaunchDaemon `io.phygitalkey.gate` (`/Library/LaunchDaemons/io.phygitalkey.gate.plist`), restarts if it stops | systemd unit `phygital-key.service` (`/etc/systemd/system/phygital-key.service`), restarts on failure |
 | Runs | `phygital-key --home <data> --port 7468 serve` as the gate user, file mask 077 | the same, plus systemd hardening (below) |
-| Daily update job (root, unless turned off) | LaunchDaemon `io.phygitalkey.update` (`/Library/LaunchDaemons/io.phygitalkey.update.plist`), once a day at a random time picked at install | `phygital-key-update.timer` (`OnCalendar=daily`, `RandomizedDelaySec=6h`, `Persistent=true`) and `phygital-key-update.service` (oneshot, `PrivateTmp`, `ProtectHome`) in `/etc/systemd/system/` |
+| Daily update job (root, unless turned off) | LaunchDaemon `io.phygitalkey.update` (`/Library/LaunchDaemons/io.phygitalkey.update.plist`, mode 0600, so other users cannot read its time), once a day at a random time picked at install | `phygital-key-update.timer` (`OnCalendar=daily`, `RandomizedDelaySec=6h`, `Persistent=true`) and `phygital-key-update.service` (oneshot, `PrivateTmp`, `ProtectHome`) in `/etc/systemd/system/` |
 | Update log | `/Library/Logs/PhygitalKeyUpdate/update.log` (folder 0700, root) | The journal: `journalctl -u phygital-key-update` |
 | Update settings (written by root) | `/Library/PhygitalKey/auto-update` (`on` or `off`) and `/Library/PhygitalKey/update-status` (last result) | `/usr/lib/phygital-key/auto-update` and `/usr/lib/phygital-key/update-status` |
 
@@ -130,7 +130,7 @@ With the `curl` command, pass options after `-s --`:
 curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash -s -- --no-auto-update
 ```
 
-The script itself takes only `--uninstall`, `--purge`, `--auto-update` and `--no-auto-update` (anything else prints `unknown option: <option>`); the program passes `--release`, `--binary` and `--port` to it. Of the program's general options, only `--port` reaches the service: it always uses the data folder above and serves `http://localhost:<port>`, so `--home`, `--origin`, `--bind`, `--lifetime` and `--open-mcp` have no effect on it.
+The script itself takes only `--uninstall`, `--purge`, `--auto-update` and `--no-auto-update`, plus the hidden `--auto-update-run` and `--now` of the update job (anything else prints `unknown option: <option>`); the program passes `--release`, `--binary` and `--port` to it. Of the program's general options, only `--port` reaches the service: it always uses the data folder above and serves `http://localhost:<port>`, so `--home`, `--origin`, `--bind`, `--lifetime` and `--open-mcp` have no effect on it.
 
 ## What it checks and refuses
 
@@ -165,6 +165,10 @@ When a gate was already installed (an update), the script keeps the old program 
 
 The port check matters because the approval page lives at `http://localhost:7468`. Another program holding that address (on IPv4 or IPv6) could show a fake page with the very same passkey origin. The gate itself also holds both `127.0.0.1` and `[::1]` and refuses to start if either is taken.
 
+During an unattended update (the daily job or `phygital-key-admin update`) nobody is there to read a refusal, and stopping the gate would leave the other program holding the address. So in that run only, a program running as another user that took the port while the gate restarted is stopped (`kill -9`) and the gate started again, up to 5 times. The result line then ends with `; stopped programs that took the port of the gate during the restart: [uid <u>, pid <p>]`. If the port is still taken after 5 tries, the gate is stopped and the result says so. An install you run yourself keeps refusing with the message above.
+
+**Root never takes your environment.** On macOS, `sudo` keeps your `HOME` (and your `PATH` when no `secure_path` is set). A `~/.curlrc` there could make root's `curl` download and write any file, and a folder you can write early in `PATH` (such as `/opt/homebrew/bin`) could hold a fake `curl`, `awk` or `openssl`. So `install-service` starts the script with an empty environment (only `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, root's `HOME`, `LANG=C` and the `PKA_*` values), the script sets that `PATH` and `HOME` again first and clears `CURL_HOME`, `XDG_CONFIG_HOME`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `CURL_CA_BUNDLE`, `OPENSSL_CONF`, `OPENSSL_MODULES`, `BASH_ENV`, `ENV`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_INSERT_LIBRARIES` and `DYLD_LIBRARY_PATH` (which also covers `curl ... | sudo bash`), and every `curl` starts with `-q`, so no `.curlrc` is read. The admin helper sets `PATH` to system folders before any `sudo`.
+
 ## The admin helper
 
 `phygital-key-admin` runs a few commands as the gate user, through `sudo`. Each asks for your administrator password (unless `sudo` remembers it from a moment ago).
@@ -179,7 +183,7 @@ The port check matters because the approval page lives at `http://localhost:7468
 | `phygital-key-admin logs` | Shows the last 50 lines of the gate's log |
 | `phygital-key-admin update [--now]` | Installs the latest signed release now, if it is newer; `--now` even while standing approvals are active ([update](#update)) |
 
-Anything else prints `usage: phygital-key-admin enroll | token | keys | audit-check | status | logs | update`.
+Anything else prints `usage: phygital-key-admin enroll | token | keys | audit-check | status | logs | update [--now]`.
 
 ## Check it any time
 
@@ -193,7 +197,7 @@ When all is well:
 program:      phygital-key 0.3.0
 auto-update:  on  (last: 2026-10-18T03:12:00Z up to date (v0.3.0; latest signed release v0.3.0))
 ok: only the gate (_phygitalkey) listens on port 7468
-{"history_ok":true,"keys":[...],"origin":"http://localhost:7468","root_fingerprint":"...","rp_id":"localhost"}
+{"history_ok":true,"keys":[...],"origin":"http://localhost:7468","root_fingerprint":"...","rp_id":"localhost","standing_active":0,"waiting":0}
 ```
 
 Otherwise the last lines read:
@@ -206,7 +210,7 @@ Run it after a restart, after an update, and whenever an approval page looks odd
 
 ## Update
 
-**Automatically.** With automatic updates on (the default), the daily job downloads the latest `release.txt` and its signature from GitHub, checks the signature against the pinned release keys, and installs the release only if it is strictly newer. It then runs every check above again. It waits while standing approvals are active or requests are waiting (a restart would end them), for up to 7 days per release. If the new gate does not start, the previous program is put back and started; if another program holds the port, the gate is stopped and the result says why. Each run writes one result line to `update-status`, shown by `status`. The full flow, with every result line, is on [updates](updates.md#automatic-updates-secure-install).
+**Automatically.** With automatic updates on (the default), the daily job downloads the latest `release.txt` and its signature from GitHub, checks the signature against the pinned release keys, and installs the release only if it is strictly newer. It then runs every check above again. It waits while standing approvals are active (a restart would end them), for up to 7 days counted from the first wait on the installed version; requests still waiting for you do not hold it back. If the new gate does not start, the previous program is put back and started. If another program takes the port during the restart, it is stopped and the gate started again, up to 5 times; after that the gate is stopped and the result says why. Each run writes one result line to `update-status`, shown by `status`. The full flow, with every result line, is on [updates](updates.md#automatic-updates-secure-install).
 
 **Now.** `phygital-key-admin update` runs the same job at once. `phygital-key-admin update --now` also installs while standing approvals are active, and so ends them.
 
@@ -258,6 +262,7 @@ sudo /Library/PhygitalKey/bin/phygital-key install-service --uninstall --purge  
 - **It contacts GitHub daily** while automatic updates are on ([privacy](privacy.md#what-leaves-your-machine)). The gate itself makes no network calls.
 - **Automatic updates are new.** The first real automatic update against GitHub happens with the release after v0.3.0. Until then, CI tests the parts on their own (below).
 - **Restarts end standing approvals** and drop waiting requests (fail closed). An automatic update restarts the gate at the job's time.
+- **A moment with a free port.** While the gate restarts, its port is free for a moment. A program that takes it during an update is stopped, but a fast one could take it again (and is stopped again). Passing the open port from launchd or systemd to the gate is not built, because the gate forbids unsafe code.
 - **Changing the port** changes the approval page's address, which your keyring is tied to. Enroll a new keyring after such a change ([keys and devices](keys-and-devices.md#the-signed-key-history)).
 - **Pre-audit.** No outside security audit has happened yet ([security reviews](security-reviews.md)).
 
@@ -285,6 +290,8 @@ CI installs the gate for real, as a separate user, on macOS and on Linux, on eve
 - [x] a release list signed by an unknown key is refused
 - [x] the update job leaves the gate running unless a newer signed release exists
 - [x] the update job records its result
+- [x] root ignores the user's `~/.curlrc`
+- [x] root ignores programs early in the user's `PATH`
 - [x] a new program that does not start is switched back to the previous one
 - [x] `--no-auto-update` removes the job
 - [x] the off choice is kept on later installs
@@ -294,7 +301,7 @@ CI installs the gate for real, as a separate user, on macOS and on Linux, on eve
 - [x] purge removes everything
 - [x] uninstall removes the update job
 
-That is 28 checks. Two of them have honest limits: the update job runs against GitHub, where no newer signed release exists, so it records `up to date`, `update check failed` or `update refused`; and the switch-back check installs a broken program with `--binary`, not through a real update. See [testing](testing.md) for the other suites.
+That is 30 checks. Two of them have honest limits: the update job runs against GitHub, where no newer signed release exists, so it records `up to date`, `update check failed` or `update refused`; and the switch-back check installs a broken program with `--binary`, not through a real update. See [testing](testing.md) for the other suites.
 
 ## Troubleshooting
 

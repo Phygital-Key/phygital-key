@@ -268,8 +268,9 @@ $$\texttt{hash}_n = \mathrm{base64url}\big(\mathrm{SHA256}(\mathrm{JCS}(\text{li
 | A value in line 2 edited by hand | `phygital-key: audit log line 2: hash does not match (line changed)` | 1 |
 | The `hash` field of line 1 removed | `phygital-key: audit log line 1: no hash` | 1 |
 | A line removed, or two lines swapped | `phygital-key: audit log line 1: chain broken (prev does not match)` (the first line whose `prev` no longer fits) | 1 |
-| No `audit.log`, but `keyring.json` exists | `phygital-key: no audit log at <home>/audit.log, but a key is enrolled: the log was deleted or moved` | 1 |
-| No `audit.log` and no `keyring.json` | `no audit log yet: nothing has happened on this gate` | 0 |
+| No `audit.log`, but `keyring.json` holds a key | `phygital-key: no audit log at <home>/audit.log, but a key is enrolled: the log was deleted or moved` | 1 |
+| No `audit.log`, and `keyring.json` cannot be read or is damaged | `phygital-key: <home>/keyring.json: damaged keyring (<reason>)` (or the read error) | 1 |
+| No `audit.log`, and no `keyring.json` (or one with no keys) | `no audit log yet: nothing has happened on this gate` | 0 |
 
 The output names the last hash. Copy it somewhere the gate cannot write (a note, a ticket, another machine): the chain detects edited, removed and reordered lines, not a log rewritten from the start or cut off at the end. A deleted log is caught only while `keyring.json` is still there. See [audit log](audit-log.md).
 
@@ -386,7 +387,7 @@ The messages below are taken from the code (`crates/phygital-key/src/update.rs`)
 
 The release list is `release.txt`, checked line by line before anything is downloaded: line 1 `phygital-key release manifest v1`, line 2 `version vX.Y.Z`, then one `<64 lowercase hex>  phygital-key-vX.Y.Z-<target>.tar.gz` (or `.zip`) line per file, LF line ends and a final LF, at most 8192 bytes. `release.txt.sig` is an ECDSA P-256 / SHA-256 signature (DER) made with a release key that is kept off GitHub. The program and both install scripts pin the same public release keys.
 
-It contacts GitHub only when you run it (`curl` over HTTPS, TLS 1.2 or later). Until a signed release is published, it stops at the first download:
+It contacts GitHub only when you run it (`curl -q` over HTTPS, TLS 1.2 or later; `-q` means no `.curlrc` is read). Until a signed release is published, it stops at the first download:
 
 ```text
 $ phygital-key update --check
@@ -395,7 +396,7 @@ phygital-key: download of https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/
 ```
 
 > [!NOTE]
-> The secure install updates itself with a daily job (macOS LaunchDaemon `io.phygitalkey.update`, Linux `phygital-key-update.timer`). It installs only a strictly newer signed release and keeps the previous program. If the new gate does not answer within about 30 seconds, it switches back to the previous program; if another program holds the gate's port, it stops the gate instead and records why in `<prefix>/update-status`. Updating restarts the gate, so requests still waiting for a decision are lost and standing approvals end (their use keys live in memory); approvals already signed are not affected. The daily job waits while standing approvals are active or requests are waiting, for up to 7 days per release, then installs anyway. Update now with `phygital-key-admin update` (`--now` to install even while they are active); `phygital-key-admin status` shows the program version, whether auto-update is on and the last result. The full download-and-update path runs for real only once signed releases exist. More: [updates](updates.md), [secure install](secure-install.md#update).
+> The secure install updates itself with a daily job (macOS LaunchDaemon `io.phygitalkey.update`, Linux `phygital-key-update.timer`). It installs only a strictly newer signed release and keeps the previous program. If the new gate does not answer within about 30 seconds, it switches back to the previous program. If another program takes the gate's port during the restart, it stops that program and starts the gate again, up to 5 times, then stops the gate instead and records why in `<prefix>/update-status`. Updating restarts the gate, so requests still waiting for a decision are lost and standing approvals end (their use keys live in memory); approvals already signed are not affected. The daily job waits while standing approvals are active (waiting requests do not count), for up to 7 days from the first wait on the installed version, then installs anyway. Update now with `phygital-key-admin update` (`--now` to install even while they are active); `phygital-key-admin status` shows the program version, whether auto-update is on and the last result. The full download-and-update path runs for real only once signed releases exist. More: [updates](updates.md), [secure install](secure-install.md#update).
 
 ## Files it writes
 
@@ -409,7 +410,7 @@ phygital-key: download of https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/
 | `audit.log` | the gate | 0600 | Hash-chained log of requests, approvals, key changes, receipts |
 | `revocations.json` | the gate | 0600 | Signed revocations it publishes |
 
-The gate and `trust-service`, `enroll` and `mcp-token` write each file to a `.tmp` file first, flush it, then rename it over the old one; `audit.log` is only ever appended to. `keys`, `keys --check`, `receipt-check` and `audit-check` only read (`keys` without `--file` creates an empty `<home>` if there is none). `verify` writes only the seen-ids file (and creates `<home>` if needed). The home folder is created with mode 0700. `update` writes nothing in `<home>`: it replaces its own program file (through a `.phygital-key.update` file next to it) and uses a private temporary folder that it deletes. Full list: [reference](reference.md#files-in-the-data-folder).
+The gate and `trust-service`, `enroll` and `mcp-token` write each file to a `.tmp` file first, flush it, then rename it over the old one; `audit.log` is only ever appended to. `keys`, `keys --check`, `receipt-check` and `audit-check` only read (`keys` without `--file` creates an empty `<home>` if there is none). `verify` writes only the seen-ids file (and creates `<home>` if needed). The home folder is created with mode 0700. `update` writes nothing in `<home>`: it replaces its own program file (through a freshly created `.phygital-key.update` file next to it, mode 0755, never a file or link that was already there) and uses a private temporary folder that it deletes. Full list: [reference](reference.md#files-in-the-data-folder).
 
 ## The seen-ids file
 

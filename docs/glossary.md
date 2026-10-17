@@ -18,6 +18,8 @@ The web page the gate serves where the person reads a request and approves with 
 
 An optional certificate in which an authenticator's maker vouches for its model. Phygital Key asks for attestation `none`, so the gate cannot tell a hardware key from a software key; the one-time enrollment link and approvals by existing keys provide the trust instead. See [WebAuthn](webauthn.md#registration).
 
+The release process uses a different kind: a build provenance attestation (build record), GitHub's signed record of which workflow built a release file from which commit. See [the signed release list](updates.md#the-signed-release-list).
+
 ### Audience
 
 The `aud` claim: who will act on the approval, such as `https://deploy.example.com`. It is 1 to 256 visible ASCII characters, and a verifier refuses an approval whose audience is not its own (`WRONG_AUDIENCE`). See [spec](spec.md).

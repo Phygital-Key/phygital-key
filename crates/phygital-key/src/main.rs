@@ -326,7 +326,19 @@ async fn run(cli: Cli) -> Result<(), String> {
                     args.push(flag.into());
                 }
             }
+            // Runs as root: start from an empty environment, so nothing of the
+            // caller's (HOME with a ~/.curlrc, PATH with a planted curl, BASH_ENV,
+            // OPENSSL_CONF...) can steer what root runs, downloads or writes.
+            let root_home = if cfg!(target_os = "macos") {
+                "/var/root"
+            } else {
+                "/root"
+            };
             let mut child = std::process::Command::new("/bin/bash")
+                .env_clear()
+                .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+                .env("HOME", root_home)
+                .env("LANG", "C")
                 .args(&args)
                 // The script downloads and checks the official release itself: this
                 // program file is yours, so it is never what gets installed as root.
@@ -481,10 +493,17 @@ async fn run(cli: Cli) -> Result<(), String> {
         Command::AuditCheck => {
             let log = s.home.join("audit.log");
             if !log.exists() {
-                let enrolled = std::fs::read_to_string(s.home.join("keyring.json"))
-                    .ok()
-                    .and_then(|t| Keyring::from_json(&t).ok())
-                    .is_some_and(|k| !k.keys.is_empty());
+                let ring = s.home.join("keyring.json");
+                let enrolled = if ring.exists() {
+                    // A keyring that cannot be read is not "nothing happened".
+                    let text = std::fs::read_to_string(&ring)
+                        .map_err(|e| format!("{}: {e}", ring.display()))?;
+                    let k = Keyring::from_json(&text)
+                        .map_err(|e| format!("{}: damaged keyring ({e})", ring.display()))?;
+                    !k.keys.is_empty()
+                } else {
+                    false
+                };
                 if enrolled {
                     return Err(format!(
                         "no audit log at {}, but a key is enrolled: the log was deleted or moved",

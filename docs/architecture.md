@@ -308,26 +308,30 @@ A crash leaves either the old file or the new one, never half of one. If the sav
 
 ## Signed releases and updates
 
-The secure install updates itself once a day, on by default ([decision 36](decisions.md)). An update runs new code as root, so a SHA-256 published next to the file is not enough: whoever controlled the GitHub account could replace both. Each release therefore carries a file list signed with a release key that never touches GitHub, and every installer and updater checks that signature against public keys pinned in its own source. The code is `src/update.rs`, `assets/install-service.sh`, `install.sh`, `scripts/release-key.sh`, `scripts/sign-release.sh` and `.github/workflows/release.yml`.
+The secure install updates itself once a day, on by default ([decision 36](decisions.md)). An update runs new code as root, so a SHA-256 published next to the file is not enough: whoever controlled the GitHub account could replace both. Each release therefore carries a file list signed with a release key that never touches GitHub, and every installer and updater checks that signature against public keys pinned in its own source. Before the key signs, the build record of every file is checked against the maintainer's own copy of the tag. The code is `src/update.rs`, `assets/install-service.sh`, `install.sh`, `scripts/release-key.sh`, `scripts/sign-release.sh` and `.github/workflows/release.yml`.
 
 ```mermaid
 flowchart TD
-    T["Tag vX.Y.Z pushed"] --> B["CI: tests, builds 5 targets, writes .sha256 files"]
+    T["Tag vX.Y.Z pushed"] --> B["CI: tests, builds 5 targets, writes .sha256 files and build records"]
     B --> D["Draft release: invisible to installers and updaters"]
-    D --> S["sign-release.sh on the maintainer's Mac: hashes, writes and signs release.txt"]
+    D --> S["sign-release.sh on the maintainer's Mac: checks build records, hashes, writes and signs release.txt"]
     S --> P["release.txt and release.txt.sig uploaded, release published"]
     P --> F["Daily job fetches the latest release.txt and its signature"]
     F --> K{"Signed by a pinned release key?"}
     K -- no --> R1["Refused: nothing changes"]
     K -- yes --> N{"Newer than the installed version?"}
     N -- no --> U["Up to date: nothing changes"]
-    N -- yes --> H["Download, compare SHA-256 with the signed list"]
+    N -- yes --> SA{"Standing approvals active, under 7 days?"}
+    SA -- yes --> WT["Waiting to install: try the next day"]
+    SA -- no --> H["Download, compare SHA-256 with the signed list"]
     H -- "differs" --> R2["Refused: nothing is installed"]
     H -- "matches" --> W["Swap the program, keep the old one, restart the gate"]
     W --> C{"Gate answers and only the gate listens?"}
     C -- yes --> OK["Updated"]
     C -- "no answer" --> BACK["Previous program put back and restarted"]
-    C -- "another program on the port" --> STOP["Gate stopped"]
+    C -- "another program on the port" --> KILL["Stop that program, start the gate again (up to 5 times)"]
+    KILL --> C
+    KILL -- "still taken" --> STOP["Gate stopped"]
 ```
 
 ### release.txt
@@ -352,13 +356,13 @@ The Rust parser (`verify_manifest` and `parse_manifest` in `update.rs`) refuses 
 | Files | At least one, none listed twice |
 | Signature | `release.txt.sig` is an ECDSA P-256 signature over SHA-256 of the exact bytes, DER-encoded (what `openssl dgst -sha256 -sign` writes), by one of the pinned keys |
 
-The shell installers check the signature with `openssl dgst -sha256 -verify`, then the first line, the version line and the line for the one file they download. Seven unit tests in `update.rs` cover the parser, the version order, reading PEM blocks and the pinned keys.
+The shell installers check the signature with `openssl dgst -sha256 -verify`. The secure installer (`install-service.sh`, which runs as root) then applies the same strict format as the program: LF only, a final LF, at least one file line, every file line exactly `<64 hex>  phygital-key-<version>-<name>.tar.gz` or `.zip`, no name twice. `install.sh` (which runs as you) checks the first line, the version line and the line for the one file it downloads. Signatures with a high S value are accepted, which has no security effect. Seven unit tests in `update.rs` cover the parser, the version order, reading PEM blocks and the pinned keys.
 
 ### Pinned release keys
 
 Both installers hold the public keys between `# BEGIN RELEASE KEYS` and `# END RELEASE KEYS`, as PEM `PUBLIC KEY` blocks. The program compiles `install-service.sh` into itself and reads the same block, so the shell installer, `phygital-key update` and the hidden `phygital-key release-check` command trust the same keys. The test `both_installers_pin_the_same_keys` fails if the block in `install.sh` differs.
 
-`scripts/release-key.sh` (run once, on the maintainer's Mac) makes two P-256 keys in `~/.phygital-key-release`: a signing key and a backup key to be moved off that computer. Each key file is encrypted (AES-256) with a random passphrase kept in the macOS login Keychain. The script then writes both public keys into the two installers. Private release keys are never stored in GitHub or its secrets.
+`scripts/release-key.sh` (run once, on the maintainer's Mac) makes two P-256 keys in `~/.phygital-key-release`: a signing key and a backup key to be moved off that computer. Each key file is encrypted (AES-256) with a passphrase the maintainer types (and keeps in a password manager); the script refuses to run without a terminal. Nothing goes into the macOS Keychain, so a program running as the maintainer, an agent included, can copy the encrypted files but cannot use them. The script then writes both public keys into the two installers. Private release keys and passphrases are never stored in GitHub or its secrets. A hardware key (for example a YubiKey with touch) would be a stronger home for the signing key later.
 
 > [!IMPORTANT]
 > The release keys are not made yet: in this source tree the key block is empty. Until the maintainer runs `scripts/release-key.sh` and commits the block, every installer refuses with "no release key is pinned in this installer", and the test `installer_pins_at_least_one_release_key` fails.
@@ -366,28 +370,28 @@ Both installers hold the public keys between `# BEGIN RELEASE KEYS` and `# END R
 ### Draft until signed
 
 1. Pushing a `v*` tag runs `release.yml`: `cargo test --workspace --locked` and a release build for 5 targets (Linux x86_64 and arm64, macOS Apple silicon and Intel, Windows x86_64), each packed as `.tar.gz` (`.zip` on Windows) with a `.sha256` file.
-2. The workflow creates a draft release. Drafts are not served by `releases/latest/download` or by version URLs, so no installer and no updater can see it.
-3. On the maintainer's Mac, `scripts/sign-release.sh vX.Y.Z` downloads the draft's files, computes each SHA-256 itself, requires it to match the workflow's `.sha256` file, writes `release.txt`, signs it with the signing key (passphrase read from the Keychain), and checks the signature against the keys pinned in `install-service.sh`. Only then does it upload `release.txt` and `release.txt.sig` and publish the release as the latest.
+2. Each build job publishes a build provenance attestation for its archive (`actions/attest-build-provenance`, signed through Sigstore): GitHub's record of which workflow built which file from which commit. The workflow then creates a draft release. Drafts are not served by `releases/latest/download` or by version URLs, so no installer and no updater can see it.
+3. On the maintainer's Mac, in their own terminal (the script refuses without one), `scripts/sign-release.sh vX.Y.Z` reads the commit of the tag from the maintainer's own clone, downloads the draft's files, computes each SHA-256 itself and requires it to match the workflow's `.sha256` file. It then runs `gh attestation verify` for each file: built by `.github/workflows/release.yml`, from `refs/tags/vX.Y.Z`, at that commit. A file swapped on GitHub after the build has no such record, and the script stops with `no build record from the release workflow at <commit>. Not signing.` Only then does it write `release.txt`, sign it with the signing key (the maintainer types the passphrase), check the signature against the keys pinned in `install-service.sh`, upload `release.txt` and `release.txt.sig` and publish the release as the latest.
 
 ### The daily job
 
 | | macOS | Linux |
 |---|---|---|
-| Job | LaunchDaemon `io.phygitalkey.update` (root), one random time of day chosen at install | `phygital-key-update.timer` (`OnCalendar=daily`, `RandomizedDelaySec=6h`, `Persistent=true`) starting `phygital-key-update.service` (`Type=oneshot`, `PrivateTmp`, `ProtectHome`) |
+| Job | LaunchDaemon `io.phygitalkey.update` (root, plist mode 0600), one random time of day chosen at install | `phygital-key-update.timer` (`OnCalendar=daily`, `RandomizedDelaySec=6h`, `Persistent=true`) starting `phygital-key-update.service` (`Type=oneshot`, `PrivateTmp`, `ProtectHome`) |
 | Runs | `<prefix>/bin/phygital-key --port <port> install-service --auto-update-run` | the same |
 | Output | `/Library/Logs/PhygitalKeyUpdate/update.log`, in a folder only root can open | the journal: `journalctl -u phygital-key-update` |
 
-`<prefix>` is `/Library/PhygitalKey` on macOS and `/usr/lib/phygital-key` on Linux. The installed program runs the installer script compiled into it, which:
+`<prefix>` is `/Library/PhygitalKey` on macOS and `/usr/lib/phygital-key` on Linux. The installed program runs the installer script compiled into it, with bash started from an empty environment (only `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, root's `HOME`, `LANG=C` and the `PKA_*` values). The script sets that `PATH` and `HOME` again, clears variables such as `CURL_HOME`, `SSL_CERT_FILE`, `OPENSSL_CONF`, `BASH_ENV`, `LD_PRELOAD` and `DYLD_INSERT_LIBRARIES`, sets `umask 022`, and then:
 
-1. fetches `https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases/latest/download/release.txt` and `release.txt.sig` (`curl --proto '=https' --tlsv1.2`);
+1. fetches `https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases/latest/download/release.txt` and `release.txt.sig` (`curl -q --proto '=https' --tlsv1.2`; `-q` means no `.curlrc` is read);
 2. checks the signature with `openssl` and the pinned keys, or, if `openssl` is missing, with the installed root-owned program's `release-check`;
 3. stops if the signed version is not strictly newer than the installed one;
-4. asks the gate's `/api/status` for `waiting` and `standing_active`; if either is above zero, records `waiting to install ...` and stops, for up to 7 days per version (first seen time in `<prefix>/update-postponed`), unless run with `--now`;
+4. asks the gate's `/api/status` for `standing_active`; if it is above zero, records `waiting to install ...` and stops, unless run with `--now`. The first wait on the installed version writes `<unix time> <installed version>` to `<prefix>/update-postponed`; a newer release does not restart that clock, and after 7 days the job installs anyway. Waiting requests (`waiting`) do not count, because an agent can make one at any time;
 5. downloads the release file for this machine, compares its SHA-256 with the signed list, and unpacks it;
 6. keeps a copy of the current program, moves the new one into place in one step, and restarts the gate;
-7. waits up to about 30 seconds for the gate to answer at `/api/status`, and checks that only the gate user listens on the port.
+7. waits up to about 30 seconds for the gate to answer at `/api/status`, and checks that only the gate user listens on the port. A program running as another user that took the port during the restart is stopped with `kill -9` and the gate started again, up to 5 times.
 
-The result goes to `<prefix>/update-status`, one line, written by root and readable by everyone, for example `2026-10-18T03:12:00Z up to date (v0.3.0; latest signed release v0.3.0)`. Other lines: `update check failed: could not download the latest signed release list from GitHub (still on ...)`, `waiting to install ...: N standing approval(s) active, N request(s) waiting. ...`, `update refused: the latest release list is not signed by a pinned release key (still on ...)`, `updated from ... to ... (signed release, SHA-256 checked)`. Any error that stops the run (a download that does not match its signed SHA-256, for example) is recorded as `update stopped: <message>`.
+The result goes to `<prefix>/update-status`, one line, written by root and readable by everyone, for example `2026-10-18T03:12:00Z up to date (v0.3.0; latest signed release v0.3.0)`. Other lines: `update check failed: could not download the latest signed release list from GitHub (still on ...)`, `waiting to install ...: N standing approval(s) active. ...`, `update refused: the latest release list is not signed by a pinned release key (still on ...)`, `updated from ... to ... (signed release, SHA-256 checked)`, which ends with `; stopped programs that took the port of the gate during the restart: [uid U, pid P] ...` when the job had to stop such a program. Any error that stops the run (a download that does not match its signed SHA-256, for example) is recorded as `update stopped: <message>`.
 
 `phygital-key-admin update` runs the same job now. `phygital-key-admin status` prints the program version, whether automatic updates are on, and the last result. `--no-auto-update` removes the job and writes `off` to `<prefix>/auto-update`, so later installs keep it off until `--auto-update`. With the install command from GitHub: `curl ... | sudo bash -s -- --no-auto-update`.
 
@@ -397,7 +401,8 @@ The result goes to `<prefix>/update-status`, one line, written by root and reada
 |---|---|
 | The new gate does not answer within about 30 seconds | The previous program is put back and started. Status: `update to vX.Y.Z failed: the new gate did not start, so vA.B.C is back` |
 | The previous program does not answer either | The gate stays stopped. Status: `update stopped: the gate is stopped: the gate did not start. See: <prefix>/bin/phygital-key-admin logs. To install again: sudo <prefix>/bin/phygital-key install-service` |
-| Another program listens on the gate's port | The gate is stopped, never left running next to it. Status: `update stopped: the gate is stopped: another program (...) is listening on port ...` |
+| Another program takes the gate's port during the restart | That program is stopped (`kill -9`) and the gate started again, up to 5 times. The status line names it |
+| The port is still taken after 5 tries, or was taken before the update started | The gate is stopped, never left running next to it. Status: `update stopped: the gate is stopped: another program (...) is listening on port ...` |
 
 The CI secure-install test installs a program that exits at once and checks that the previous program is back and answering.
 
@@ -410,7 +415,7 @@ Installs in your own folders do not update themselves. `install.sh` checks the s
 The gate itself still makes no network calls. The secure install's daily job contacts github.com once a day (plus the release file when it updates); `install.sh` and `phygital-key update` contact GitHub only when you run them.
 
 > [!WARNING]
-> The full download-and-update path runs for real only once signed releases exist: the first real update is the release after v0.3.0. It has not been tested against GitHub yet. The CI test covers the parts that run without a signed release: the job is installed and root-owned, a list signed by an unknown key is refused, the job leaves the gate running when no newer signed release exists and records its result, a program that does not start is switched back, and the on/off choice is kept.
+> The full download-and-update path runs for real only once signed releases exist: the first real update is the release after v0.3.0. It has not been tested against GitHub yet. The CI test covers the parts that run without a signed release: the job is installed and root-owned, a list signed by an unknown key is refused, the job leaves the gate running when no newer signed release exists and records its result, root ignores a planted `~/.curlrc` and a fake `curl` early in `PATH`, a program that does not start is switched back, and the on/off choice is kept. Killing a program that takes the port during an update restart has no CI test.
 
 ## Next
 

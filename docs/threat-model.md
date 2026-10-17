@@ -29,7 +29,8 @@ How the secure install makes that true:
 | The data cannot be read or written by you | `/Library/Application Support/PhygitalKey` or `/var/lib/phygital-key`, mode 0700, owned by the gate user | "this user cannot read the data folder", "this user cannot write the keyring" |
 | The installed program is the official one | The install downloads the release list (`release.txt`), checks its signature against the pinned release keys, then checks the archive against the SHA-256 in that signed list; a `--binary` must be an absolute path, owned by root, with no group or other write and no symlinks, in every folder above it | "refuses a relative --binary", "refuses a binary the user could have changed", "refuses a release list signed by an unknown key" |
 | Updates come only from signed, newer releases | A root-owned daily job (on by default) installs a release only if its list is signed by a pinned key and its version is higher; a new gate that does not start is replaced by the previous program | "daily update job installed, owned by root", "update job leaves the gate running unless a newer signed release exists", "a failed update switches back to the previous program" |
-| No look-alike page on the same address | The gate holds both `127.0.0.1` and `[::1]` and refuses to start if either is taken; the install refuses while another program listens on the port | "refuses while another program holds the address" |
+| No look-alike page on the same address | The gate holds both `127.0.0.1` and `[::1]` and refuses to start if either is taken; the install refuses while another program listens on the port; during an unattended update, a program that takes the port while the gate restarts is stopped and the gate started again (up to 5 times, then the gate is stopped) | "refuses while another program holds the address" (the stop-and-restart during an update has no CI check) |
+| Root never takes your environment | `install-service` starts its script with an empty environment (system `PATH`, root's `HOME`, `LANG=C`); the script resets `PATH` and `HOME` and clears `CURL_HOME`, `SSL_CERT_FILE`, `OPENSSL_CONF`, `BASH_ENV`, `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES` and similar; every `curl` starts with `-q`; the admin helper sets a system `PATH` before `sudo` | "root ignores the user's ~/.curlrc", "root ignores programs early in the user's PATH" |
 | Admin tasks need your password | `phygital-key-admin enroll`, `token`, `keys`, `audit-check`, `status`, `logs`, `update` run through `sudo` | "admin helper makes an enrollment link", "admin status confirms the listener" |
 | No secrets in logs | The enrollment link and MCP token are never written to the gate log | "no enrollment link or token in the gate log" |
 
@@ -49,7 +50,7 @@ On Linux the systemd unit adds sandboxing: `NoNewPrivileges`, `ProtectSystem=str
 | The record | Every request, approval, denial, key change, receipt and revocation is in a hash-chained audit log. | `audit.log` in the gate data folder |
 | The secrets of the gate | MCP access token, one-time enrollment token, the per-standing-approval use key | Data folder (0600 or 0700); use keys only in memory |
 | The update channel | The secure install, `install.sh` and `phygital-key update` install only a release whose file list is signed by a pinned release key, and the daily job only a newer one. Homebrew, Scoop and cargo installs rely on their own channel instead. See [the update channel](#the-update-channel). | Release files on GitHub; public keys pinned in `crates/phygital-key/assets/install-service.sh` and `install.sh` |
-| The release keys | Two ECDSA P-256 keys: a signing key and an offline backup key. Never in GitHub. | Signing key on the maintainer's Mac, encrypted (AES-256), passphrase in the macOS Keychain; backup key off that Mac |
+| The release keys | Two ECDSA P-256 keys: a signing key and an offline backup key. Never in GitHub. | Signing key on the maintainer's Mac, encrypted (AES-256) with a passphrase the maintainer types at each signing and keeps in a password manager (never in the macOS Keychain or GitHub); backup key off that Mac |
 
 Cryptography, exactly: ES256 (ECDSA over P-256 with SHA-256) for every signature, SHA-256 for every hash, RFC 8785 (JCS) for the [canonical form](glossary.md). The person's device signs this [challenge](glossary.md):
 
@@ -102,17 +103,19 @@ The secure install updates itself once a day (on by default, decision 36 in [dec
 ```mermaid
 flowchart LR
   subgraph MAC["Maintainer's Mac"]
-    K["Release key (encrypted, passphrase in Keychain)"]
+    K["Release key (encrypted, passphrase typed by the maintainer)"]
+    CL["Maintainer's own clone: commit of the tag"]
   end
   subgraph GH["GitHub: not trusted"]
-    DR["Draft release built by CI"]
+    DR["Draft release built by CI, with a build record per file"]
     PUB["Published release with release.txt and .sig"]
   end
   subgraph GM["Gate machine"]
     J["Daily job (root)"]
     G["Gate"]
   end
-  DR -->|"scripts/sign-release.sh downloads, hashes, signs"| K
+  DR -->|"scripts/sign-release.sh downloads, checks build records, hashes"| K
+  CL -->|"build records must name this commit"| K
   K -->|"uploads release.txt and .sig, then publishes"| PUB
   PUB -->|"release.txt and .sig, then the archive"| J
   J -->|"signed by a pinned key, newer, SHA-256 matches"| G
@@ -120,19 +123,24 @@ flowchart LR
 
 What the daily job does, in order (from `crates/phygital-key/assets/install-service.sh`):
 
-1. Downloads `release.txt` and `release.txt.sig` from the latest release over HTTPS.
+1. Downloads `release.txt` and `release.txt.sig` from the latest release over HTTPS, with `curl -q` (no `.curlrc`), in a clean root environment.
 2. Checks the signature with `openssl` against the public keys pinned in the installed, root-owned program (or with that program's own `release-check` if `openssl` is missing). The keys come from what is already installed, never from the download.
 3. Reads the version on line 2. If it is not strictly higher than the installed version, it stops and records `up to date`.
-4. Downloads the archive for this machine and compares its SHA-256 with the one in the signed list.
-5. Keeps the old program, swaps in the new one and restarts the gate. If the new gate does not answer within about 30 seconds, it puts the old program back and restarts that. If another program holds the gate's port, it stops the gate instead and records why.
-6. Writes one result line to `<prefix>/update-status`, which `phygital-key-admin status` prints.
+4. If any standing approval is active, records `waiting to install` and stops, for up to 7 days from the first wait on the installed version. Waiting requests do not count.
+5. Downloads the archive for this machine and compares its SHA-256 with the one in the signed list.
+6. Keeps the old program, swaps in the new one and restarts the gate. If the new gate does not answer within about 30 seconds, it puts the old program back and restarts that. If a program running as another user takes the gate's port during the restart, it stops that program (`kill -9`) and starts the gate again, up to 5 times, and names it in the result. If the port is still taken, it stops the gate and records why.
+7. Writes one result line to `<prefix>/update-status`, which `phygital-key-admin status` prints.
 
-`release.txt` is strict: line 1 `phygital-key release manifest v1`, line 2 `version vX.Y.Z`, then one `<64 lowercase hex>  phygital-key-vX.Y.Z-<target>.tar.gz` (or `.zip`) line per archive, LF line ends and a final LF. Anything else is refused (Rust test `strict_format` in `crates/phygital-key/src/update.rs`).
+`release.txt` is strict: line 1 `phygital-key release manifest v1`, line 2 `version vX.Y.Z`, then one `<64 lowercase hex>  phygital-key-vX.Y.Z-<target>.tar.gz` (or `.zip`) line per archive, LF line ends and a final LF. Anything else is refused (Rust test `strict_format` in `crates/phygital-key/src/update.rs`). The secure installer's `openssl` path applies the same rules.
 
 | Attacker | What they can do | What they cannot do | Proved by |
 |---|---|---|---|
-| Someone who takes over the GitHub account, a download mirror or the connection | Replace archives, `.sha256` files and `release.txt` | Make a list that verifies: they have no release key. The update is refused and recorded as `update refused`. | Secure install "refuses a release list signed by an unknown key"; Rust test `refused_when_changed_wrong_key_or_unsigned` |
-| Someone who steals the maintainer's key file | Copy `signing-key.pem` | Use it: the file is encrypted with AES-256 under a random passphrase kept in the maintainer's macOS Keychain | `scripts/release-key.sh` (how the keys are made); not testable |
+| Someone who takes over a download mirror or the connection | Replace archives, `.sha256` files and `release.txt` | Make a list that verifies: they have no release key. The update is refused and recorded as `update refused`. | Secure install "refuses a release list signed by an unknown key"; Rust test `refused_when_changed_wrong_key_or_unsigned` |
+| Someone who takes over the GitHub account | Replace published files (refused, as above), or swap a file in the draft before the maintainer signs it | Get a swapped draft file signed: `scripts/sign-release.sh` signs only files with a build provenance attestation from `.github/workflows/release.yml`, from `refs/tags/vX.Y.Z`, at the commit the maintainer's own clone has for that tag (`gh attestation verify`) | `scripts/sign-release.sh` and the `actions/attest-build-provenance` step in `release.yml`; not run in CI (no release exists yet) |
+| A program running as the maintainer (an AI agent included) | Copy `signing-key.pem` and `backup-key.pem` | Use them: each is encrypted with AES-256 under a passphrase the maintainer types and keeps in a password manager, never in the macOS Keychain or on GitHub. `release-key.sh` and `sign-release.sh` refuse to run without a terminal | `scripts/release-key.sh`, `scripts/sign-release.sh`; not testable |
+| A program running as you on the gate machine | Plant a `~/.curlrc` (sudo keeps `HOME` on macOS) that makes root's `curl` write any file, or a fake `curl`, `awk` or `openssl` in a folder early in your `PATH` (such as `/opt/homebrew/bin`), then wait for `curl ... \| sudo bash`, `sudo ... install-service` or `phygital-key-admin update` | Steer root: the script runs from an empty environment, resets `PATH` and `HOME`, clears the variables curl, OpenSSL, bash and the loader read, and starts every `curl` with `-q` | Secure install "root ignores the user's ~/.curlrc", "root ignores programs early in the user's PATH" |
+| A program running as you on the gate machine | Wait for an update restart, take the gate's port in the moment it is free, and serve a look-alike page | Keep the address: during the unattended update, a listener that is not the gate user is killed and the gate started again, up to 5 times; then the gate is stopped (fail closed). The result line names every program it stopped | The code in `install-service.sh` (`gate_up`); no CI check yet |
+| An agent that holds back updates | Keep one request waiting forever, so a restart would always lose it | Delay the update: the daily job waits only for active standing approvals, which need the person's passkey. Waiting requests are lost on the restart, and the agent asks again | The code in `install-service.sh` (step 0); no CI check yet |
 | The maintainer loses the signing key (an accident, not an attack) | No more releases can be signed with that key | Stop updates: the backup key is pinned too, so a release signed with it installs | Rust test `both_installers_pin_the_same_keys` (both installers carry the same key block); the backup path itself has not been run |
 | Someone who holds back updates (a freeze) | Serve an older release as "latest", or nothing at all, so machines stay on an old version | Install an older or an unsigned release. An older signed list ends in `up to date`, an unsigned one in `update refused`. | Rust test `versions_compare_by_number`; secure install "update job leaves the gate running unless a newer signed release exists", "update job records its result" |
 | A bad release that was signed (a bug, or a maintainer mistake) | Reach every secure install with updates on | Stay installed if the new gate does not start: the previous program comes back. A signed release that starts and answers is trusted and stays. | Secure install "a failed update switches back to the previous program" |
@@ -144,7 +152,10 @@ Limits of the update channel, plainly:
 
 - **A freeze cannot be seen from the machine.** The signed list has no expiry date. `phygital-key-admin status` shows the latest signed release it found; compare it with the [Releases](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases) page.
 - **The first install trusts what it downloads.** The pinned keys arrive inside the install script. Someone who controls the GitHub account could serve a changed script to new installs. Machines already installed keep the keys they have.
-- **Someone in full control of the maintainer's logged-in Mac** could use both the key file and the Keychain passphrase.
+- **Someone in full control of the maintainer's logged-in Mac** (able to read keystrokes, for example) could catch the passphrase when it is typed and then use the key file. A hardware key (a YubiKey with touch, for example) would be a stronger home for the signing key; it is not used yet.
+- **GitHub account plus the build.** Someone who controls the GitHub account and can also change what the workflow builds at the tagged commit (for example through a poisoned action the workflow uses) gets a file with a valid build record, which the maintainer would then sign. The actions in the workflow are pinned by commit SHA to make that harder.
+- **The port is free for a moment at each update restart.** A program fast enough could win that moment again after it was killed (and would be killed again, up to 5 times, then the gate stops). Handing the open port from launchd or systemd to the gate (socket activation), so it is never free, is not built, because the gate forbids unsafe code.
+- **A standing approval delays updates.** A person's active standing approval can hold back a security update for up to 7 days. An agent cannot start this on its own.
 - **If both release keys are lost**, no update can install. Machines would need a fresh install with new pinned keys.
 - **`--release` can go back.** With the administrator password, `install-service --release vX.Y.Z` installs any signed release, also an older one. The daily job never does.
 - **Not yet run for real.** The release keys are made once by the maintainer (`scripts/release-key.sh`); until then no key is pinned and every update is refused. CI tests the signature check, the refusal and the switch back with a local build, but the full download-and-update path runs for real only once signed releases exist (the first real test is the release after v0.3.0).
@@ -219,7 +230,7 @@ The guarantees hold only if **the agent cannot change the gate's program, the ga
 - **Updates trust the release key.** A signed release that starts is installed; there is no second reviewer and no expiry on the signed list. See [the update channel](#the-update-channel).
 - **Look-alike highlighting is a help.** The real protection is that exact bytes are signed and compared.
 - **Request limits are a nuisance limit, not a fatigue cure.** A person can still be asked many times.
-- **Pre-audit.** Six internal reviews by AI security-auditor agents, every finding fixed; no paid third-party audit. See [security reviews](security-reviews.md).
+- **Pre-audit.** Seven internal reviews by AI security-auditor agents, every finding fixed or documented; no paid third-party audit. See [security reviews](security-reviews.md).
 
 ## Out of scope
 

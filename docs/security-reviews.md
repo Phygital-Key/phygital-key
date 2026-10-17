@@ -3,7 +3,7 @@
 This page lists every security review of Phygital Key so far, what each one found, and what was changed. It is for anyone judging how far to trust the project, and for researchers who want to know what has already been looked at.
 
 > [!IMPORTANT]
-> Phygital Key is **pre-audit**. The six reviews below were done by AI security-auditor agents, not by a paid third-party audit firm. They found real problems, and every confirmed finding was fixed, but they are no substitute for an outside audit.
+> Phygital Key is **pre-audit**. The seven reviews below were done by AI security-auditor agents, not by a paid third-party audit firm. They found real problems, and every confirmed finding was fixed or, where a fix is not built, documented as a limit. They are no substitute for an outside audit.
 
 **On this page**
 
@@ -14,6 +14,7 @@ This page lists every security review of Phygital Key so far, what each one foun
 - [Review 4: the review 3 fixes](#review-4-the-review-3-fixes)
 - [Review 5: v0.3.0](#review-5-v030)
 - [Review 6: the review 5 fixes](#review-6-the-review-5-fixes)
+- [Review 7: signed automatic updates, JS stores, gate changes](#review-7-signed-automatic-updates-js-stores-gate-changes)
 - [The documentation review](#the-documentation-review)
 - [Problems CI found](#problems-ci-found)
 - [What is still open](#what-is-still-open)
@@ -103,9 +104,28 @@ Hardening: no secrets in `serve` logs, `Bearer` accepted in any case, a cap of 1
 | One listener could keep serving when the other stopped | Listeners stop together, and on SIGTERM (e2e "stdio mode stops cleanly when told to (SIGTERM)") |
 | No way to update to a named release | `--release` added |
 
+## Review 7: signed automatic updates, JS stores, gate changes
+
+Scope: the signed automatic updates and the release process, the async seen stores and use stores of the JavaScript checker, and the gate changes made for v0.3.0. Result: 2 high, 3 medium, 3 low and 4 informational findings, each fixed or documented.
+
+| # | Severity | Finding | Fix | Proof now |
+|---|---|---|---|---|
+| H1 | HIGH | Root used the caller's environment. On macOS `sudo` keeps `HOME` (and `PATH` when no `secure_path` is set), so `curl ... \| sudo bash`, `sudo <prefix>/bin/phygital-key install-service` and `phygital-key-admin update` ran root's `curl` with the user's `~/.curlrc` (which can make curl write any file as root), and could run a `curl`, `awk` or `openssl` planted in a folder the user can write early in `PATH` (such as `/opt/homebrew/bin`). This was already true of the v0.3.0 install path before automatic updates. | `install-service` starts bash with an empty environment (system `PATH`, root's `HOME`, `LANG=C`, the `PKA_*` values). The script first sets that `PATH` and `HOME`, clears `CURL_HOME`, `XDG_CONFIG_HOME`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `CURL_CA_BUNDLE`, `OPENSSL_CONF`, `OPENSSL_MODULES`, `BASH_ENV`, `ENV`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_INSERT_LIBRARIES`, `DYLD_LIBRARY_PATH`, and sets `umask 022` (this covers `curl ... \| sudo bash` too). Every `curl` starts with `-q`, also in `phygital-key update`. The admin helper sets a system `PATH` before any `sudo`. | Secure install "root ignores the user's ~/.curlrc", "root ignores programs early in the user's PATH" |
+| H2 | HIGH | An update restart frees the gate's port for a moment. A program running as the user could take it, and the update then stopped the gate and left that program holding `http://localhost:<port>` with nobody watching. | During the unattended update only, a program (not the gate user) found listening on the port is killed (`kill -9`) and the gate started again, up to 5 times; the result line ends with `; stopped programs that took the port of the gate during the restart: [uid U, pid P]`. If it still fails, the gate is stopped (fail closed) and the status says so. Manual installs keep refusing with the message, because the person is there. The daily job's plist on macOS is now 0600, so other users cannot read its time. Documented limit: passing the open port from launchd or systemd to the gate is not built (the gate forbids unsafe code), so a fast program could win the moment again, and would be killed again. | The code (`gate_up` in `install-service.sh`); no CI check |
+| M1 | MEDIUM | An agent could hold back updates by keeping one request waiting. | The daily job waits only for active standing approvals, which need a real passkey approval. The 7-day clock starts at the first wait on the installed version, and a newer release does not restart it (`<prefix>/update-postponed` holds `<unix time> <installed version>`). Waiting requests are lost on an update restart, and the agent asks again. Documented limit: a person's active standing approval can delay a security update by up to 7 days. | The code (step 0 of `install-service.sh`); no CI check |
+| M2 | MEDIUM | The release key signed whatever files GitHub held for the draft, so someone controlling the GitHub account could swap a draft file before signing. | The release workflow publishes a build provenance attestation for every archive (`actions/attest-build-provenance`, Sigstore), and `scripts/sign-release.sh` refuses to sign unless `gh attestation verify` proves each file was built by `.github/workflows/release.yml` from `refs/tags/vX.Y.Z` at the commit the maintainer's own clone has for that tag. Documented limit: someone who controls the GitHub account and can also change what the workflow builds at that commit (a poisoned action, for example) is not stopped; the actions are pinned by commit SHA. | `scripts/sign-release.sh`, `.github/workflows/release.yml`; runs only at a real release |
+| M3 | MEDIUM | The key passphrase sat in the macOS Keychain, readable without a prompt by any program running as the maintainer (an agent included). | No Keychain. `scripts/release-key.sh` asks the maintainer to type a passphrase for each key (kept in a password manager) and refuses to run without a terminal; `scripts/sign-release.sh` asks for it at each signing and refuses without a terminal. A program running as the maintainer can copy the encrypted key files but cannot use them. A hardware key (YubiKey PIV with touch) is the stronger option for later. | The scripts; not testable in CI |
+| L1 | LOW | The switch back to the previous program was skipped when the install refused after the swap. | Covered by the H2 fix for unattended updates: the program on the port is stopped and the gate started again. An install you run yourself still stops the gate and tells you why. | As H2 |
+| L2 | LOW | `phygital-key update` could write the new program through a file or link already at its staging path. | It writes to a freshly created file (`create_new`, mode 0755), never through a file or link that was there. | The code (`update.rs`); no automated test |
+| L3 | LOW | `audit-check` passed when `keyring.json` existed but could not be read or was damaged. | It fails with `<path>: damaged keyring (...)` (or the read error). Only "no log and no keyring" (or a keyring with no keys) passes, with `no audit log yet: nothing has happened on this gate`. | Run by hand; no automated test |
+| I | INFO | The shell (`openssl`) path checked `release.txt` less strictly than the program. | The secure installer applies the same strict format: LF only, a final LF, at least one file line, exact `<64 hex>  phygital-key-<version>-<name>.tar.gz` or `.zip` lines, no name twice. | The code (`verify_release` in `install-service.sh`) |
+| I | INFO | No release key was pinned yet, so every install and update was refused (fails closed). | The maintainer makes the keys with `scripts/release-key.sh` before the first signed release; a test fails while the key block is empty. | `installer_pins_at_least_one_release_key` |
+| I | INFO | High-S ECDSA signatures are accepted. | No change: no security effect. | |
+| I | INFO | A freeze (an old signed list served forever) cannot be seen, because the signed list has no expiry. | Documented limit ([threat model](threat-model.md#the-update-channel)). | |
+
 ## The documentation review
 
-While this documentation was written for v0.3.0, its pages were checked claim by claim against the code. That is not one of the six security reviews, but it found one fail-open bug and several places where the program and its docs disagreed. All were fixed in the code before the release (see the 0.3.0 entry in the [changelog](../CHANGELOG.md)).
+While this documentation was written for v0.3.0, its pages were checked claim by claim against the code. That is not one of the seven security reviews, but it found one fail-open bug and several places where the program and its docs disagreed. All were fixed in the code before the release (see the 0.3.0 entry in the [changelog](../CHANGELOG.md)).
 
 | # | Finding | Fix | Proof now |
 |---|---|---|---|
@@ -128,7 +148,7 @@ The automatic tests found real problems too:
 
 ## What is still open
 
-Nothing confirmed by a review is open. These remain, by design, by decision or because they cannot be tested yet. They are listed in the [threat model](threat-model.md#known-limits):
+Nothing confirmed by a review is open without a fix or a documented limit. These remain, by design, by decision or because they cannot be tested yet. They are listed in the [threat model](threat-model.md#known-limits):
 
 - [ ] An outside, paid security audit (the project stays labeled pre-audit until then)
 - [ ] Approvals are signed, not encrypted (decision 33)
@@ -141,6 +161,11 @@ Nothing confirmed by a review is open. These remain, by design, by decision or b
 - [ ] The download path is untested in CI: CI installs the secure install from a root-owned local build (`--binary`), so downloading a published release, checking its signed `release.txt` and its SHA-256, and a real automatic update have not run yet. They can run only once signed releases exist (the first real update test is the release after v0.3.0).
 - [ ] The release keys are made once by the maintainer (`scripts/release-key.sh`). Until they are pinned in the installers, every download and update is refused.
 - [ ] Automatic updates trust the release key: a signed release that starts is installed, and a held-back update (a freeze) cannot be seen from the machine. See [the update channel](threat-model.md#the-update-channel).
+- [ ] The gate's port is free for a moment at each update restart. A program that takes it is killed and the gate started again, but handing the open port from launchd or systemd to the gate is not built (review 7, H2). The kill-and-restart has no CI check.
+- [ ] Someone who controls the GitHub account and can also change what the release workflow builds at the tagged commit is not stopped by the build records (review 7, M2).
+- [ ] A person's active standing approval can hold back a security update for up to 7 days (review 7, M1). The waiting logic has no CI check.
+- [ ] The release signing key is a passphrase-protected file, not a hardware key (review 7, M3).
+- [ ] The fixes for review 7 L2 and L3 have no automated test.
 
 ## How to report
 

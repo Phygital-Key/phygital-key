@@ -115,7 +115,7 @@ An AI could ask for every remaining use right before you revoke, and spend them 
 > [!WARNING]
 > Revoking cannot undo uses that already happened, and up to 60 seconds of already handed-out tokens can still be spent. Set `max_uses` and the ranges to what you could live with if all of them were used at once.
 
-A restart of the gate ends every standing approval it holds, because the `use_key` lives only in memory. That fails closed: no new uses can be signed, and the AI must ask again. With the [secure install](secure-install.md#update), the daily update job does not install while a standing approval is active, but it waits for 7 days at most: after that it installs, the gate restarts, and a standing approval can end before its date. Turn automatic updates off with `--no-auto-update` if that would hurt you.
+A restart of the gate ends every standing approval it holds, because the `use_key` lives only in memory. That fails closed: no new uses can be signed, and the AI must ask again. With the [secure install](secure-install.md#update), the daily update job does not install while a standing approval is active, but it waits for 7 days at most, counted from its first wait on the installed version (a newer release does not restart the clock). After that it installs, the gate restarts, and a standing approval can end before its date. The other side of this: while one of your standing approvals is active, a security update can be held back for up to 7 days. Waiting requests never hold an update back. Turn automatic updates off with `--no-auto-update` if that would hurt you.
 
 ## When to use one, and when not
 

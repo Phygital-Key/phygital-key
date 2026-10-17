@@ -2,7 +2,7 @@
 # Phygital Key: run the gate as its own locked-down system user (macOS, Linux).
 #
 # Recommended (from a fresh terminal you trust):
-#   curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
+#   curl -q -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
 # It then updates itself once a day to the latest SIGNED release (see below).
 # Later, use the locked copy it installs:
 #   sudo /Library/PhygitalKey/bin/phygital-key install-service [--release vX.Y.Z | --no-auto-update | --uninstall]   (macOS)
@@ -23,6 +23,13 @@
 # administrator can change. Its data folder is closed to everyone else. Nothing that you (or an agent acting as you) could have edited is
 # ever run as root or installed.
 set -euo pipefail
+# Root must not take anything from the caller's environment: a ~/.curlrc in HOME
+# (sudo keeps HOME on macOS) could make curl write any file, and a folder the user
+# can write in PATH could hold a fake curl, awk or openssl.
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+HOME=$(cd ~root && pwd); export HOME
+unset CURL_HOME XDG_CONFIG_HOME SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE OPENSSL_CONF OPENSSL_MODULES BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH
+umask 022
 
 REPO="s17sh70x2jfl031ag/phygital-key-mcp"
 VERSION="${PKA_VERSION:-v0.3.0}"
@@ -142,6 +149,14 @@ verify_release() {
     [ "$ok" = yes ] || { echo "  release.txt is not signed by a pinned release key" >&2; return 1; }
     [ "$(sed -n 1p "$d/release.txt")" = "phygital-key release manifest v1" ] || return 1
     v=$(sed -n 2p "$d/release.txt" | sed -n 's/^version \(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p')
+    [ -n "$v" ] || return 1
+    # The same strict format the program checks: LF only, a final LF, at least one
+    # file, every file line exact, no name twice.
+    [ -z "$(tail -c 1 "$d/release.txt")" ] || return 1
+    ! LC_ALL=C grep -q "$(printf '\r')" "$d/release.txt" || return 1
+    [ "$(sed -n '3,$p' "$d/release.txt" | wc -l | tr -d ' ')" -ge 1 ] || return 1
+    [ "$(sed -n '3,$p' "$d/release.txt" | LC_ALL=C grep -cvE "^[0-9a-f]{64}  phygital-key-${v//./\\.}-[A-Za-z0-9._-]+\.(tar\.gz|zip)\$" || true)" = 0 ] || return 1
+    [ -z "$(sed -n '3,$p' "$d/release.txt" | awk '{ print $2 }' | sort | uniq -d)" ] || return 1
   elif [ -x "$BIN" ] && root_only "$BIN" 2>/dev/null; then
     # The installed, root-owned program checks it with the same pinned keys.
     v=$("$BIN" release-check --file "$d/release.txt" --sig "$d/release.txt.sig") || return 1
@@ -153,8 +168,8 @@ verify_release() {
 }
 
 fetch_release_list() { # $1 = base URL, $2 = folder
-  curl --proto '=https' --tlsv1.2 --max-time 120 -fsSL "$1/release.txt" -o "$2/release.txt" &&
-  curl --proto '=https' --tlsv1.2 --max-time 120 -fsSL "$1/release.txt.sig" -o "$2/release.txt.sig"
+  curl -q --proto '=https' --tlsv1.2 --max-time 120 -fsSL "$1/release.txt" -o "$2/release.txt" &&
+  curl -q --proto '=https' --tlsv1.2 --max-time 120 -fsSL "$1/release.txt.sig" -o "$2/release.txt.sig"
 }
 
 # The daily update job's last result, for phygital-key-admin status (root-only folder).
@@ -222,21 +237,22 @@ if [ "$AUTO_RUN" = yes ]; then
   if ! newer "$LATEST" "$HAVE"; then
     note "up to date ($HAVE; latest signed release $LATEST)"; exit 0
   fi
-  # A restart ends requests still waiting and every standing approval (their use
-  # keys live only in memory). Wait while there are any, for up to 7 days.
+  # A restart ends every standing approval (their use keys live only in memory).
+  # Wait while any is active, for up to 7 days after the first wait on this
+  # installed version (a newer release does not restart the clock). Waiting
+  # requests do not count: an agent can make one at any time.
   if [ "$FORCE" != yes ]; then
-    st=$(curl --max-time 5 -fsS "http://localhost:$PORT/api/status" 2>/dev/null || true)
-    w=$(printf '%s' "$st" | sed -n 's/.*"waiting": *\([0-9][0-9]*\).*/\1/p')
+    st=$(curl -q --max-time 5 -fsS "http://localhost:$PORT/api/status" 2>/dev/null || true)
     a=$(printf '%s' "$st" | sed -n 's/.*"standing_active": *\([0-9][0-9]*\).*/\1/p')
-    if [ "${w:-0}" -gt 0 ] || [ "${a:-0}" -gt 0 ]; then
-      since=$(awk -v v="$LATEST" '$2 == v && $1 ~ /^[0-9]+$/ { print $1 }' "$PREFIX/update-postponed" 2>/dev/null || true)
+    if [ "${a:-0}" -gt 0 ]; then
+      since=$(awk -v v="$HAVE" '$2 == v && $1 ~ /^[0-9]+$/ { print $1 }' "$PREFIX/update-postponed" 2>/dev/null || true)
       nowts=$(date +%s)
       if [ -z "$since" ]; then
         since=$nowts
-        printf '%s %s\n' "$since" "$LATEST" > "$PREFIX/update-postponed.new" && mv -f "$PREFIX/update-postponed.new" "$PREFIX/update-postponed"
+        printf '%s %s\n' "$since" "$HAVE" > "$PREFIX/update-postponed.new" && mv -f "$PREFIX/update-postponed.new" "$PREFIX/update-postponed"
       fi
       if [ $(( nowts - since )) -lt $(( 7 * 86400 )) ]; then
-        note "waiting to install $LATEST: ${a:-0} standing approval(s) active, ${w:-0} request(s) waiting. It installs once they end, after 7 days at the latest, or now with: phygital-key-admin update --now"
+        note "waiting to install $LATEST: ${a} standing approval(s) active. It installs once they end, after 7 days at the latest, or now with: phygital-key-admin update --now"
         exit 0
       fi
     fi
@@ -263,7 +279,7 @@ else
   want=$(awk -v n="$NAME.tar.gz" '$2 == n && $1 ~ /^[0-9a-f]+$/ && length($1) == 64 { print $1 }' "$REL/release.txt")
   [ -n "$want" ] || die "the signed release list has no $NAME.tar.gz. Nothing was installed."
   say "Downloading the official $VERSION release for this machine (signed release list checked)"
-  curl --proto '=https' --tlsv1.2 --max-time 300 -fsSL "$URL" -o "$WORK/r.tar.gz" || die "download failed: $URL"
+  curl -q --proto '=https' --tlsv1.2 --max-time 300 -fsSL "$URL" -o "$WORK/r.tar.gz" || die "download failed: $URL"
   if command -v sha256sum >/dev/null; then have=$(sha256sum "$WORK/r.tar.gz" | cut -d ' ' -f 1)
   else have=$(shasum -a 256 "$WORK/r.tar.gz" | cut -d ' ' -f 1); fi
   [ "$want" = "$have" ] || die "the download does not match its signed SHA-256. Nothing was installed."
@@ -316,6 +332,8 @@ cat > "$WORK/admin" <<ADMINSCRIPT
 # Phygital Key admin helper (installed by install-service). Run it by its full path
 # if /usr/local/bin is not root-only on this machine: $ADMIN
 set -euo pipefail
+# Only system folders: sudo below must never run a program from a folder you can write.
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 run() { sudo -u "$SVC_USER" "$BIN" --home "$DATA" --port "$PORT" "\$@"; }
 listeners_ok() {
   local pids
@@ -334,7 +352,7 @@ case "\${1:-help}" in
   status)
     echo "program:      \$("$BIN" --version)"
     echo "auto-update:  \$(cat "$PREFIX/auto-update" 2>/dev/null || echo on)  (last: \$(cat "$PREFIX/update-status" 2>/dev/null || echo "not run yet"))"
-    if listeners_ok; then echo "ok: only the gate ($SVC_USER) listens on port $PORT"; curl --max-time 5 -fsS "http://localhost:$PORT/api/status"; echo
+    if listeners_ok; then echo "ok: only the gate ($SVC_USER) listens on port $PORT"; curl -q --max-time 5 -fsS "http://localhost:$PORT/api/status"; echo
     else echo "WARNING: something other than the gate is listening on port $PORT, or the gate is not running. Do not approve anything until this is fixed."; exit 1; fi ;;
   logs) if [ -n "$LOGS" ]; then sudo tail -n 50 "$LOGS/gate.log"; else sudo journalctl -u phygital-key -n 50 --no-pager; fi ;;
   *) echo "usage: phygital-key-admin enroll | token | keys | audit-check | status | logs | update [--now]" ;;
@@ -359,6 +377,14 @@ foreign_listener() {
   done
   return 1
 }
+foreign_pids() {
+  local p u
+  for p in $(listener_pids "$PORT" || true); do
+    u=$(ps -o uid= -p "$p" | tr -d ' ')
+    [ "$u" = "$SVC_UID" ] || echo "$p"
+  done
+}
+KILLED=""
 # Before starting anything: nothing else may already hold the gate's port.
 if who=$(foreign_listener); then
   refuse "another program ($who) is listening on port $PORT. Stop it, then run this again."
@@ -452,12 +478,22 @@ fi
 #    (another program on the same port could show a fake approval page).
 #    If not, stop the service again: never leave a half-trusted gate running.
 gate_up() {
-  local who
+  local who tries=0
   for _ in $(seq 1 150); do
     if who=$(foreign_listener); then
+      if [ "$AUTO_RUN" = yes ] && [ "$tries" -lt 5 ]; then
+        # Unattended update: a program that took the gate's port while the gate
+        # restarted is posing as the gate. Never leave it the address: stop it and
+        # start the gate again.
+        tries=$((tries + 1))
+        for p in $(foreign_pids); do kill -9 "$p" 2>/dev/null || true; done
+        KILLED="$KILLED [$who]"
+        start_gate
+        continue
+      fi
       refuse "another program ($who) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
     fi
-    if [ -n "$(listener_pids "$PORT" || true)" ] && curl --max-time 2 -fsS -o /dev/null "http://localhost:$PORT/api/status" 2>/dev/null; then
+    if [ -n "$(listener_pids "$PORT" || true)" ] && curl -q --max-time 2 -fsS -o /dev/null "http://localhost:$PORT/api/status" 2>/dev/null; then
       if who=$(foreign_listener); then
         refuse "another program ($who) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
       fi
@@ -483,7 +519,7 @@ if ! gate_up; then
   refuse "the gate did not start. See: $ADMIN logs. To install again: sudo $BIN install-service"
 fi
 if [ "$AUTO_RUN" = yes ]; then
-  note "updated from $HAVE to $VERSION (signed release, SHA-256 checked)"
+  note "updated from $HAVE to $VERSION (signed release, SHA-256 checked)${KILLED:+; stopped programs that took the port of the gate during the restart:$KILLED}"
   exit 0
 fi
 
@@ -519,7 +555,7 @@ if [ "$AUTO" = on ]; then
 </dict>
 </plist>
 PLIST
-    install -m 0644 -o root "$WORK/upd" "$UPD_UNIT"
+    install -m 0600 -o root "$WORK/upd" "$UPD_UNIT"
     launchctl bootstrap system "$UPD_UNIT" 2>/dev/null || say "Note: could not start the daily update job (launchctl). Updates: sudo $BIN install-service --release vX.Y.Z"
     UPDATES="daily at $(printf '%02d:%02d' "$H" "$M"), signed releases only (off: sudo $BIN install-service --no-auto-update)"
   else

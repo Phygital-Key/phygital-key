@@ -2,7 +2,7 @@
 
 Phygital Key lets a person approve exact AI actions with a passkey or hardware key, and lets any service check that approval. A flaw here could let an action run without the person's yes, so reports are welcome.
 
-Phygital Key is **pre-audit**: six internal reviews by AI security-auditor agents, every finding fixed, and no paid third-party audit yet. See [docs/security-reviews.md](docs/security-reviews.md).
+Phygital Key is **pre-audit**: seven internal reviews by AI security-auditor agents, every finding fixed or documented as a limit, and no paid third-party audit yet. See [docs/security-reviews.md](docs/security-reviews.md).
 
 ## Supported versions
 
@@ -22,7 +22,15 @@ How fixes reach you:
 | Homebrew | `brew upgrade phygital-key` |
 | Scoop (Windows) | `scoop update phygital-key` |
 
-Automatic updates and `phygital-key update` arrived in 0.3.0, so the first release they can install is the one after 0.3.0. See [docs/updates.md](docs/updates.md), and [the update channel](docs/threat-model.md#the-update-channel) for what the signature protects and what it does not.
+Automatic updates and `phygital-key update` arrived in 0.3.0, so the first release they can install is the one after 0.3.0.
+
+### How a release is signed
+
+1. A pushed tag `vX.Y.Z` makes CI build every archive, publish a build record for each (a build provenance attestation: which workflow built which file from which commit), and create a draft release that no installer or updater can see.
+2. The maintainer runs `scripts/sign-release.sh vX.Y.Z` in their own terminal, never from an AI agent's session (the script refuses to run without a terminal). With `gh attestation verify` it checks that each file was built by `.github/workflows/release.yml` from that tag at the commit the maintainer's own clone has for it, so `gh` is needed. It computes every SHA-256 itself and asks for the key passphrase.
+3. It signs `release.txt`, checks the signature against the pinned keys, uploads it and publishes the release.
+
+The release keys are files encrypted with passphrases the maintainer types and keeps in a password manager. Neither the keys nor the passphrases are ever in the macOS Keychain or on GitHub, so a copy of the key files without the passphrase is useless. See [docs/updates.md](docs/updates.md), and [the update channel](docs/threat-model.md#the-update-channel) for what the signature protects and what it does not.
 
 ## Reporting a problem
 

@@ -78,6 +78,8 @@ Every command accepts these, before or after the command name. Commands that do 
 | `PHYGITAL_KEY_BIN_DIR` | `install.sh` | Folder to install into, default `~/.local/bin`. |
 | `PHYGITAL_KEY_VERSION` | `install.sh` | A release to install instead of the latest, for example `v0.3.0`. |
 
+`install-service` reads none of your environment. It runs as root, so it starts its script with an empty environment: only `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, root's `HOME` (`/var/root` on macOS, `/root` on Linux), `LANG=C` and its own `PKA_VERSION`, `PKA_BINARY` and `PKA_PORT`. The script also resets `PATH` and `HOME` and clears variables such as `CURL_HOME`, `SSL_CERT_FILE`, `OPENSSL_CONF`, `BASH_ENV`, `LD_PRELOAD` and `DYLD_INSERT_LIBRARIES` when it is run as `curl ... | sudo bash`. Every `curl` it or `phygital-key update` runs starts with `-q`, so no `.curlrc` is read.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -98,7 +100,7 @@ The secure install adds `phygital-key-admin` at `<prefix>/bin/phygital-key-admin
 | `phygital-key-admin audit-check` | Checks the audit log (runs `audit-check`). |
 | `phygital-key-admin status` | Prints the program version, whether auto-update is on and the last update result, then checks that only the gate user listens on the port and prints `/api/status`. Exits 1 with a warning not to approve anything if another program listens or the gate is down. |
 | `phygital-key-admin logs` | The last 50 lines of the gate log (macOS `gate.log`, Linux `journalctl -u phygital-key`). |
-| `phygital-key-admin update [--now]` | Runs the update job now: installs the latest signed release if it is newer. It waits while standing approvals are active or requests are waiting; `--now` installs anyway. |
+| `phygital-key-admin update [--now]` | Runs the update job now: installs the latest signed release if it is newer. It waits while standing approvals are active (waiting requests do not count); `--now` installs anyway. |
 
 ## MCP server and tools
 
@@ -170,7 +172,7 @@ It reads the approval from the `Phygital-Approval` header and, for a standing ap
 | `enroll-token.json` | `enroll` | A one-time enrollment token and its expiry, deleted at the first step of enrolling |
 | `seen-ids.jsonl` (+ `.lock`, `.tmp`) | `verify` | Approval ids already used by `phygital-key verify` |
 
-Files are written to a `.tmp` file first, flushed and renamed into place. Waiting requests and the use keys of standing approvals live only in memory: a restart of the gate (an update included) drops requests that are still waiting and ends every standing approval it holds. The daily job waits while standing approvals are active or requests are waiting, for up to 7 days per release, then installs anyway.
+Files are written to a `.tmp` file first, flushed and renamed into place. Waiting requests and the use keys of standing approvals live only in memory: a restart of the gate (an update included) drops requests that are still waiting and ends every standing approval it holds. The daily job waits while standing approvals are active (not for waiting requests), for up to 7 days from the first wait on the installed version, then installs anyway.
 
 ## Files of the secure install
 
@@ -182,6 +184,7 @@ Files are written to a `.tmp` file first, flushed and renamed into place. Waitin
 | `<prefix>/bin/phygital-key-admin` | The admin helper, owned by root. |
 | `<prefix>/auto-update` | `on` or `off`: your auto-update choice, reused by later installs. |
 | `<prefix>/update-status` | The daily job's last result, for example `2026-10-18T03:12:00Z up to date (v0.3.0; latest signed release v0.3.0)`. Written by root. |
+| `<prefix>/update-postponed` | `<unix time> <installed version>`: when the daily job first waited for standing approvals on the installed version. Removed when an update goes ahead. Written by root. |
 | `/usr/local/bin/phygital-key-admin` | Link to the helper, made only if `/usr/local/bin` is root-only. |
 
 | | macOS | Linux |
@@ -189,7 +192,7 @@ Files are written to a `.tmp` file first, flushed and renamed into place. Waitin
 | Gate user | `_phygitalkey` (hidden, id 400 to 499) | `phygitalkey` (system user, no login) |
 | Gate service | `/Library/LaunchDaemons/io.phygitalkey.gate.plist` | `/etc/systemd/system/phygital-key.service` (hardened unit) |
 | Gate log | `/Library/Logs/PhygitalKey/gate.log` (folder 0700, gate user) | systemd journal: `journalctl -u phygital-key` |
-| Daily update job | `/Library/LaunchDaemons/io.phygitalkey.update.plist` (root, a random time of day chosen at install) | `/etc/systemd/system/phygital-key-update.timer` (`OnCalendar=daily`, `RandomizedDelaySec=6h`, `Persistent=true`) and `phygital-key-update.service` (oneshot, `PrivateTmp`, `ProtectHome`) |
+| Daily update job | `/Library/LaunchDaemons/io.phygitalkey.update.plist` (root, mode 0600, a random time of day chosen at install) | `/etc/systemd/system/phygital-key-update.timer` (`OnCalendar=daily`, `RandomizedDelaySec=6h`, `Persistent=true`) and `phygital-key-update.service` (oneshot, `PrivateTmp`, `ProtectHome`) |
 | Update log | `/Library/Logs/PhygitalKeyUpdate/update.log` (root-only folder) | `journalctl -u phygital-key-update` |
 
 The daily job fetches `https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases/latest/download/release.txt` and its `.sig`, so the secure install contacts github.com once a day (and downloads the release file when it updates). The gate itself makes no network calls. Details: [secure install](secure-install.md).

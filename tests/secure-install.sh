@@ -90,6 +90,17 @@ sudo "$BIN" install-service --auto-update-run >/dev/null 2>&1 || true
 [ "$("$BIN" --version)" = "$before" ] && curl -fsS http://localhost:7468/api/status >/dev/null && pass "update job leaves the gate running unless a newer signed release exists" || fail "update job leaves the gate running unless a newer signed release exists"
 sudo cat "$PREFIX/update-status" | grep -Eq "up to date|update check failed|update refused" && pass "update job records its result" || fail "no update result recorded"
 
+# Root never takes the caller's environment: a planted ~/.curlrc (sudo keeps HOME on
+# macOS) or a fake curl early in PATH must not run or write anything as root.
+rm -f /tmp/pka-curlrc-planted /tmp/pka-path-planted
+printf 'url = "https://github.com/"\noutput = "/tmp/pka-curlrc-planted"\n' > "$HOME/.curlrc"
+FAKE=$(mktemp -d); printf '#!/bin/sh\ntouch /tmp/pka-path-planted\nexit 1\n' > "$FAKE/curl"; chmod +x "$FAKE/curl"
+PATH="$FAKE:$PATH" sudo --preserve-env=HOME,PATH "$BIN" install-service --auto-update-run >/dev/null 2>&1 || true
+PATH="$FAKE:$PATH" "$ADMIN" update >/dev/null 2>&1 || true
+rm -f "$HOME/.curlrc"; rm -rf "$FAKE"
+if [ -e /tmp/pka-curlrc-planted ]; then fail "root used the user's ~/.curlrc"; else pass "root ignores the user's ~/.curlrc"; fi
+if [ -e /tmp/pka-path-planted ]; then fail "root ran a program from the user's PATH"; else pass "root ignores programs early in the user's PATH"; fi
+
 # A new program that does not start is switched back to the previous one.
 printf '#!/bin/sh\nexit 1\n' > /tmp/pka-broken
 sudo install -m 0755 -o root /tmp/pka-broken "$CI_DIR/broken"; rm -f /tmp/pka-broken
