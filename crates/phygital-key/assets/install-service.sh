@@ -67,12 +67,13 @@ mode_of() { if [ "$OS" = mac ]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi;
 root_only() {
   local p="$1"
   while :; do
-    [ -e "$p" ] || return 1
-    [ ! -L "$p" ] || return 1
-    [ "$(owner_of "$p")" = root ] || return 1
-    local m; m=$(mode_of "$p")
-    # No group or other write bit.
-    [ $(( 0$m & 022 )) -eq 0 ] || return 1
+    [ -e "$p" ] || { echo "  not found: $p" >&2; return 1; }
+    [ ! -L "$p" ] || { echo "  is a link: $p" >&2; return 1; }
+    local o m; o=$(owner_of "$p"); m=$(mode_of "$p")
+    [ "$o" = root ] || { echo "  owned by $o, not root: $p" >&2; return 1; }
+    # No group or other write bit (the last three digits of the mode).
+    m=${m: -3}
+    [ $(( 8#$m & 8#022 )) -eq 0 ] || { echo "  writable by others (mode $m): $p" >&2; return 1; }
     [ "$p" = / ] && return 0
     p=$(dirname "$p")
   done
@@ -229,6 +230,8 @@ if [ "$OS" = mac ]; then
 PLIST
   install -m 0644 -o root "$WORK/plist" "$UNIT"
   launchctl bootout system/io.phygitalkey.gate 2>/dev/null || true
+  # Wait until an old instance has really let go of the port.
+  for _ in $(seq 1 50); do [ -z "$(listener_pids "$PORT")" ] && break; sleep 0.2; done
   ok=no
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     if launchctl bootstrap system "$UNIT" 2>/dev/null; then ok=yes; break; fi
@@ -280,21 +283,25 @@ UNITFILE
   install -m 0644 -o root "$WORK/unit" "$UNIT"
   systemctl daemon-reload
   systemctl enable phygital-key.service >/dev/null 2>&1
-  systemctl restart phygital-key.service
+  systemctl stop phygital-key.service 2>/dev/null || true
+  for _ in $(seq 1 50); do [ -z "$(listener_pids "$PORT")" ] && break; sleep 0.2; done
+  systemctl start phygital-key.service
 fi
 
 # 7. Check that it answers, and that ONLY the gate listens on its port
 #    (another program on the same port could show a fake approval page).
-for _ in $(seq 1 50); do
+#    If not, stop the service again: never leave a half-trusted gate running.
+refuse() { stop_service; die "$1"; }
+for _ in $(seq 1 150); do
   curl -fsS -o /dev/null "http://localhost:$PORT/api/status" 2>/dev/null && break
   sleep 0.2
 done
 pids=$(listener_pids "$PORT" || true)
-[ -n "$pids" ] || die "the gate did not start. See: sudo tail $LOGS/gate.log"
+[ -n "$pids" ] || refuse "the gate did not start. See: sudo tail $LOGS/gate.log"
 SVC_UID=$(id -u "$SVC_USER")
 for p in $pids; do
   u=$(ps -o uid= -p "$p" | tr -d ' ')
-  [ "$u" = "$SVC_UID" ] || die "another program (uid $u, pid $p) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
+  [ "$u" = "$SVC_UID" ] || refuse "another program (uid $u, pid $p) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
 done
 
 cat <<DONE
