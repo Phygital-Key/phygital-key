@@ -192,18 +192,34 @@ case "\${1:-help}" in
   keys) run keys ;;
   audit-check) run audit-check ;;
   status)
-    if listeners_ok; then echo "ok: only the gate ($SVC_USER) listens on port $PORT"; curl -fsS "http://localhost:$PORT/api/status"; echo
+    if listeners_ok; then echo "ok: only the gate ($SVC_USER) listens on port $PORT"; curl --max-time 5 -fsS "http://localhost:$PORT/api/status"; echo
     else echo "WARNING: something other than the gate is listening on port $PORT, or the gate is not running. Do not approve anything until this is fixed."; exit 1; fi ;;
   logs) if [ -n "$LOGS" ]; then sudo tail -n 50 "$LOGS/gate.log"; else sudo journalctl -u phygital-key -n 50 --no-pager; fi ;;
   *) echo "usage: phygital-key-admin enroll | token | keys | audit-check | status | logs" ;;
 esac
 ADMINSCRIPT
 install -m 0755 -o root "$WORK/admin" "$ADMIN"
-if [ -d /usr/local/bin ] && root_only /usr/local/bin; then
+if [ -d /usr/local/bin ] && root_only /usr/local/bin 2>/dev/null; then
   ln -sfn "$ADMIN" "$LINK"
   HELPER=phygital-key-admin
 else
   HELPER="$ADMIN"
+fi
+
+refuse() { stop_service; die "$1"; }
+SVC_UID=$(id -u "$SVC_USER")
+# Refuse the moment a program other than the gate listens on the port.
+foreign_listener() {
+  local p u
+  for p in $(listener_pids "$PORT" || true); do
+    u=$(ps -o uid= -p "$p" | tr -d ' ')
+    [ "$u" = "$SVC_UID" ] || { echo "uid $u, pid $p"; return 0; }
+  done
+  return 1
+}
+# Before starting anything: nothing else may already hold the gate's port.
+if who=$(foreign_listener); then
+  refuse "another program ($who) is listening on port $PORT. Stop it, then run this again."
 fi
 
 # 6. The service.
@@ -291,18 +307,20 @@ fi
 # 7. Check that it answers, and that ONLY the gate listens on its port
 #    (another program on the same port could show a fake approval page).
 #    If not, stop the service again: never leave a half-trusted gate running.
-refuse() { stop_service; die "$1"; }
+up=no
 for _ in $(seq 1 150); do
-  curl -fsS -o /dev/null "http://localhost:$PORT/api/status" 2>/dev/null && break
+  if who=$(foreign_listener); then
+    refuse "another program ($who) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
+  fi
+  if [ -n "$(listener_pids "$PORT" || true)" ] && curl --max-time 2 -fsS -o /dev/null "http://localhost:$PORT/api/status" 2>/dev/null; then
+    up=yes; break
+  fi
   sleep 0.2
 done
-pids=$(listener_pids "$PORT" || true)
-[ -n "$pids" ] || refuse "the gate did not start. See: $ADMIN logs"
-SVC_UID=$(id -u "$SVC_USER")
-for p in $pids; do
-  u=$(ps -o uid= -p "$p" | tr -d ' ')
-  [ "$u" = "$SVC_UID" ] || refuse "another program (uid $u, pid $p) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
-done
+[ "$up" = yes ] || refuse "the gate did not start. See: $ADMIN logs"
+if who=$(foreign_listener); then
+  refuse "another program ($who) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
+fi
 
 cat <<DONE
 Phygital Key is installed as a locked-down service.

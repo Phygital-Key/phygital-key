@@ -162,7 +162,12 @@ From then on, **the AI, even acting as you, can't change the gate's program, rea
 
 | Path | What |
 |---|---|
-| [`docs/spec.md`](docs/spec.md) | The open spec (PKA v0.1): format, checks, error codes |
+| [`docs/how-it-works.md`](docs/how-it-works.md) | How it works, in plain words |
+| [`docs/getting-started.md`](docs/getting-started.md) | Try it, use it with your AI app, or check approvals in a service |
+| [`docs/integrate.md`](docs/integrate.md) | For services: Rust, JavaScript, command line, standing approvals, receipts, keys |
+| [`docs/reference.md`](docs/reference.md) | Every command, MCP tool, endpoint, file and limit |
+| [`docs/faq.md`](docs/faq.md) | Questions and answers |
+| [`docs/spec.md`](docs/spec.md) | The open spec (format `pka.1`): every check and error code |
 | [`crates/phygital-key-verify`](crates/phygital-key-verify) | The verifier library (Rust). Pure, offline, fail closed |
 | [`verifier-js/`](verifier-js) | An independent verifier in JavaScript, no dependencies, same test vectors |
 | [`crates/phygital-key`](crates/phygital-key) | The gate: MCP server, approval page, enrollment, audit log, demo |

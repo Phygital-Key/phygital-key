@@ -32,7 +32,7 @@ for fam, host in ((socket.AF_INET6, "::1"), (socket.AF_INET, "127.0.0.1")):
         s = socket.socket(fam); s.bind((host, 7468)); s.listen(); break
     except OSError:
         continue
-time.sleep(30)' &
+time.sleep(300)' &
 HIJACK=$!
 sleep 1
 lsof -nP -iTCP:7468 -sTCP:LISTEN -t 2>/dev/null | grep -qx "$HIJACK" || ss -ltnpH "sport = :7468" 2>/dev/null | grep -q "pid=$HIJACK" || fail "test setup: the fake program is not listening"

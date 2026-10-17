@@ -19,4 +19,4 @@ Before reporting, read [docs/threat-model.md](docs/threat-model.md). It lists wh
 
 ## Supported versions
 
-Only the latest release gets fixes while the project is at 0.x.
+Only the latest release gets fixes while the project is at 0.x. Update with `sudo /Library/PhygitalKey/bin/phygital-key install-service --release vX.Y.Z` (Linux: `/usr/lib/phygital-key/bin/phygital-key`), or your package manager.

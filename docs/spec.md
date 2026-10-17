@@ -78,6 +78,8 @@ JSON, carried as base64url (no padding) in an `approval` field or a `Phygital-Ap
 
 `challenge = SHA-256("phygital-key/approval/v1" || 0x00 || canonical(claims))`
 
+A verifier's `verify` MUST refuse a request of type `revoke` (`MALFORMED`): a revocation is never an action. Implementations MUST refuse a UTF-8 byte-order mark before the JSON (one approval, one encoding).
+
 The approver's device signs this through WebAuthn, so the signature covers the exact request, audience, level and expiry. Algorithm: ES256 (ECDSA P-256 with SHA-256) is required.
 
 ## 4. Timing
@@ -177,7 +179,7 @@ A standing approval lets an agent do the same kind of action a few times, within
 
    Its `exp` is when the permission ends: at most 30 days after `iat`. `max_uses` is 1 to 1000; `fixed` and `vary` must not share a field; integer limits need **both** `min` and `max` (so a forgotten lower limit can never allow negative amounts), with `min` not above `max`; `one_of` holds 1 to 20 strings. Standing approvals are always level `high`, whatever the service asks. A standing approval never passes as a one-time approval, and a one-time approval never passes as a standing one; a gate refuses a `standing` request made any other way than as a standing approval.
 2. **Each use** is a use token: an ES256 compact JWS, header exactly `{"alg":"ES256","typ":"pka-use+jwt"}`, payload `{"v":"pka.use.1","standing_id","id","aud","request","request_hash","iat","exp"}`, signed with `use_key`, living at most 60 s and never past the standing approval's `exp`. The gate keeps `use_key` in memory only and signs a token only for a request inside the limits.
-3. **The verifier** (`verify_use(standing, use_token, expected, keyring, use_store, config, now)`) checks the person's standing approval (all the checks of section 7, with the 30-day life), the use token (signature by `use_key`, same `standing_id`, same audience, time), that the request it is about to run is exactly the one in the token, that it has exactly the `fixed` fields with the same values and the `vary` fields within their limits and nothing else (`NOT_ALLOWED`), and counts uses itself: a use id seen before is `REPLAYED`, more than `max_uses` is `USED_UP`.
+3. **The verifier** (`verify_use(standing, use_token, expected, keyring, use_store, revocations, config, now)`) checks the person's standing approval (all the checks of section 7, with the 30-day life), that it is not revoked (`REVOKED`), the use token (header exactly the canonical bytes above) (signature by `use_key`, same `standing_id`, same audience, time), that the request it is about to run is exactly the one in the token, that it has exactly the `fixed` fields with the same values and the `vary` fields within their limits and nothing else (`NOT_ALLOWED`), and counts uses itself: a use id seen before is `REPLAYED`, more than `max_uses` is `USED_UP`.
 
 **Revoking** has two steps.
 

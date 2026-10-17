@@ -34,6 +34,18 @@ cd tests/e2e && npm ci && npx playwright install chromium
 PKA_BIN=../../target/release/phygital-key node run.mjs
 ```
 
+JavaScript checker (needs Node 20+; must pass the same vectors):
+
+```bash
+cd verifier-js && npm test
+```
+
+The secure install is tested for real in CI on macOS and Linux (`tests/secure-install.sh`, needs password-less sudo, so only on CI machines).
+
+## Two implementations
+
+The Rust verifier and the JavaScript verifier share no code, only `docs/spec.md` and `test-vectors/`. A change to what is accepted or refused must land in both, with new vectors first.
+
 ## Security problems
 
 Please report privately. See [SECURITY.md](SECURITY.md).
