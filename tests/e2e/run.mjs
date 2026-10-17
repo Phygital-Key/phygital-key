@@ -84,7 +84,13 @@ try {
 
   // --- Before any key: requests are refused, enrollment needs the CLI token.
   const mcp = new Client({ name: "e2e-agent", version: "1.0.0" });
-  await mcp.connect(new StreamableHTTPClientTransport(new URL(GATE + "/mcp")));
+  const hint = execFileSync(BIN, args(["mcp-token"])).toString();
+  const mcpToken = hint.match(/Bearer ([A-Za-z0-9_-]{43})/)[1];
+  const noMcpToken = await fetch(GATE + "/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "x", version: "1" } } }) });
+  check("MCP endpoint refuses a client without the access token", noMcpToken.status === 401);
+  const wrongToken = await fetch(GATE + "/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: "Bearer " + "x".repeat(43) }, body: "{}" });
+  check("MCP endpoint refuses a wrong access token", wrongToken.status === 401);
+  await mcp.connect(new StreamableHTTPClientTransport(new URL(GATE + "/mcp"), { requestInit: { headers: { Authorization: "Bearer " + mcpToken } } }));
   const tools = (await mcp.listTools()).tools.map((t) => t.name).sort();
   check("MCP lists exactly 6 tools, none can approve", JSON.stringify(tools) === JSON.stringify(["cancel_approval", "get_approval", "record_receipt", "request_approval", "request_standing_approval", "use_standing_approval"]), tools.join(","));
   const early = await tool(mcp, "request_approval", { request: { type: "deploy", params: deploy }, aud: DEMO, level: "high" });
@@ -281,9 +287,21 @@ try {
   await page.waitForFunction(() => /active/.test(document.getElementById("title").textContent), null, { timeout: 5000 });
   check("page shows uses so far", (await page.locator("#lead").innerText()).includes("Used 2 of 2"));
   await page.click("#deny");
-  await page.waitForFunction(() => document.getElementById("title").textContent === "Revoked", null, { timeout: 5000 });
+  await page.waitForURL(/\/r\//, { timeout: 5000 });
+  await page.waitForFunction(() => /Tell the service/.test(document.getElementById("title").textContent), null, { timeout: 5000 });
   const afterRevoke = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(10) } });
-  check("revoked: no more uses", afterRevoke.isError);
+  check("revoked: no new uses, even before the revocation is signed", afterRevoke.isError);
+  const beforeSigned = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use2.approval, "Phygital-Use": use2.use_token }, body: JSON.stringify(payParams(2000)) });
+  check("a use token handed out before the revoke still works until the revocation is signed", beforeSigned.status === 200);
+  const use2b = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(5) } });
+  check("gate still refuses new uses", use2b.isError);
+  await page.locator("#actions").waitFor({ state: "visible" });
+  await page.click("#approve");
+  await page.waitForFunction(() => document.getElementById("title").textContent === "Approved", null, { timeout: 15000 });
+  const revokedList = await (await fetch(GATE + "/.well-known/phygital-key-revoked.json")).json();
+  check("the signed revocation is published", revokedList.revocations.length === 1);
+  const afterSigned = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use2.approval, "Phygital-Use": use2.use_token }, body: JSON.stringify(payParams(2000)) });
+  check("after the person signs the revocation, the service refuses the standing approval", (await afterSigned.json()).error === "REVOKED");
 
   // Bad input from the agent.
   const floaty = await tool(mcp, "request_approval", { request: { type: "payment", params: { amount: 10.5 } }, aud: DEMO, level: "high" });

@@ -15,6 +15,7 @@ use axum::{Json, Router};
 use phygital_key_verify::Assertion;
 use serde::Deserialize;
 use serde_json::json;
+use subtle::ConstantTimeEq;
 
 use crate::state::Gate;
 
@@ -70,6 +71,20 @@ async fn guard(State(gate): State<Shared>, req: Request, next: Next) -> Response
         return err(StatusCode::MISDIRECTED_REQUEST, "unknown host");
     }
     let is_mcp = req.uri().path().starts_with("/mcp");
+    if is_mcp && let Some(want) = &gate.settings.mcp_token {
+        let got = req
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok())
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .unwrap_or_default();
+        if got.len() != want.len() || !bool::from(got.as_bytes().ct_eq(want.as_bytes())) {
+            return err(
+                StatusCode::UNAUTHORIZED,
+                "missing or wrong MCP access token (see `phygital-key mcp-token`)",
+            );
+        }
+    }
     if req.method() != Method::GET && !is_mcp {
         let origin = req
             .headers()
@@ -174,9 +189,18 @@ async fn deny(State(gate): State<Shared>, Path(id): Path<String>) -> Response {
 }
 
 async fn revoke(State(gate): State<Shared>, Path(id): Path<String>) -> Response {
-    match gate.cancel(&id) {
-        Ok(v) => ok(v),
+    match gate.revoke(&id) {
+        Ok((v, sign_url)) => ok(json!({"view": v, "sign_url": sign_url})),
         Err(e) => err(StatusCode::CONFLICT, e),
+    }
+}
+
+async fn revoked_list(State(gate): State<Shared>) -> Response {
+    let doc = json!({"revocations": gate.revocations()});
+    if gate.settings.rp_id != "localhost" {
+        ([(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")], Json(doc)).into_response()
+    } else {
+        Json(doc).into_response()
     }
 }
 
@@ -253,6 +277,7 @@ pub fn router(gate: Shared, extra: Option<Router>) -> Router {
             get(|| async { page(STYLE_CSS, "text/css; charset=utf-8") }),
         )
         .route("/.well-known/phygital-key.json", get(well_known))
+        .route("/.well-known/phygital-key-revoked.json", get(revoked_list))
         .route("/api/status", get(status))
         .route("/api/r/{id}", get(view))
         .route("/api/r/{id}/start", post(start))

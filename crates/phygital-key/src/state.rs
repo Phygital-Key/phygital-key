@@ -52,6 +52,8 @@ pub struct Settings {
     pub rp_id: String,
     /// Approval life in seconds.
     pub lifetime: i64,
+    /// Bearer token required on `/mcp` in HTTP mode (`None`: open, `--open-mcp`).
+    pub mcp_token: Option<String>,
 }
 
 impl Settings {
@@ -92,6 +94,8 @@ enum Kind {
     RemoveKey(KeyCard),
     /// A standing approval: limited uses, signed one by one with a gate-held key.
     Standing(StandingParams),
+    /// The person's signed revocation of a standing approval, for services to see.
+    Revoke(String),
 }
 
 /// Where a request stands.
@@ -189,6 +193,8 @@ pub struct View {
     pub first_key: bool,
     /// True when this request removes a key.
     pub removes_key: bool,
+    /// True when this is the signed revocation of a standing approval.
+    pub revokes: bool,
     /// Standing approval details, for standing requests.
     pub standing: Option<StandingView>,
     /// What the service reported after acting (`success` or `error`): set only
@@ -425,6 +431,13 @@ impl Gate {
         {
             return Err("\"standing\" is reserved: use request_standing_approval".into());
         }
+        if request.get("type").and_then(Value::as_str) == Some(phygital_key_verify::REVOKE_TYPE)
+            && !matches!(kind, Kind::Revoke(_))
+        {
+            return Err(
+                "\"revoke\" is reserved: revoke a standing approval on its approval page".into(),
+            );
+        }
         if aud == self.settings.keyring_aud() && matches!(kind, Kind::Action | Kind::Standing(_)) {
             return Err("this audience is reserved for the gate itself".into());
         }
@@ -505,6 +518,7 @@ impl Gate {
             adds_key: matches!(r.kind, Kind::AddKey(_)),
             first_key: matches!(r.kind, Kind::AddKey(_)) && r.first_key,
             removes_key: matches!(r.kind, Kind::RemoveKey(_)),
+            revokes: matches!(r.kind, Kind::Revoke(_)),
             standing: match &r.kind {
                 Kind::Standing(p) => Some(StandingView {
                     for_type: p.for_type.clone(),
@@ -707,6 +721,20 @@ impl Gate {
             }
             _ => None,
         };
+        let revoked_standing = match &kind {
+            Kind::Revoke(sid) => Some(sid.clone()),
+            _ => None,
+        };
+        if revoked_standing.is_some() {
+            let mut list = self.revocations();
+            list.push(approval.clone());
+            let doc = json!({"revocations": list});
+            let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n";
+            util::write_private(
+                &self.settings.home.join("revocations.json"),
+                text.as_bytes(),
+            )?;
+        }
         if key_event.is_some() {
             if signed {
                 next.origin = Some(self.settings.origin.clone());
@@ -725,6 +753,13 @@ impl Gate {
         let view = self.view_of(r, t);
         let entry = json!({"id": ok.id, "aud": aud, "level": ok.level.as_str(), "request_hash": ok.request_hash, "credential_id": ok.credential_id});
         inner.audit.append("approved", entry, t)?;
+        if let Some(sid) = revoked_standing {
+            inner.audit.append(
+                "revocation_published",
+                json!({"standing_id": sid, "approved_with": ok.credential_id}),
+                t,
+            )?;
+        }
         if let Some((event, card)) = key_event {
             inner.audit.append(event, json!({"credential_id": card.credential_id, "name": card.name, "approved_with": ok.credential_id}), t)?;
         }
@@ -785,7 +820,50 @@ impl Gate {
 
     /// The requester withdrew.
     pub fn cancel(&self, id: &str) -> Result<View, String> {
+        let standing_approved = {
+            let inner = self.lock()?;
+            let r = inner.requests.get(id).ok_or("unknown request")?;
+            matches!(r.kind, Kind::Standing(_)) && r.current_status(now()) == Status::Approved
+        };
+        if standing_approved {
+            return self.revoke(id).map(|(v, _)| v);
+        }
         self.close(id, Status::Cancelled, "cancelled")
+    }
+
+    /// Revoke an approved standing approval. Two steps:
+    /// 1. right away, the use key is thrown away, so no new uses can be signed;
+    /// 2. a revocation request is created: when the person signs it, it is
+    ///    published at `/.well-known/phygital-key-revoked.json` for services.
+    ///
+    /// Returns the closed standing view and the link to sign the revocation.
+    pub fn revoke(&self, id: &str) -> Result<(View, String), String> {
+        let (aud, sid) = {
+            let inner = self.lock()?;
+            let r = inner.requests.get(id).ok_or("unknown request")?;
+            if !matches!(r.kind, Kind::Standing(_)) || r.current_status(now()) != Status::Approved {
+                return Err("Only an active standing approval can be revoked.".into());
+            }
+            (r.aud.clone(), r.id.clone())
+        };
+        let view = self.close(id, Status::Cancelled, "cancelled")?;
+        let sign = self.create_kind(
+            standing::revoke_request(&sid),
+            &aud,
+            Level::Medium,
+            Kind::Revoke(sid),
+        )?;
+        Ok((view, sign.approve_url))
+    }
+
+    /// Signed revocations made on this gate (approval strings).
+    pub fn revocations(&self) -> Vec<String> {
+        std::fs::read_to_string(self.settings.home.join("revocations.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v.get("revocations").cloned())
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default()
     }
 
     fn close(&self, id: &str, status: Status, event: &str) -> Result<View, String> {
@@ -1065,6 +1143,21 @@ impl Gate {
             Kind::RemoveKey(card),
         )
     }
+}
+
+/// The MCP access token for HTTP mode: made once, kept in `<home>/mcp-token`.
+pub fn mcp_token(settings: &Settings) -> Result<String, String> {
+    util::private_dir(&settings.home)?;
+    let path = settings.home.join("mcp-token");
+    if let Ok(t) = std::fs::read_to_string(&path) {
+        let t = t.trim().to_string();
+        if t.len() >= 32 {
+            return Ok(t);
+        }
+    }
+    let token = b64::encode(util::random::<32>()?);
+    util::write_private(&path, format!("{token}\n").as_bytes())?;
+    Ok(token)
 }
 
 /// Write a fresh enrollment token into the data folder and return the link.

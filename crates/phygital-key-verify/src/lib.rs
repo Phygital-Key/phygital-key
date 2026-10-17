@@ -27,5 +27,6 @@ pub use model::{
     id_ok, request_shape_ok,
 };
 pub use verify::{
-    ErrorCode, MemorySeenStore, STANDING_TYPE, SeenStore, Verified, Verifier, check, verify,
+    ErrorCode, MemorySeenStore, REVOKE_TYPE, STANDING_TYPE, SeenStore, Verified, Verifier, check,
+    verify,
 };

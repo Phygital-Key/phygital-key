@@ -1039,6 +1039,23 @@ fn standing_vectors(
         };
     let now = IAT + 3600;
     let t = |req: &Value, n: u8| token(req, n, &sid, AUD, now - 5, 60, use_key);
+    #[allow(clippy::too_many_arguments)]
+    let case_rev = |name: &str,
+                    desc: &str,
+                    standing: &str,
+                    use_token: &str,
+                    request: &Value,
+                    level: &str,
+                    at: i64,
+                    prior: &[String],
+                    revocations: &[String],
+                    err: Option<&str>| {
+        json!({"name": name, "description": desc, "input": {
+            "standing": standing, "use": use_token, "request": request, "aud": AUD, "level": level, "now": at,
+            "keyring": keyring, "config": {"origins": [ORIGIN], "rp_ids": [RP_ID]}, "prior_uses": prior,
+            "revocations": revocations},
+            "expected": match err { None => json!({"ok": true}), Some(c) => json!({"ok": false, "error": c}) }})
+    };
     let case = |name: &str,
                 desc: &str,
                 standing: &str,
@@ -1048,11 +1065,32 @@ fn standing_vectors(
                 at: i64,
                 prior: &[String],
                 err: Option<&str>| {
-        json!({"name": name, "description": desc, "input": {
-            "standing": standing, "use": use_token, "request": request, "aud": AUD, "level": level, "now": at,
-            "keyring": keyring, "config": {"origins": [ORIGIN], "rp_ids": [RP_ID]}, "prior_uses": prior},
-            "expected": match err { None => json!({"ok": true}), Some(c) => json!({"ok": false, "error": c}) }})
+        case_rev(
+            name,
+            desc,
+            standing,
+            use_token,
+            request,
+            level,
+            at,
+            prior,
+            &[],
+            err,
+        )
     };
+    // Signed revocations (one-time approvals of {"type": "revoke"}).
+    let revocation = |sid: &str, signer: &TestKey, aud: &str, n: u8| -> String {
+        let req = phygital_key_verify::standing::revoke_request(sid);
+        let mut b = Build::new("medium");
+        b.claims = claims_for(&req, "medium", IAT + 1000, IAT + 1060);
+        set(&mut b.claims, "id", json!(b64::encode([n; 16])));
+        set(&mut b.claims, "aud", json!(aud));
+        b.approval(signer)
+    };
+    let rev_ok = revocation(&sid, alice, AUD, 90);
+    let rev_untrusted = revocation(&sid, mallory, AUD, 91);
+    let rev_other_service = revocation(&sid, alice, "https://other.example.com", 92);
+    let rev_other_standing = revocation(&b64::encode([9u8; 16]), alice, AUD, 93);
     let prior3: Vec<String> = (1u8..=3).map(|n| b64::encode([n + 100; 16])).collect();
     let extra = json!({"type": "payment", "params": {"to": "ACME Ltd", "currency": "EUR", "amount_cents": 450, "memo": "coffee", "note": "x"}});
     let missing = json!({"type": "payment", "params": {"to": "ACME Ltd", "currency": "EUR", "amount_cents": 450}});
@@ -1158,6 +1196,11 @@ fn standing_vectors(
             case("use_wrong_version", "Use token with an unknown version.", &standing, &wrong_v_token, &good, "high", now, &[], Some("MALFORMED")),
             case("one_fixed_three_vary", "Field counting: one fixed and three varying fields.", &standing13, &token(&good13, 33, &b64::encode([46u8; 16]), AUD, now - 5, 60, use_key), &good13, "high", now, &[], None),
             case("one_fixed_three_vary_missing_one", "Field counting: one varying field missing.", &standing13, &token(&missing13, 34, &b64::encode([46u8; 16]), AUD, now - 5, 60, use_key), &missing13, "high", now, &[], Some("NOT_ALLOWED")),
+            case_rev("revoked", "The person signed a revocation the service has picked up.", &standing, &t(&good, 37), &good, "high", now, &[], &[rev_ok.clone()], Some("REVOKED")),
+            case_rev("revocation_by_untrusted_key", "A revocation signed by an untrusted key is ignored.", &standing, &t(&good, 38), &good, "high", now, &[], &[rev_untrusted.clone()], None),
+            case_rev("revocation_for_other_service", "A revocation for another service is ignored.", &standing, &t(&good, 39), &good, "high", now, &[], &[rev_other_service.clone()], None),
+            case_rev("revocation_of_other_standing", "A revocation of another standing approval changes nothing here.", &standing, &t(&good, 40), &good, "high", now, &[], &[rev_other_standing.clone(), rev_untrusted.clone()], None),
+            case_rev("revoked_among_others", "One valid revocation among junk still counts.", &standing, &t(&good, 41), &good, "high", now, &[], &["junk".to_string(), rev_untrusted.clone(), rev_ok.clone()], Some("REVOKED")),
             case("no_use_token", "A standing approval alone is not enough.", &standing, "", &good, "high", now, &[], Some("APPROVAL_REQUIRED")),
             case("one_time_approval_as_standing", "A one-time approval is not a standing one.", &Build::new("high").approval(alice), &t(&good, 24), &good, "high", now, &[], Some("MALFORMED")),
         ]

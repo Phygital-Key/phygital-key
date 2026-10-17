@@ -42,6 +42,8 @@ pub enum ErrorCode {
     NotAllowed,
     /// A standing approval has no uses left.
     UsedUp,
+    /// The person revoked this standing approval.
+    Revoked,
 }
 
 impl ErrorCode {
@@ -60,11 +62,12 @@ impl ErrorCode {
             ErrorCode::Denied => "DENIED",
             ErrorCode::NotAllowed => "NOT_ALLOWED",
             ErrorCode::UsedUp => "USED_UP",
+            ErrorCode::Revoked => "REVOKED",
         }
     }
 
     /// Every code, for tests and docs.
-    pub const ALL: [ErrorCode; 12] = [
+    pub const ALL: [ErrorCode; 13] = [
         ErrorCode::ApprovalRequired,
         ErrorCode::Malformed,
         ErrorCode::WrongAudience,
@@ -77,6 +80,7 @@ impl ErrorCode {
         ErrorCode::Denied,
         ErrorCode::NotAllowed,
         ErrorCode::UsedUp,
+        ErrorCode::Revoked,
     ];
 }
 
@@ -157,6 +161,9 @@ pub fn check(
 
 /// The type name reserved for standing approvals. Never an action.
 pub const STANDING_TYPE: &str = "standing";
+
+/// The type name reserved for revoking a standing approval.
+pub const REVOKE_TYPE: &str = "revoke";
 
 /// [`check`] for one-time approvals (`standing == false`) or standing ones.
 /// A standing approval can never pass as a one-time approval, or the reverse.

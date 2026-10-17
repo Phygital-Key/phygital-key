@@ -47,6 +47,9 @@ struct Cli {
     /// Public origin of the approval page, e.g. https://approve.example.com [default: http://localhost:<port>]
     #[arg(long, global = true, env = "PHYGITAL_KEY_ORIGIN")]
     origin: Option<String>,
+    /// Serve /mcp without an access token (anyone on this machine could then create requests).
+    #[arg(long, global = true)]
+    open_mcp: bool,
     /// Approval life in seconds (max 300).
     #[arg(long, global = true, default_value_t = phygital_key_verify::DEFAULT_LIFETIME_SECS)]
     lifetime: i64,
@@ -62,6 +65,8 @@ enum Command {
     Serve,
     /// Print a one-time link to add a passkey or hardware key (valid 10 minutes).
     Enroll,
+    /// Print the access token for the HTTP MCP endpoint, and how to add it to an AI app.
+    McpToken,
     /// Print the trusted public key cards (give this to services that verify).
     Keys {
         /// Check a keyring's signed history against the first key's fingerprint.
@@ -166,6 +171,7 @@ fn settings(cli: &Cli) -> Result<Settings, String> {
         origin: origin.trim_end_matches('/').to_string(),
         rp_id,
         lifetime: cli.lifetime,
+        mcp_token: None,
     })
 }
 
@@ -226,9 +232,35 @@ fn mcp_http(gate: &Arc<Gate>) -> axum::Router {
     axum::Router::new().nest_service("/mcp", service)
 }
 
+/// How to add the HTTP MCP endpoint to an AI app.
+fn mcp_hint(s: &Settings) -> String {
+    match &s.mcp_token {
+        Some(t) => format!(
+            "  MCP endpoint    {o}/mcp  (needs header  Authorization: Bearer {t})\n  Claude Code:    claude mcp add --transport http phygital-key {o}/mcp --header \"Authorization: Bearer {t}\"",
+            o = s.origin
+        ),
+        None => format!(
+            "  MCP endpoint    {}/mcp  (open: no access token)",
+            s.origin
+        ),
+    }
+}
+
 async fn run(cli: Cli) -> Result<(), String> {
-    let s = settings(&cli)?;
+    let mut s = settings(&cli)?;
+    if !cli.open_mcp
+        && matches!(
+            cli.command,
+            Command::Serve | Command::Demo | Command::McpToken
+        )
+    {
+        s.mcp_token = Some(state::mcp_token(&s)?);
+    }
     match cli.command {
+        Command::McpToken => {
+            println!("{}", mcp_hint(&s));
+            Ok(())
+        }
         Command::Enroll => {
             let link = state::write_enroll_token(&s)?;
             println!(
@@ -416,8 +448,9 @@ async fn run(cli: Cli) -> Result<(), String> {
             hint_enroll(&gate, true)?;
             prune_every_minute(&gate);
             eprintln!(
-                "phygital-key: approval page {}  |  MCP endpoint {}/mcp",
-                gate.settings.origin, gate.settings.origin
+                "phygital-key\n  approval page   {}\n{}",
+                gate.settings.origin,
+                mcp_hint(&gate.settings)
             );
             let app = web::router(gate.clone(), Some(mcp_http(&gate)));
             web::serve(gate, app).await
@@ -446,9 +479,10 @@ async fn run(cli: Cli) -> Result<(), String> {
                 let _ = axum::serve(listener, demo::router(demo).into_make_service()).await;
             });
             eprintln!(
-                "phygital-key demo\n  approval page   {}\n  MCP endpoint    {}/mcp\n  demo service    {demo_aud}  (fake deploy, payment, send_message)\n\
+                "phygital-key demo\n  approval page   {}\n{}\n  demo service    {demo_aud}  (fake deploy, payment, send_message)\n\
                  Add the MCP endpoint to your AI app, then ask it to deploy `api` 2.4.1 to production through the demo service.",
-                s.origin, s.origin
+                s.origin,
+                mcp_hint(&s)
             );
             let app = web::router(gate.clone(), Some(mcp_http(&gate)));
             web::serve(gate, app).await

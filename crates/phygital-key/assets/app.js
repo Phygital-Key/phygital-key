@@ -105,6 +105,7 @@ async function approvePage() {
     : view.adds_key ? "Add a new key to your trusted keys"
     : view.removes_key ? "Remove a key from your trusted keys"
     : view.standing ? "Standing permission for: " + view.standing.for_type
+    : view.revokes ? "Revoke a standing permission"
     : request.type;
   $("aud").textContent = (view.adds_key || view.removes_key) ? "This approval gate (your list of trusted keys)" : view.aud;
   $("level").textContent = view.level === "high" ? "Fingerprint, face or PIN" : "A touch on your key";
@@ -163,10 +164,9 @@ async function approvePage() {
       $("deny").textContent = "Revoke now";
       $("deny").onclick = async () => {
         try {
-          await api("/api/r/" + encodeURIComponent(id) + "/revoke", {});
-          $("actions").hidden = true;
-          $("title").textContent = "Revoked";
-          $("lead").textContent = "No new uses can be signed. Uses already handed out may still work for up to a minute.";
+          const r = await api("/api/r/" + encodeURIComponent(id) + "/revoke", {});
+          // Step 2: sign the revocation so the service stops accepting it too.
+          location.href = r.sign_url;
         } catch (e) { note(friendly(e), "bad"); }
       };
     }
@@ -187,6 +187,7 @@ async function approvePage() {
     : view.adds_key ? "Approve a new key?"
     : view.removes_key ? "Remove this key?"
     : view.standing ? "Give a standing permission?"
+    : view.revokes ? "Tell the service it is revoked?"
     : "Approve this request?";
   $("lead").textContent = view.first_key
     ? "Sign once with the key you just made. This proves it works and starts your signed key list."
@@ -194,6 +195,8 @@ async function approvePage() {
     ? "Someone is adding a new key. Approve only if you are adding it yourself, right now."
     : view.removes_key
     ? "This key will no longer be able to approve anything."
+    : view.revokes
+    ? "Revoked here already: no new uses can be signed. Sign once more so the service also refuses it, even uses handed out in the last minute."
     : view.standing
     ? "The AI may do this on its own, up to " + view.standing.max_uses + " times until " + until +
       ", only within the limits below. You can revoke it at any time."

@@ -317,7 +317,9 @@ fn standing_request_round_trip() {
 
 #[test]
 fn sign_use_round_trip_and_uses_left() {
-    use phygital_key_verify::standing::{MemoryUseStore, Use, UseStore, sign_use, verify_use};
+    use phygital_key_verify::standing::{
+        MemoryUseStore, Revocations, Use, UseStore, sign_use, verify_use,
+    };
     let Some(key) = use_signing_key() else {
         unreachable!("test key")
     };
@@ -352,8 +354,17 @@ fn sign_use_round_trip_and_uses_left() {
         let token = sign_use(&u, &key).unwrap_or_default();
         assert_eq!(token.split('.').count(), 3);
         left.push(
-            verify_use(&standing, &token, &expected, &keyring, &uses, &config, now)
-                .map(|v| v.uses_left),
+            verify_use(
+                &standing,
+                &token,
+                &expected,
+                &keyring,
+                &uses,
+                &Revocations::none(),
+                &config,
+                now,
+            )
+            .map(|v| v.uses_left),
         );
     }
     // max_uses is 3 in the vectors.

@@ -14,7 +14,7 @@ use axum::{Json, Router};
 use p256::ecdsa::SigningKey;
 use p256::pkcs8::EncodePublicKey;
 use phygital_key_verify::receipt::{self, Receipt};
-use phygital_key_verify::standing::{MemoryUseStore, verify_use};
+use phygital_key_verify::standing::{MemoryUseStore, Revocations, verify_use};
 use phygital_key_verify::{
     Config, Expected, Keyring, Level, MemorySeenStore, b64, canonical, verify,
 };
@@ -149,6 +149,10 @@ async fn act(
             &expected,
             &keyring,
             &d.uses,
+            // Like a real service fetching the gate's signed revocation list.
+            &std::fs::read_to_string(d.keyring_path.with_file_name("revocations.json"))
+                .map(|t| Revocations::from_json(&t, &d.aud, &keyring, &d.config))
+                .unwrap_or_default(),
             &d.config,
             now(),
         )

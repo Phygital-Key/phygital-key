@@ -34,7 +34,7 @@ use serde_json::{Map, Value, json};
 use subtle::ConstantTimeEq;
 
 use crate::model::{Config, Expected, Keyring, MAX_CLOCK_SKEW_SECS, request_shape_ok};
-use crate::verify::{ErrorCode, STANDING_TYPE, Verified, check_kind};
+use crate::verify::{ErrorCode, REVOKE_TYPE, STANDING_TYPE, Verified, check_kind};
 use crate::{b64, canonical, strict, webauthn};
 
 /// Longest a standing approval may live: 30 days.
@@ -288,12 +288,14 @@ pub struct VerifiedUse {
 ///
 /// `standing` is the person's approval of the `standing` request; `use_token`
 /// is the short token for this one request. Pure, like [`crate::verify`].
+#[allow(clippy::too_many_arguments)]
 pub fn verify_use(
     standing: &str,
     use_token: &str,
     expected: &Expected,
     keyring: &Keyring,
     uses: &dyn UseStore,
+    revoked: &Revocations,
     config: &Config,
     now: i64,
 ) -> Result<VerifiedUse, ErrorCode> {
@@ -321,6 +323,11 @@ pub fn verify_use(
         now,
         true,
     )?;
+
+    // Revoked by the person (a signed revocation the service has picked up).
+    if revoked.contains(&person.id) {
+        return Err(E::Revoked);
+    }
 
     // The use token: signed by the use key, for this standing approval, this service, now.
     let u = read_use(use_token, &params.use_key)?;
@@ -375,4 +382,94 @@ pub fn check_standing(
     now: i64,
 ) -> Result<Verified, ErrorCode> {
     check_kind(approval, expected, keyring, config, now, true)
+}
+
+/// The request a person signs to revoke a standing approval.
+pub fn revoke_request(standing_id: &str) -> Value {
+    json!({"type": REVOKE_TYPE, "params": {"standing_id": standing_id}})
+}
+
+/// Standing approvals the person has revoked, each proven by their own signature.
+///
+/// A gate publishes signed revocations at `/.well-known/phygital-key-revoked.json`
+/// (`{"revocations": ["<approval>", ...]}`). A service fetches that list now and
+/// then and builds this set: only revocations signed by a trusted key, for this
+/// service, count. Unsigned or foreign entries are ignored (they can only ever
+/// add a revocation, never remove one).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Revocations {
+    ids: HashSet<String>,
+}
+
+impl Revocations {
+    /// No revocations.
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// Check each signed revocation and keep the standing ids of the valid ones.
+    pub fn from_approvals(
+        approvals: &[String],
+        aud: &str,
+        keyring: &Keyring,
+        config: &Config,
+    ) -> Self {
+        let mut ids = HashSet::new();
+        for a in approvals {
+            let Some(claims) = b64::decode(a)
+                .filter(|_| a.len() <= crate::MAX_APPROVAL_BYTES)
+                .and_then(|raw| strict::parse(&raw))
+                .and_then(|v| v.get("claims").cloned())
+            else {
+                continue;
+            };
+            let request = claims.get("request").cloned().unwrap_or(Value::Null);
+            let (Some(iat), Some(id)) = (
+                claims.get("iat").and_then(Value::as_i64),
+                request
+                    .pointer("/params/standing_id")
+                    .and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            if request != revoke_request(id) {
+                continue;
+            }
+            // Checked as of its own time: a revocation never expires.
+            let expected = Expected {
+                aud,
+                request: &request,
+                level: crate::Level::Medium,
+            };
+            if check_kind(a, &expected, keyring, config, iat, false).is_ok() {
+                ids.insert(id.to_string());
+            }
+        }
+        Self { ids }
+    }
+
+    /// Read `{"revocations": [...]}` and check every entry.
+    pub fn from_json(text: &str, aud: &str, keyring: &Keyring, config: &Config) -> Self {
+        let list: Vec<String> = serde_json::from_str::<Value>(text)
+            .ok()
+            .and_then(|v| v.get("revocations").cloned())
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
+        Self::from_approvals(&list, aud, keyring, config)
+    }
+
+    /// Was this standing approval revoked?
+    pub fn contains(&self, standing_id: &str) -> bool {
+        self.ids.contains(standing_id)
+    }
+
+    /// How many valid revocations.
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    /// True when there are none.
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
 }

@@ -72,6 +72,7 @@ fn every_refusal_code_is_covered() -> Result<(), String> {
             phygital_key_verify::ErrorCode::Denied
                 | phygital_key_verify::ErrorCode::NotAllowed
                 | phygital_key_verify::ErrorCode::UsedUp
+                | phygital_key_verify::ErrorCode::Revoked
         ) {
             continue; // gates, or standing approvals (covered in standing.json)
         }
@@ -161,7 +162,7 @@ const STANDING: &str = include_str!("../../../test-vectors/standing.json");
 
 #[test]
 fn every_standing_vector_passes() -> Result<(), String> {
-    use phygital_key_verify::standing::{MemoryUseStore, UseStore, verify_use};
+    use phygital_key_verify::standing::{MemoryUseStore, Revocations, UseStore, verify_use};
     let doc: Value = serde_json::from_str(STANDING).map_err(|e| e.to_string())?;
     let mut failures = Vec::new();
     for v in doc["vectors"].as_array().ok_or("no vectors")? {
@@ -184,12 +185,16 @@ fn every_standing_vector_passes() -> Result<(), String> {
             request: &input["request"],
             level,
         };
+        let list: Vec<String> =
+            serde_json::from_value(input["revocations"].clone()).unwrap_or_default();
+        let revoked = Revocations::from_approvals(&list, expected.aud, &keyring, &config);
         let got = verify_use(
             standing,
             input["use"].as_str().unwrap_or(""),
             &expected,
             &keyring,
             &uses,
+            &revoked,
             &config,
             now,
         );

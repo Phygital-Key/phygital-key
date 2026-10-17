@@ -1,7 +1,7 @@
 //! Random standing approvals and use tokens: never panic, never verify.
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use phygital_key_verify::standing::{MemoryUseStore, verify_use};
+use phygital_key_verify::standing::{MemoryUseStore, Revocations, verify_use};
 use phygital_key_verify::{Config, Expected, Keyring, Level};
 use serde_json::{Value, json};
 
@@ -21,9 +21,9 @@ fuzz_target!(|data: &[u8]| {
     let Ok(text) = std::str::from_utf8(data) else { return };
     // Random use token with the real standing approval, and the reverse.
     if text != real_use {
-        assert!(verify_use(real_standing, text, &expected, &keyring, &MemoryUseStore::new(), &config, now).is_err());
+        assert!(verify_use(real_standing, text, &expected, &keyring, &MemoryUseStore::new(), &Revocations::none(), &config, now).is_err());
     }
     if text != real_standing {
-        assert!(verify_use(text, real_use, &expected, &keyring, &MemoryUseStore::new(), &config, now).is_err());
+        assert!(verify_use(text, real_use, &expected, &keyring, &MemoryUseStore::new(), &Revocations::none(), &config, now).is_err());
     }
 });
