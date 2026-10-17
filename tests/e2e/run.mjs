@@ -440,6 +440,8 @@ try {
   leak.stderr.on("data", (d) => { leakErr += d; });
   await sleep(800);
   leak.kill();
+  await sleep(1000);
+  check("stdio mode stops cleanly when told to (SIGTERM)", leak.exitCode !== null || leak.signalCode !== null);
   rmSync(emptyHome, { recursive: true, force: true });
   check("stdio mode does not print an enrollment link", /phygital-key enroll/.test(leakErr) && !/token=/.test(leakErr), leakErr.trim());
 

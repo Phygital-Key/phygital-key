@@ -4,10 +4,31 @@
   "description": "Check a Phygital Key approval: a person's signed yes (passkey, fingerprint or hardware key) for one exact request. Independent JavaScript checker, no dependencies.",
   "type": "module",
   "exports": "./src/index.js",
-  "files": ["src", "README.md"],
-  "engines": { "node": ">=20" },
+  "files": [
+    "src",
+    "README.md",
+    "NOTICE",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "git+https://github.com/s17sh70x2jfl031ag/phygital-key-mcp.git", "directory": "verifier-js" },
-  "keywords": ["passkey", "webauthn", "approval", "mcp", "ai-agents", "security"],
-  "scripts": { "test": "node --test test/vectors.test.js" }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/s17sh70x2jfl031ag/phygital-key-mcp.git",
+    "directory": "verifier-js"
+  },
+  "keywords": [
+    "passkey",
+    "webauthn",
+    "approval",
+    "mcp",
+    "ai-agents",
+    "security"
+  ],
+  "scripts": {
+    "test": "node --test test/vectors.test.js"
+  },
+  "author": "s17sh70x2jfl031ag"
 }

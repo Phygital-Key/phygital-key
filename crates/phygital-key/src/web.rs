@@ -316,7 +316,8 @@ pub async fn serve(gate: Shared, app: Router) -> Result<(), String> {
     // On loopback, hold BOTH 127.0.0.1 and [::1]. Browsers may try either for
     // "localhost"; if the gate held only one, another program on this machine could
     // open the other one and serve a fake page with the very same passkey origin.
-    let addrs: Vec<String> = if bind == "127.0.0.1" || bind == "localhost" {
+    let addrs: Vec<String> = if matches!(bind.as_str(), "127.0.0.1" | "localhost" | "::1" | "[::1]")
+    {
         vec![format!("127.0.0.1:{port}"), format!("[::1]:{port}")]
     } else {
         vec![format!("{bind}:{port}")]
@@ -336,20 +337,46 @@ pub async fn serve(gate: Shared, app: Router) -> Result<(), String> {
             }
         }
     }
-    let mut tasks = Vec::new();
+    // If any listener stops, stop everything (a service manager restarts the gate),
+    // so one address is never left free while the other keeps serving.
+    let mut tasks = tokio::task::JoinSet::new();
     for l in listeners {
         let app = app.clone();
-        tasks.push(tokio::spawn(async move {
+        tasks.spawn(async move {
             axum::serve(l, app.into_make_service())
-                .with_graceful_shutdown(async {
-                    let _ = tokio::signal::ctrl_c().await;
-                })
+                .with_graceful_shutdown(shutdown_signal())
                 .await
                 .map_err(|e| e.to_string())
-        }));
+        });
     }
-    for t in tasks {
-        t.await.map_err(|e| e.to_string())??;
+    let first = tasks.join_next().await;
+    tasks.abort_all();
+    match first {
+        Some(Ok(r)) => r,
+        Some(Err(e)) => Err(e.to_string()),
+        None => Ok(()),
     }
-    Ok(())
+}
+
+/// Ctrl-C, or SIGTERM from a service manager.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+            }
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }

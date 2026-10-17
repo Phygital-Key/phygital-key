@@ -879,26 +879,34 @@ impl Gate {
     pub fn sign_revocation(&self, id: &str) -> Result<String, String> {
         let t = now();
         let (aud, sid) = {
-            let inner = self.lock()?;
+            let mut inner = self.lock()?;
             let r = inner.requests.get(id).ok_or("unknown request")?;
             if !matches!(r.kind, Kind::Standing(_)) || r.approval.is_none() || r.usable {
                 return Err("Revoke the standing approval first.".into());
             }
-            let waiting = inner.requests.values().find(|x| {
-                matches!(&x.kind, Kind::Revoke(s) if s == &r.id)
-                    && x.current_status(t) == Status::Pending
-            });
-            if let Some(w) = waiting {
-                return Ok(self.settings.approve_url(&w.id));
-            }
-            let done = inner
+            let (aud, sid) = (r.aud.clone(), r.id.clone());
+            // At most ONE revocation request per standing approval. After a deny or
+            // a timeout the same request is opened again, never a new one, so
+            // nobody can use revocations to flood the gate.
+            let existing = inner
                 .requests
-                .values()
-                .any(|x| matches!(&x.kind, Kind::Revoke(s) if s == &r.id) && x.approval.is_some());
-            if done {
-                return Err("The revocation is already signed and published.".into());
+                .values_mut()
+                .find(|x| matches!(&x.kind, Kind::Revoke(s) if s == &sid));
+            if let Some(x) = existing {
+                if x.approval.is_some() {
+                    return Err("The revocation is already signed and published.".into());
+                }
+                if x.current_status(t) != Status::Pending {
+                    x.status = Status::Pending;
+                    x.deadline = t + PENDING_SECS;
+                    x.claims = None;
+                }
+                let url = self.settings.approve_url(&x.id);
+                drop(inner);
+                self.changed.notify_waiters();
+                return Ok(url);
             }
-            (r.aud.clone(), r.id.clone())
+            (aud, sid)
         };
         let sign = self.create_kind(
             standing::revoke_request(&sid),

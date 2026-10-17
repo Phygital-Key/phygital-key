@@ -3,9 +3,9 @@
 #
 # Recommended (from a fresh terminal you trust):
 #   curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
-# Later (update, uninstall), use the locked copy it installs:
-#   sudo /Library/PhygitalKey/bin/phygital-key install-service [--uninstall]     (macOS)
-#   sudo /opt/phygital-key/bin/phygital-key install-service [--uninstall]        (Linux)
+# Later, use the locked copy it installs (add --release vX.Y.Z to update):
+#   sudo /Library/PhygitalKey/bin/phygital-key install-service [--release vX.Y.Z | --uninstall]   (macOS)
+#   sudo /opt/phygital-key/bin/phygital-key install-service [--release vX.Y.Z | --uninstall]      (Linux)
 # Shortcut: `sudo phygital-key install-service` runs YOUR copy of the program as
 # administrator. Only use it if nothing else could have changed that file.
 #
@@ -36,6 +36,9 @@ done
 say() { printf '%s\n' "$*"; }
 die() { printf 'phygital-key install-service: %s\n' "$*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || die "needs administrator rights (sudo)."
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "bad version: $VERSION"
+[[ "$PORT" =~ ^[0-9]{1,5}$ ]] && [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || die "bad port: $PORT"
+case "$BINARY" in ""|/*) ;; *) die "--binary needs a full path (starting with /)" ;; esac
 
 case "$(uname -s)" in
   Darwin)
@@ -68,7 +71,7 @@ root_only() {
     [ ! -L "$p" ] || return 1
     [ "$(owner_of "$p")" = root ] || return 1
     local m; m=$(mode_of "$p")
-    # group or other write bit set (allow the sticky /tmp-style bit only on /).
+    # No group or other write bit.
     [ $(( 0$m & 022 )) -eq 0 ] || return 1
     [ "$p" = / ] && return 0
     p=$(dirname "$p")
@@ -126,7 +129,8 @@ else
   if command -v sha256sum >/dev/null; then have=$(sha256sum "$WORK/r.tar.gz" | cut -d ' ' -f 1)
   else have=$(shasum -a 256 "$WORK/r.tar.gz" | cut -d ' ' -f 1); fi
   [ "$want" = "$have" ] || die "the download does not match its published SHA-256. Nothing was installed."
-  tar -xzf "$WORK/r.tar.gz" -C "$WORK"
+  tar --no-same-owner -xzf "$WORK/r.tar.gz" -C "$WORK"
+  [ -f "$WORK/$NAME/phygital-key" ] && [ ! -L "$WORK/$NAME/phygital-key" ] || die "the release does not contain the expected program."
   mv "$WORK/$NAME/phygital-key" "$WORK/phygital-key"
 fi
 
@@ -157,7 +161,9 @@ fi
 install -d -m 0755 -o root "$PREFIX" "$PREFIX/bin"
 root_only "$PREFIX/bin" || die "$PREFIX/bin is not owned by root only. Refusing to continue."
 install -d -m 0700 -o "$SVC_USER" "$DATA"
-install -d -m 0700 -o "$SVC_USER" "$LOGS"
+# The log folder belongs to root: launchd/systemd open the log as root, so the
+# gate user must not be able to swap it for a link to another file.
+install -d -m 0700 -o root "$LOGS"
 
 # 4. The program, swapped in at once (no moment without a gate binary).
 install -m 0755 -o root "$WORK/phygital-key" "$BIN.new"
@@ -176,7 +182,8 @@ listeners_ok() {
   if command -v lsof >/dev/null 2>&1; then pids=\$(sudo lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null | sort -u)
   else pids=\$(sudo ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); fi
   [ -n "\$pids" ] || return 1
-  for p in \$pids; do [ "\$(ps -o user= -p "\$p" | tr -d ' ')" = "$SVC_USER" ] || return 1; done
+  local want; want=\$(id -u "$SVC_USER")
+  for p in \$pids; do [ "\$(ps -o uid= -p "\$p" | tr -d ' ')" = "\$want" ] || return 1; done
 }
 case "\${1:-help}" in
   enroll) run enroll ;;
@@ -222,7 +229,12 @@ if [ "$OS" = mac ]; then
 PLIST
   install -m 0644 -o root "$WORK/plist" "$UNIT"
   launchctl bootout system/io.phygitalkey.gate 2>/dev/null || true
-  launchctl bootstrap system "$UNIT"
+  ok=no
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if launchctl bootstrap system "$UNIT" 2>/dev/null; then ok=yes; break; fi
+    sleep 0.5   # bootout may still be finishing
+  done
+  [ "$ok" = yes ] || die "could not start the service (launchctl bootstrap)."
 else
   cat > "$WORK/unit" <<UNITFILE
 [Unit]
@@ -279,9 +291,10 @@ for _ in $(seq 1 50); do
 done
 pids=$(listener_pids "$PORT" || true)
 [ -n "$pids" ] || die "the gate did not start. See: sudo tail $LOGS/gate.log"
+SVC_UID=$(id -u "$SVC_USER")
 for p in $pids; do
-  u=$(ps -o user= -p "$p" | tr -d ' ')
-  [ "$u" = "$SVC_USER" ] || die "another program (user $u, pid $p) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
+  u=$(ps -o uid= -p "$p" | tr -d ' ')
+  [ "$u" = "$SVC_UID" ] || die "another program (uid $u, pid $p) is listening on port $PORT. Stop it, then run this again. Do not approve anything until then."
 done
 
 cat <<DONE
@@ -295,5 +308,6 @@ Next:
   1. Add your key:        $HELPER enroll
   2. Connect your AI app: $HELPER token    (prints the line to paste)
   3. Check it any time:   $HELPER status
-Update or remove later with the locked copy:  sudo $BIN install-service [--uninstall]
+Update later:  sudo $BIN install-service --release vX.Y.Z
+Remove:        sudo $BIN install-service --uninstall
 DONE
