@@ -1,0 +1,41 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/phygital-key-verify",
+    "crates/phygital-key",
+    "crates/phygital-key-testgen",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+repository = "https://github.com/s17sh70x2jfl031ag/phygital-key-mcp"
+authors = ["Phygital Key contributors"]
+
+[workspace.dependencies]
+phygital-key-verify = { path = "crates/phygital-key-verify", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_jcs = "0.2"
+sha2 = "0.11"
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
+base64 = "0.23"
+subtle = "2.6"
+unicode-normalization = "0.1"
+getrandom = "0.4"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

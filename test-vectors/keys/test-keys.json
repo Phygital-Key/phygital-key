@@ -1,0 +1,27 @@
+{
+  "keys": [
+    {
+      "card": {
+        "created": "2026-10-17",
+        "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+        "name": "alice (TEST ONLY)",
+        "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+        "rp_id": "approve.example.com"
+      },
+      "name": "alice",
+      "private_scalar_b64": "Ol_StH_UBRuDAPYci4tSOTOgbOmMwZoiIbfmDlS0Fzk"
+    },
+    {
+      "card": {
+        "created": "2026-10-17",
+        "credential_id": "h5lGA8CPDl3BPhS8ldptAw",
+        "name": "mallory (TEST ONLY)",
+        "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWGCq2lsej13FlXKQFkXpCmPx93fh-qZhT0CpzqG1-RWzKtMqA77ZO9eewG6S-0dspm-c9LEW_V75YXz5gvx5gg",
+        "rp_id": "approve.example.com"
+      },
+      "name": "mallory",
+      "private_scalar_b64": "xd27xq4dizuEFBGn_aS7r3s9VrCIYh_fm_Mbb3ql19o"
+    }
+  ],
+  "warning": "TEST ONLY. These private keys are public. Never trust them anywhere."
+}
