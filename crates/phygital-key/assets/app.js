@@ -1,0 +1,264 @@
+// Phygital Key approval page. Plain JS, no dependencies.
+// The page shows the canonical request built by the gate (never AI prose),
+// and signs a challenge it computes itself from the exact claims it was given.
+"use strict";
+
+const PREFIX = "phygital-key/approval/v1\u0000";
+const $ = (id) => document.getElementById(id);
+
+function b64u(bytes) {
+  let s = "";
+  new Uint8Array(bytes).forEach((b) => { s += String.fromCharCode(b); });
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function unb64u(text) {
+  const s = atob(text.replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+async function sha256(bytes) {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+}
+function utf8(text) {
+  return new TextEncoder().encode(text);
+}
+function concat(a, b) {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+}
+function note(text, kind) {
+  const n = $("note");
+  if (!n) return;
+  n.textContent = text;
+  n.className = "note" + (kind ? " " + kind : "");
+}
+async function api(path, body) {
+  const opts = body === undefined
+    ? { method: "GET" }
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Something went wrong (" + res.status + ").");
+  return data;
+}
+function webauthnSupported() {
+  return window.PublicKeyCredential && navigator.credentials && window.isSecureContext;
+}
+function friendly(err) {
+  if (err && err.name === "NotAllowedError") return "The key prompt was closed or timed out. Nothing was signed.";
+  if (err && err.name === "InvalidStateError") return "This key is already added.";
+  if (err && err.name === "SecurityError") return "This page address cannot use passkeys. Open it through the exact link you were given.";
+  return (err && err.message) || "Something went wrong.";
+}
+function countdown(el, until, done) {
+  const tick = () => {
+    const left = until - Math.floor(Date.now() / 1000);
+    if (left <= 0) { el.textContent = "time is up"; if (done) done(); return; }
+    const m = Math.floor(left / 60), s = left % 60;
+    el.textContent = (m ? m + " min " : "") + s + " s";
+    setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+// Flatten params into rows: path -> value. Values are shown as exact JSON text.
+function rows(value, path, out) {
+  if (value !== null && typeof value === "object") {
+    const keys = Array.isArray(value) ? value.map((_, i) => i) : Object.keys(value);
+    if (keys.length === 0) out.push([path || "(empty)", Array.isArray(value) ? "[]" : "{}"]);
+    keys.forEach((k) => rows(value[k], path ? path + (Array.isArray(value) ? "[" + k + "]" : "." + k) : String(k), out));
+  } else {
+    out.push([path, typeof value === "string" ? value : JSON.stringify(value)]);
+  }
+  return out;
+}
+function suspicious(text) {
+  // Mixed scripts and invisible characters can make two different texts look the same.
+  return /[​-‏‪-‮⁦-⁩﻿]/.test(text) || (/[A-Za-z]/.test(text) && /[Ѐ-ӿͰ-Ͽ]/.test(text));
+}
+
+async function approvePage() {
+  const id = location.pathname.split("/").pop();
+  let view;
+  try {
+    view = await api("/api/r/" + encodeURIComponent(id));
+  } catch (e) {
+    $("title").textContent = "Request not found";
+    $("lead").textContent = "This link is wrong or the request was removed.";
+    return;
+  }
+  const request = JSON.parse(view.request_jcs);
+  $("type").textContent = view.adds_key ? "Add a new key to your trusted keys" : request.type;
+  $("aud").textContent = view.aud;
+  $("level").textContent = view.level === "high" ? "Fingerprint, face or PIN" : "A touch on your key";
+  $("raw").textContent = view.request_jcs;
+  $("hash").textContent = view.request_hash;
+  const body = $("params").querySelector("tbody");
+  rows(request.params, "", []).forEach(([k, v]) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    const td = document.createElement("td");
+    th.textContent = k;
+    td.textContent = v;
+    if (suspicious(k + v)) {
+      td.classList.add("warn");
+      td.title = "Contains look-alike or invisible characters";
+    }
+    tr.append(th, td);
+    body.append(tr);
+  });
+  $("card").hidden = false;
+
+  const done = {
+    approved: ["Approved", "Signed by " + (view.approved_by || "your key") + ". You can close this page."],
+    denied: ["Denied", "You said no. Nothing will happen."],
+    cancelled: ["Cancelled", "The request was withdrawn."],
+    expired: ["Expired", "Nobody decided in time, so the answer is no."],
+  };
+  if (view.status !== "pending") {
+    const [t, l] = done[view.status] || ["Closed", ""];
+    $("title").textContent = t;
+    $("lead").textContent = l;
+    return;
+  }
+  $("title").textContent = view.adds_key ? "Approve a new key?" : "Approve this request?";
+  $("lead").textContent = view.adds_key
+    ? "Someone is adding a new key. Approve only if you are adding it yourself, right now."
+    : "Check every detail. Your key will sign exactly what is shown here.";
+  countdown($("deadline"), view.deadline, () => { $("actions").hidden = true; note("Time is up. The answer is no.", "bad"); });
+  if (!webauthnSupported()) {
+    note("This browser cannot use passkeys here. Open the link in a recent browser, over https or localhost.", "bad");
+    return;
+  }
+  $("actions").hidden = false;
+
+  $("deny").onclick = async () => {
+    try {
+      await api("/api/r/" + encodeURIComponent(id) + "/deny", {});
+      $("actions").hidden = true;
+      $("title").textContent = "Denied";
+      $("lead").textContent = "You said no. Nothing will happen.";
+      note("");
+    } catch (e) { note(friendly(e), "bad"); }
+  };
+
+  $("approve").onclick = async () => {
+    $("approve").disabled = true;
+    $("deny").disabled = true;
+    try {
+      note("Waiting for your key…");
+      const started = await api("/api/r/" + encodeURIComponent(id) + "/start", {});
+      const claims = JSON.parse(started.claims_jcs);
+      // Sign only if the claims say exactly what this page shows.
+      const shownHash = b64u(await sha256(utf8(view.request_jcs)));
+      if (claims.aud !== view.aud || claims.level !== view.level || claims.request_hash !== shownHash ||
+          claims.request_hash !== view.request_hash || JSON.stringify(claims.request) !== JSON.stringify(request) ||
+          claims.id !== view.id || claims.v !== "pka.1") {
+        throw new Error("What would be signed does not match what is shown. Nothing was signed.");
+      }
+      const challenge = await sha256(concat(utf8(PREFIX), utf8(started.claims_jcs)));
+      const cred = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: started.rp_id,
+          allowCredentials: started.allow.map((c) => ({ type: "public-key", id: unb64u(c) })),
+          userVerification: view.level === "high" ? "required" : "preferred",
+          timeout: 120000,
+        },
+      });
+      const r = cred.response;
+      const result = await api("/api/r/" + encodeURIComponent(id) + "/finish", {
+        credential_id: b64u(cred.rawId),
+        authenticator_data: b64u(r.authenticatorData),
+        client_data_json: b64u(r.clientDataJSON),
+        signature: b64u(r.signature),
+      });
+      $("actions").hidden = true;
+      $("title").textContent = "Approved";
+      $("lead").textContent = "Signed by " + (result.approved_by || "your key") + ". It works once, within " + (claims.exp - claims.iat) + " seconds.";
+      note("Done. You can close this page.", "good");
+    } catch (e) {
+      note(friendly(e), "bad");
+      $("approve").disabled = false;
+      $("deny").disabled = false;
+    }
+  };
+}
+
+async function enrollPage() {
+  const token = new URLSearchParams(location.hash.slice(1)).get("token") || "";
+  history.replaceState(null, "", location.pathname); // keep the token out of history
+  if (!token) {
+    note("This page needs the link printed by `phygital-key enroll`.", "bad");
+    $("enroll").disabled = true;
+    return;
+  }
+  if (!webauthnSupported()) {
+    note("This browser cannot use passkeys here. Use a recent browser, over https or localhost.", "bad");
+    $("enroll").disabled = true;
+    return;
+  }
+  $("enroll").onclick = async () => {
+    $("enroll").disabled = true;
+    try {
+      const name = $("name").value.trim() || "My key";
+      const o = await api("/api/enroll/begin", { token, name });
+      note("Follow your browser's prompt…");
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge: unb64u(o.challenge),
+          rp: { id: o.rp_id, name: "Phygital Key" },
+          user: { id: unb64u(o.user_id), name: o.name, displayName: o.name },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+          excludeCredentials: o.exclude.map((c) => ({ type: "public-key", id: unb64u(c) })),
+          authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },
+          attestation: "none",
+          timeout: 120000,
+        },
+      });
+      const r = cred.response;
+      if (typeof r.getPublicKey !== "function" || r.getPublicKeyAlgorithm() !== -7 || !r.getPublicKey()) {
+        throw new Error("This key type is not supported yet. Use a passkey or a FIDO2 key with ES256.");
+      }
+      const result = await api("/api/enroll/finish", {
+        token,
+        credential_id: b64u(cred.rawId),
+        public_key: b64u(r.getPublicKey()),
+        client_data_json: b64u(r.clientDataJSON),
+      });
+      if (result.status === "added") {
+        note("Key added: " + result.card.name + ". You can close this page.", "good");
+      } else {
+        note("Almost done: approve this new key with a key you already trust.", "good");
+        location.href = result.approve_url;
+      }
+    } catch (e) {
+      note(friendly(e), "bad");
+      $("enroll").disabled = false;
+    }
+  };
+}
+
+async function indexPage() {
+  try {
+    const s = await api("/api/status");
+    const list = $("keys");
+    list.textContent = "";
+    if (s.keys.length === 0) {
+      const li = document.createElement("li");
+      li.textContent = "No keys yet.";
+      list.append(li);
+    }
+    s.keys.forEach((k) => {
+      const li = document.createElement("li");
+      li.textContent = k.name + " · added " + k.created;
+      list.append(li);
+    });
+  } catch (e) { note(friendly(e), "bad"); }
+}
+
+const page = document.body.dataset.page;
+if (page === "approve") approvePage();
+else if (page === "enroll") enrollPage();
+else indexPage();

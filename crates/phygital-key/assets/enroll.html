@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Add a key · Phygital Key</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body data-page="enroll">
+<main>
+  <header class="brand"><span class="dot" aria-hidden="true"></span> Phygital Key</header>
+  <h1>Add your key</h1>
+  <p class="lead">Use your phone, this computer's fingerprint or face unlock, or a hardware key. Your key never leaves your device.</p>
+  <section class="card">
+    <label for="name">Name for this key</label>
+    <input id="name" type="text" maxlength="64" autocomplete="off" placeholder="e.g. My phone">
+    <p class="small">Tip: add two keys (for example phone and laptop), so losing one does not lock you out.</p>
+  </section>
+  <p id="note" class="note" role="status" aria-live="polite"></p>
+  <div class="actions">
+    <button id="enroll" class="primary" type="button">Add key</button>
+  </div>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

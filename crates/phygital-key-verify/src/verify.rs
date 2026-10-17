@@ -9,8 +9,8 @@ use subtle::ConstantTimeEq;
 
 use crate::canonical;
 use crate::model::{
-    ApprovalObject, Claims, Config, Expected, Keyring, Level, MAX_APPROVAL_BYTES, MAX_CLOCK_SKEW_SECS,
-    MAX_LIFETIME_SECS, MAX_REQUEST_BYTES, VERSION, id_ok, request_shape_ok,
+    ApprovalObject, Claims, Config, Expected, Keyring, Level, MAX_APPROVAL_BYTES,
+    MAX_CLOCK_SKEW_SECS, MAX_LIFETIME_SECS, MAX_REQUEST_BYTES, VERSION, id_ok, request_shape_ok,
 };
 use crate::webauthn::{self, AssertionCheck, AssertionError, FLAG_UP, FLAG_UV};
 use crate::{b64, strict};
@@ -122,7 +122,9 @@ impl MemorySeenStore {
 
 impl SeenStore for MemorySeenStore {
     fn insert_if_new(&self, id: &str, exp: i64, now: i64) -> bool {
-        let Ok(mut seen) = self.seen.lock() else { return false };
+        let Ok(mut seen) = self.seen.lock() else {
+            return false;
+        };
         seen.retain(|_, e| *e > now);
         if seen.contains_key(id) {
             return false;
@@ -158,7 +160,9 @@ pub fn check(
     if claims.v != VERSION || !id_ok(&claims.id) || !request_shape_ok(&claims.request) {
         return Err(E::Malformed);
     }
-    let [sig] = obj.signatures.as_slice() else { return Err(E::Malformed) };
+    let [sig] = obj.signatures.as_slice() else {
+        return Err(E::Malformed);
+    };
     let challenge = canonical::challenge(&claims_value).map_err(|_| E::Malformed)?;
     let claims_request = canonical::canonical_bytes(&claims.request).map_err(|_| E::Malformed)?;
     if claims_request.len() > MAX_REQUEST_BYTES {
@@ -216,11 +220,17 @@ pub fn check(
     let key = webauthn::parse_public_key(&card.public_key).ok_or(E::UntrustedKey)?;
 
     // 6. The assertion checks out, and proves enough.
-    let want = AssertionCheck { kind: "webauthn.get", challenge: &challenge, origins: &config.origins, rp_id: &card.rp_id };
-    let flags = webauthn::verify_assertion(&key, &auth_data, &client_data, &sig_der, &want).map_err(|e| match e {
-        AssertionError::BadSignature => E::BadSignature,
-        AssertionError::AssuranceTooLow => E::AssuranceTooLow,
-    })?;
+    let want = AssertionCheck {
+        kind: "webauthn.get",
+        challenge: &challenge,
+        origins: &config.origins,
+        rp_id: &card.rp_id,
+    };
+    let flags = webauthn::verify_assertion(&key, &auth_data, &client_data, &sig_der, &want)
+        .map_err(|e| match e {
+            AssertionError::BadSignature => E::BadSignature,
+            AssertionError::AssuranceTooLow => E::AssuranceTooLow,
+        })?;
     if flags & FLAG_UP == 0 || (claims.level == Level::High && flags & FLAG_UV == 0) {
         return Err(E::AssuranceTooLow);
     }
@@ -293,7 +303,12 @@ impl Verifier<MemorySeenStore> {
 impl<S: SeenStore> Verifier<S> {
     /// A verifier with your own seen store.
     pub fn with_store(aud: impl Into<String>, keyring: Keyring, config: Config, seen: S) -> Self {
-        Self { aud: aud.into(), keyring, config, seen }
+        Self {
+            aud: aud.into(),
+            keyring,
+            config,
+            seen,
+        }
     }
 
     /// Replace the keyring (for example after reloading it from disk).
@@ -302,12 +317,28 @@ impl<S: SeenStore> Verifier<S> {
     }
 
     /// Verify `approval` for `request` at `level` or above, now.
-    pub fn verify(&self, approval: &str, request: &Value, level: Level) -> Result<Verified, ErrorCode> {
+    pub fn verify(
+        &self,
+        approval: &str,
+        request: &Value,
+        level: Level,
+    ) -> Result<Verified, ErrorCode> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
             .map_err(|_| ErrorCode::Expired)?;
-        let expected = Expected { aud: &self.aud, request, level };
-        verify(approval, &expected, &self.keyring, &self.seen, &self.config, now)
+        let expected = Expected {
+            aud: &self.aud,
+            request,
+            level,
+        };
+        verify(
+            approval,
+            &expected,
+            &self.keyring,
+            &self.seen,
+            &self.config,
+            now,
+        )
     }
 }

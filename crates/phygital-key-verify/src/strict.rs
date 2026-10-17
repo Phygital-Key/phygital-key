@@ -35,7 +35,9 @@ impl<'de> Visitor<'de> for StrictVisitor {
     }
     fn visit_f64<E>(self, v: f64) -> Result<StrictValue, E> {
         // Kept so the canonical step can refuse it with a clear reason.
-        Ok(StrictValue(serde_json::Number::from_f64(v).map_or(Value::Null, Value::Number)))
+        Ok(StrictValue(
+            serde_json::Number::from_f64(v).map_or(Value::Null, Value::Number),
+        ))
     }
     fn visit_str<E>(self, v: &str) -> Result<StrictValue, E> {
         Ok(StrictValue(Value::String(v.to_owned())))

@@ -159,14 +159,18 @@ pub struct Expected<'a> {
 
 /// Check that a request has the shape `{"type": "<name>", "params": {...}}`.
 pub fn request_shape_ok(request: &Value) -> bool {
-    let Some(obj) = request.as_object() else { return false };
+    let Some(obj) = request.as_object() else {
+        return false;
+    };
     if obj.len() != 2 {
         return false;
     }
     let type_ok = obj.get("type").and_then(Value::as_str).is_some_and(|t| {
         !t.is_empty()
             && t.len() <= 64
-            && t.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.' || b == b'-')
+            && t.bytes().all(|b| {
+                b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.' || b == b'-'
+            })
     });
     type_ok && obj.get("params").is_some_and(Value::is_object)
 }

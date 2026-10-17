@@ -89,13 +89,22 @@ mod tests {
     #[test]
     fn keys_are_sorted() {
         let v = json!({"b": 1, "a": [true, null, "x"]});
-        assert_eq!(canonical_string(&v), Ok(r#"{"a":[true,null,"x"],"b":1}"#.to_string()));
+        assert_eq!(
+            canonical_string(&v),
+            Ok(r#"{"a":[true,null,"x"],"b":1}"#.to_string())
+        );
     }
 
     #[test]
     fn floats_are_refused() {
-        assert_eq!(canonical_bytes(&json!({"amount": 1.5})), Err(CanonError::NotSafeInteger));
-        assert_eq!(canonical_bytes(&json!(9_007_199_254_740_992_u64)), Err(CanonError::NotSafeInteger));
+        assert_eq!(
+            canonical_bytes(&json!({"amount": 1.5})),
+            Err(CanonError::NotSafeInteger)
+        );
+        assert_eq!(
+            canonical_bytes(&json!(9_007_199_254_740_992_u64)),
+            Err(CanonError::NotSafeInteger)
+        );
         assert!(canonical_bytes(&json!(-9_007_199_254_740_991_i64)).is_ok());
     }
 
@@ -111,7 +120,10 @@ mod tests {
         let mut m = Map::new();
         m.insert("e\u{301}".into(), json!(1));
         m.insert("\u{e9}".into(), json!(2));
-        assert_eq!(canonical_bytes(&Value::Object(m)), Err(CanonError::DuplicateKeyAfterNfc));
+        assert_eq!(
+            canonical_bytes(&Value::Object(m)),
+            Err(CanonError::DuplicateKeyAfterNfc)
+        );
     }
 
     #[test]
@@ -149,7 +161,10 @@ mod tests {
     #[test]
     fn nfc_rewrites_composition_exclusions() {
         // U+FB33 becomes U+05D3 U+05BC under NFC, so it sorts before U+20AC.
-        assert_eq!(canonical_string(&json!("\u{fb33}")), Ok("\"\u{5d3}\u{5bc}\"".to_string()));
+        assert_eq!(
+            canonical_string(&json!("\u{fb33}")),
+            Ok("\"\u{5d3}\u{5bc}\"".to_string())
+        );
     }
 
     #[test]

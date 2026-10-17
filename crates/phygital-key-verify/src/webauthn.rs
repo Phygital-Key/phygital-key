@@ -50,12 +50,16 @@ pub fn check_client_data(client_data_json: &[u8], want: &AssertionCheck) -> bool
     if client_data_json.len() > MAX_CLIENT_DATA {
         return false;
     }
-    let Some(cd) = crate::strict::parse(client_data_json) else { return false };
+    let Some(cd) = crate::strict::parse(client_data_json) else {
+        return false;
+    };
     let s = |k: &str| cd.get(k).and_then(Value::as_str);
     if s("type") != Some(want.kind) {
         return false;
     }
-    let Some(got) = s("challenge").and_then(b64::decode) else { return false };
+    let Some(got) = s("challenge").and_then(b64::decode) else {
+        return false;
+    };
     if !bool::from(got.as_slice().ct_eq(want.challenge)) {
         return false;
     }
@@ -63,8 +67,10 @@ pub fn check_client_data(client_data_json: &[u8], want: &AssertionCheck) -> bool
         return false;
     }
     // A page inside a frame on another site must not be able to collect a yes.
-    !matches!(cd.get("crossOrigin"), Some(Value::Bool(true)) | Some(Value::String(_)))
-        && cd.get("topOrigin").is_none()
+    !matches!(
+        cd.get("crossOrigin"),
+        Some(Value::Bool(true)) | Some(Value::String(_))
+    ) && cd.get("topOrigin").is_none()
 }
 
 /// Verify one ES256 assertion. Returns the authenticator flags on success.
@@ -78,7 +84,8 @@ pub fn verify_assertion(
     if !check_client_data(client_data_json, want) {
         return Err(AssertionError::BadSignature);
     }
-    let (Some(rp_hash), Some(&flags)) = (authenticator_data.get(..32), authenticator_data.get(32)) else {
+    let (Some(rp_hash), Some(&flags)) = (authenticator_data.get(..32), authenticator_data.get(32))
+    else {
         return Err(AssertionError::BadSignature);
     };
     if authenticator_data.len() < 37 {
@@ -91,6 +98,8 @@ pub fn verify_assertion(
     let sig = Signature::from_der(signature_der).map_err(|_| AssertionError::BadSignature)?;
     let mut signed = authenticator_data.to_vec();
     signed.extend_from_slice(&Sha256::digest(client_data_json));
-    public_key.verify(&signed, &sig).map_err(|_| AssertionError::BadSignature)?;
+    public_key
+        .verify(&signed, &sig)
+        .map_err(|_| AssertionError::BadSignature)?;
     Ok(flags)
 }

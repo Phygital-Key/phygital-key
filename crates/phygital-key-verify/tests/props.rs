@@ -1,7 +1,11 @@
 //! Property tests: random input never panics and never verifies;
 //! any change to a valid approval is refused; canonical form is stable.
+// serde_json::Value indexing returns Null for missing keys; it never panics.
+#![allow(clippy::indexing_slicing)]
 
-use phygital_key_verify::{Config, Expected, Keyring, Level, MemorySeenStore, b64, canonical, verify};
+use phygital_key_verify::{
+    Config, Expected, Keyring, Level, MemorySeenStore, b64, canonical, verify,
+};
 use proptest::prelude::*;
 use serde_json::{Map, Value, json};
 
@@ -24,15 +28,29 @@ fn fixture() -> Fixture {
         request: input["request"].clone(),
         aud: input["aud"].as_str().unwrap_or_default().to_string(),
         keyring: serde_json::from_value(input["keyring"].clone()).unwrap_or_default(),
-        config: serde_json::from_value(input["config"].clone())
-            .unwrap_or(Config { origins: vec![], rp_ids: vec![] }),
+        config: serde_json::from_value(input["config"].clone()).unwrap_or(Config {
+            origins: vec![],
+            rp_ids: vec![],
+        }),
         now: input["now"].as_i64().unwrap_or_default(),
     }
 }
 
 fn run(f: &Fixture, approval: &str, request: &Value) -> bool {
-    let expected = Expected { aud: &f.aud, request, level: Level::Medium };
-    verify(approval, &expected, &f.keyring, &MemorySeenStore::new(), &f.config, f.now).is_ok()
+    let expected = Expected {
+        aud: &f.aud,
+        request,
+        level: Level::Medium,
+    };
+    verify(
+        approval,
+        &expected,
+        &f.keyring,
+        &MemorySeenStore::new(),
+        &f.config,
+        f.now,
+    )
+    .is_ok()
 }
 
 fn json_value() -> impl Strategy<Value = Value> {
