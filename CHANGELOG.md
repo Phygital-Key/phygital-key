@@ -8,7 +8,7 @@
 - **Fuzzing** of the verifier, the strict parser and the key history (`fuzz/`, runs in CI), and mutation testing of the verifier.
 - **Signed receipts:** a service answers "done" or "failed" with a standard ES256 JWT that points at the approval by hash (AP2 style). The demo service returns them, the agent passes them back with the new `record_receipt` tool, and the gate shows "the service reported: done" only for receipts signed by a pinned service key (`phygital-key trust-service`). `phygital-key receipt-check` verifies them.
 - **More edge test cases** from mutation testing: exact size limits (8192-byte request, 4096-byte client data, 16384-character approval), and five more key-history cases. 55 approval vectors in total.
-- **Three independent security reviews** of the new code; all findings fixed (key-list rollback and forks, made-up receipts, double key removal, crash-safe used-ids file, save-then-swap keyring, strict receipt checks, standing ranges without a minimum, standing approvals kept until their end, reserved `standing` type).
+- **Four independent security reviews** of the new code; all findings fixed (key-list rollback and forks, made-up receipts, double key removal, crash-safe used-ids file, save-then-swap keyring, strict receipt checks, standing ranges without a minimum, standing approvals kept until their end, reserved `standing` type, a cap on stored requests).
 - **Installers:** Homebrew tap, a checksum-checking install script, and a Scoop bucket for Windows. winget manifests are generated in `packaging/winget/`.
 
 ## 0.1.0 (2026-10-17)
