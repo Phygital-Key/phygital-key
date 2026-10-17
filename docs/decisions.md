@@ -30,3 +30,7 @@ Each entry: what we chose, and why. Newest last.
 26. **Receipts count only when signed by a pinned service key.** The agent carries them, so an unchecked one proves nothing.
 27. **Standing approvals stay narrow:** exact fixed values, integer ranges or short string lists, a use cap, at most 30 days, one gate-held use key per approval kept in memory. No policy language. Services count uses themselves.
 28. **No AP2 export yet.** It would move trust from the passkey to a gate key for plain AP2 verifiers. The mapping is written down in `docs/ap2.md`; the code waits for a real user.
+29. **Revocations are signed by the person, not the gate.** A revoke is one more touch, so services can trust it with the keyring they already have, and no gate key is needed. Invalid entries in the published list are ignored: an entry can only add a revocation.
+30. **An access token on the HTTP MCP endpoint, on by default.** Any program on the machine could otherwise create requests. stdio needs none.
+31. **A second verifier, in JavaScript, with no dependencies.** It shares only the spec and the vectors with the Rust one. Two implementations agreeing on every vector is how unclear spec text is found.
+32. **Secure install as a separate system user** (launchd, systemd). It is the simplest way to put the gate out of reach of an agent that runs as you, without a second machine.

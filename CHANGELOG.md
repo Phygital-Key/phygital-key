@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 (2026-10-17)
+
+- **Secure install:** `sudo phygital-key install-service` runs the gate as its own locked-down system user (launchd on macOS, systemd with hardening on Linux). Program owned by root, data readable only by the gate user, `phygital-key-admin` for enroll, token, keys, status and logs (each needs your administrator password). Tested for real on Linux and macOS in CI. `--uninstall`, `--purge`.
+- **Signed revocations for standing approvals:** revoking stops new uses at once, then one more touch signs a revocation published at `/.well-known/phygital-key-revoked.json`; `verify_use` takes the checked list and refuses with the new code `REVOKED`. 5 new test vectors.
+- **MCP access token** for HTTP mode (`serve`, `demo`): on by default, printed with the exact line to paste into an AI app, `phygital-key mcp-token`, `--open-mcp` to turn it off.
+- **An independent JavaScript verifier** (`verifier-js/`, no dependencies, Node 20+ and browsers) that passes every shared test vector, in CI.
+
 ## 0.2.0 (2026-10-17)
 
 - **Standing approvals:** approve once, with limits (exact fixed fields, integer ranges, short string lists, a use cap, up to 30 days). The gate signs a one-minute use token per action with a key it keeps only in memory; the service checks both with `verify_use` and counts uses. Revoke on the approval page. New tools `request_standing_approval` and `use_standing_approval`; new codes `NOT_ALLOWED` and `USED_UP`; 38 test vectors in `test-vectors/standing.json`. Integer limits need both `min` and `max`; standing approvals are always level high; receipts per use (`verify_use_receipt`).

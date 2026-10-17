@@ -21,7 +21,7 @@ One party can hold several roles. Example: a business can be both Requester and 
 
 The base is the format and the verifier. Adapters are just doorways.
 
-- **v0.1: MCP.** The Gate is an MCP server (stdio, or Streamable HTTP at `/mcp`). It asks the client to open the approval page with MCP URL-mode elicitation. If the client has no URL elicitation, it returns the link for the person to open. It never auto-approves.
+- **v0.1: MCP.** The Gate is an MCP server (stdio, or Streamable HTTP at `/mcp`). It asks the client to open the approval page with MCP URL-mode elicitation. If the client has no URL elicitation, it returns the link for the person to open. It never auto-approves. Over HTTP, `/mcp` needs a bearer token (`Authorization: Bearer <token>`, made once and kept in the gate's data folder; `phygital-key mcp-token` prints it) and refuses any request that carries a browser `Origin`. `--open-mcp` turns the token off. stdio needs no token: only the app that started the gate can talk to it.
 - **Later:** plain HTTP API, email link, chat apps, QR code on a screen, SDKs for apps.
 
 All adapters produce the same approval object and use the same verifier.
@@ -142,7 +142,7 @@ The first failing check returns its code.
 9. **Replay** (`REPLAYED`): atomically record `id` until `exp`; refuse if already seen. Several verifier instances MUST share one store.
 10. Only then act. Log `id`, `request_hash`, time, the approver's credential and the result.
 
-**Error codes:** `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `BAD_SIGNATURE`, `UNTRUSTED_KEY`, `ASSURANCE_TOO_LOW`, `REPLAYED`, `NOT_ALLOWED` and `USED_UP` (standing approvals, section 7c), and `DENIED` (returned by relays when the person says no; never by `verify`).
+**Error codes:** `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `BAD_SIGNATURE`, `UNTRUSTED_KEY`, `ASSURANCE_TOO_LOW`, `REPLAYED`, `NOT_ALLOWED`, `USED_UP` and `REVOKED` (standing approvals, section 7c), and `DENIED` (returned by relays when the person says no; never by `verify`).
 
 **API:** `verify(approval, expected{aud, request, level}, keyring, seen_store, config{origins, rp_ids}, now) -> ok | error(code)`. The verifier is pure: no network, no clock reads, no global state except `seen_store`.
 
@@ -179,7 +179,12 @@ A standing approval lets an agent do the same kind of action a few times, within
 2. **Each use** is a use token: an ES256 compact JWS, header exactly `{"alg":"ES256","typ":"pka-use+jwt"}`, payload `{"v":"pka.use.1","standing_id","id","aud","request","request_hash","iat","exp"}`, signed with `use_key`, living at most 60 s and never past the standing approval's `exp`. The gate keeps `use_key` in memory only and signs a token only for a request inside the limits.
 3. **The verifier** (`verify_use(standing, use_token, expected, keyring, use_store, config, now)`) checks the person's standing approval (all the checks of section 7, with the 30-day life), the use token (signature by `use_key`, same `standing_id`, same audience, time), that the request it is about to run is exactly the one in the token, that it has exactly the `fixed` fields with the same values and the `vary` fields within their limits and nothing else (`NOT_ALLOWED`), and counts uses itself: a use id seen before is `REPLAYED`, more than `max_uses` is `USED_UP`.
 
-**Revoking.** The person can revoke on the approval page (or the agent with `cancel_approval`). The gate then throws `use_key` away, so no new use tokens can be made. Use tokens already handed out still work for up to 60 seconds, and an agent could have collected every remaining use just before; services get no revocation signal, and the standing approval itself stays valid at the service until its `exp`. A restart of the gate also ends every standing approval it holds (fail closed). A service that wants to stop earlier can refuse that `standing_id`. Services MUST count uses in a durable store shared by all their instances, and keep entries a little past expiry (so a clock that steps back cannot reset the count).
+**Revoking** has two steps.
+
+1. On the gate, right away: the person presses Revoke on the approval page (or the agent calls `cancel_approval`). The gate throws `use_key` away, so no new use tokens can be made. A restart of the gate also ends every standing approval it holds (fail closed).
+2. At the service: the gate then asks the person to sign a **revocation**, a one-time approval (level `medium` or higher) of the reserved request `{"type": "revoke", "params": {"standing_id": "<id>"}}` with the standing approval's audience. Signed revocations are published at `/.well-known/phygital-key-revoked.json` as `{"revocations": ["<approval>", ...]}`. A service fetches that list now and then (it is just data; the verifier never fetches) and builds `Revocations::from_approvals(list, aud, keyring, config)`: only revocations signed by a trusted key, for this service, about a standing id, count, each checked as of its own `iat` (a revocation never expires). Anything else in the list is ignored, which is safe because an entry can only ever add a revocation. `verify_use` then refuses that standing approval with `REVOKED`, including use tokens handed out before the revoke.
+
+Until the service picks up the signed revocation, use tokens already handed out still work for up to 60 seconds (and an agent could have collected every remaining use just before the revoke). Services MUST count uses in a durable store shared by all their instances, and keep entries a little past expiry (so a clock that steps back cannot reset the count).
 
 **Receipts for standing uses** carry the use token's `use_id`, and `request_hash` is that use's request. They are checked with `receipt::verify_use_receipt` (the gate records one per use token it handed out).
 

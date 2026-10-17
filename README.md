@@ -57,7 +57,7 @@ The gate is a normal MCP server. Two ways to run it:
 | Your app | How |
 |---|---|
 | Launches local servers (Claude Code, Claude Desktop, Cursor, most apps) | command `phygital-key mcp` |
-| Connects to a URL | run `phygital-key serve`, then use `http://localhost:7468/mcp` |
+| Connects to a URL | run `phygital-key serve`, then use `http://localhost:7468/mcp` with the access token it prints (`phygital-key mcp-token`) |
 
 Claude Code:
 
@@ -114,7 +114,7 @@ For small repeated actions, the person can approve once, with limits:
 
 > Allow **payment** to **ACME Ltd** in **EUR**, **up to 20.00** each, **at most 5 times**, **for 7 days**.
 
-The agent then asks the gate for a one-minute **use token** for each payment, and sends it with the approval (`Phygital-Approval` and `Phygital-Use` headers). The service checks both with `verify_use` and counts the uses itself. Anything outside the limits (another payee, a bigger amount, an extra field) is refused. The person can revoke it on the approval page at any time.
+The agent then asks the gate for a one-minute **use token** for each payment, and sends it with the approval (`Phygital-Approval` and `Phygital-Use` headers). The service checks both with `verify_use` and counts the uses itself. Anything outside the limits (another payee, a bigger amount, an extra field) is refused. The person can revoke it on the approval page at any time: new uses stop at once, and one more touch signs a revocation that services pick up from `/.well-known/phygital-key-revoked.json`.
 
 ## Receipts
 
@@ -141,14 +141,23 @@ Passkeys need `https` (or `localhost`). Put the gate behind any TLS proxy and te
 phygital-key serve --origin https://approve.example.com
 ```
 
-Run the gate where the AI agent cannot change its files (another machine, or another OS user). See [where to run it](docs/threat-model.md#where-to-run-it-important).
+Run the gate where the AI agent cannot change its files. On macOS and Linux one command does that for you, by running the gate as its own locked-down system user:
+
+```bash
+sudo phygital-key install-service
+phygital-key-admin enroll      # add your key
+phygital-key-admin token       # the line to paste into your AI app
+```
+
+After that, the gate's program, keys and log can only be changed with your administrator password, so an AI acting as you can't touch them. `sudo phygital-key install-service --uninstall` removes it (add `--purge` to delete the keys too). See [where to run it](docs/threat-model.md#where-to-run-it-important).
 
 ## What is inside
 
 | Path | What |
 |---|---|
 | [`docs/spec.md`](docs/spec.md) | The open spec (PKA v0.1): format, checks, error codes |
-| [`crates/phygital-key-verify`](crates/phygital-key-verify) | The verifier library. Pure, offline, fail closed |
+| [`crates/phygital-key-verify`](crates/phygital-key-verify) | The verifier library (Rust). Pure, offline, fail closed |
+| [`verifier-js/`](verifier-js) | An independent verifier in JavaScript, no dependencies, same test vectors |
 | [`crates/phygital-key`](crates/phygital-key) | The gate: MCP server, approval page, enrollment, audit log, demo |
 | [`test-vectors/`](test-vectors) | 55 approval, 25 key-list and 38 standing-approval test cases every implementation must pass |
 | [`tests/e2e/`](tests/e2e) | End-to-end and red-team tests: real browser, virtual passkey, real MCP client |

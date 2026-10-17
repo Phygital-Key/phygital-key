@@ -24,6 +24,8 @@ Plain words first: Phygital Key makes sure **a real person said yes to this exac
 | Look-alike text | `аpi` with a Cyrillic a, KELVIN SIGN instead of K, invisible characters | The exact bytes are signed and compared, never rewritten; text that is not NFC is refused; audiences are visible ASCII only; the page quotes odd keys and highlights common invisible and mixed-script characters (a help, not a guarantee). |
 | Approval fatigue | Hundreds of requests so the person clicks yes | 30 requests per minute, 50 waiting at most, every field always shown, fingerprint or PIN for `high`. |
 | A tampered key list | A website or file lists an extra key, relabels one, serves an old copy, or a removed key signs a new branch | Every key change is signed by a key trusted at that point, back to one pinned fingerprint and a pinned origin; cards must match what was signed; whoever refetches keeps the last accepted copy and takes only extensions (`--previous`). A first fetch with no stored copy cannot tell an old copy from the latest. |
+| Another program on this machine using the gate's MCP | Creating requests to flood the person | Over HTTP, `/mcp` needs the gate's access token; stdio is private to the app that started it. Requests are also rate-limited. |
+| A revoked standing approval still used at a service | Uses collected before the revoke | The person signs a revocation; services that pick up `/.well-known/phygital-key-revoked.json` refuse it with `REVOKED`. Until they do, tokens already handed out work for up to 60 s. |
 | A made-up receipt | The agent reports "done" with a fake receipt | The gate records a receipt only if it is signed by the service's pinned receipt key. |
 | An agent stretching a standing approval | More uses, bigger amounts, another payee, extra fields, after revoke | Exact `fixed` values, `vary` limits, nothing extra, use counting by the service, 60-second use tokens, use key kept only in the gate's memory and thrown away on revoke. Tokens already handed out work up to 60 s after a revoke, and that can be every remaining use if the agent collected them first. Services must count uses in a durable store shared by all their instances. |
 | Parser tricks | Duplicate keys, floats, huge or deeply nested JSON, lone surrogates, base64 padding | Strict parsing refuses all of these (`MALFORMED`), before any signature work. |
@@ -38,8 +40,9 @@ Plain words first: Phygital Key makes sure **a real person said yes to this exac
 
 The safety holds only if **the agent cannot change the gate's code, the gate's data folder or the verifier's keyring**.
 
-- **Good:** the gate runs on another machine or as another OS user, the verifier keeps its own read-only copy of the keyring, the agent reaches the gate only through MCP.
-- **Demo and personal use:** everything on one laptop, under one user. This shows the flow, but an agent with full shell access as that user could edit the files. Use a separate OS user or a small server for anything real.
+- **Good:** `sudo phygital-key install-service` (macOS, Linux). The gate runs as its own system user; its program is owned by root and its data folder is readable only by that user; enrolling a key or reading the MCP token needs your administrator password (`phygital-key-admin`). An agent acting as you can then use the gate only through MCP. This holds as long as the agent cannot use `sudo` without your password (check that your account has no password-less sudo).
+- **Also good:** the gate on another machine, the verifier with its own read-only copy of the keyring.
+- **Demo and quick tries:** everything under your own user (`phygital-key demo`, `phygital-key mcp`). This shows the flow, but an agent with full shell access as you could edit the files.
 
 ## Known limits in v0.1
 
