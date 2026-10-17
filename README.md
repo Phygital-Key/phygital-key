@@ -7,6 +7,7 @@ Before an AI agent (or any app, business or person) does something that matters,
 - **Can't be faked:** only the person's own key can sign. The AI never holds a key.
 - **Can't be changed:** change one character of the request and the approval is refused.
 - **Can't be reused:** each approval works once, for one service, for 60 seconds.
+- **Out of the AI's reach:** with one command (`sudo phygital-key install-service`) the gate runs as its own locked-down user. The AI, even acting as you, can't change its program, read its data or write its keys. Only your administrator password can.
 - **Works anywhere:** passkeys run on almost every phone, laptop and security key. One small program, no account, no cloud.
 
 > [!WARNING]

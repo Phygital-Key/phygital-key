@@ -2,6 +2,10 @@
 
 Plain words first: Phygital Key makes sure **a real person said yes to this exact request**, and that **the yes cannot be faked, changed or reused**. It does not make a bad request safe, and it cannot protect a service that does not check the approval.
 
+## The headline guarantee
+
+With the secure install (`sudo phygital-key install-service`), **the AI, even acting as you, can't change the gate's program, read its data or write its keys.** The gate runs as its own system user, its program belongs to root, and its data folder is closed to everyone else. Only your administrator password opens it. CI installs it for real on macOS and Linux and checks exactly this, every time.
+
 ## What we protect
 
 1. **The yes itself.** Only the person's key can make it. It covers one exact request, for one audience, for up to 5 minutes, once.
