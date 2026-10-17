@@ -35,6 +35,23 @@ jobs:
           cargo run -q --release -p phygital-key-testgen --locked -- test-vectors
           git diff --exit-code test-vectors
 
+  secure-install:
+    name: secure install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - run: cargo build --release --locked -p phygital-key
+      - name: Install as a separate user, then check it cannot be changed by this user
+        shell: bash
+        run: tests/secure-install.sh "$PWD/target/release/phygital-key"
+
   verifier-js:
     name: JavaScript checker (same test vectors)
     runs-on: ubuntu-latest

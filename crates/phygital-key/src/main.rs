@@ -67,6 +67,15 @@ enum Command {
     Enroll,
     /// Print the access token for the HTTP MCP endpoint, and how to add it to an AI app.
     McpToken,
+    /// Run the gate as its own locked-down system user (macOS, Linux). Needs sudo.
+    InstallService {
+        /// Remove the service (keeps keys and log unless --purge).
+        #[arg(long)]
+        uninstall: bool,
+        /// With --uninstall: also delete the service user, keys and log.
+        #[arg(long)]
+        purge: bool,
+    },
     /// Print the trusted public key cards (give this to services that verify).
     Keys {
         /// Check a keyring's signed history against the first key's fingerprint.
@@ -257,6 +266,36 @@ async fn run(cli: Cli) -> Result<(), String> {
         s.mcp_token = Some(state::mcp_token(&s)?);
     }
     match cli.command {
+        Command::InstallService { uninstall, purge } => {
+            const SCRIPT: &str = include_str!("../assets/install-service.sh");
+            let me =
+                std::env::current_exe().map_err(|e| format!("cannot find this program: {e}"))?;
+            let mut args = vec!["-s".to_string(), "--".to_string()];
+            if uninstall {
+                args.push("--uninstall".into());
+            }
+            if purge {
+                args.push("--purge".into());
+            }
+            let mut child = std::process::Command::new("/bin/bash")
+                .args(&args)
+                .env("PKA_SELF", &me)
+                .env("PKA_PORT", s.port.to_string())
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("cannot run bash: {e}"))?;
+            if let Some(mut stdin) = child.stdin.take() {
+                use std::io::Write;
+                stdin
+                    .write_all(SCRIPT.as_bytes())
+                    .map_err(|e| e.to_string())?;
+            }
+            let status = child.wait().map_err(|e| e.to_string())?;
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
+            Ok(())
+        }
         Command::McpToken => {
             println!("{}", mcp_hint(&s));
             Ok(())
