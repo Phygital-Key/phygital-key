@@ -194,7 +194,8 @@ export async function verify(approval, expected, keyring, seen, config, now) {
     // A revocation is never an action to carry out.
     if (asModel(expected.request)?.get?.("type") === REVOKE_TYPE) no("MALFORMED");
     const verified = await checkKind(approval, expected, keyring, config, now, false);
-    if (!seen.insertIfNew(verified.id, verified.exp, now)) no("REPLAYED");
+    // The store may be sync or async; only an exact `true` means "first use".
+    if ((await seen.insertIfNew(verified.id, verified.exp, now)) !== true) no("REPLAYED");
     return { ok: true, verified };
   } catch (e) {
     if (e instanceof Refused) return { ok: false, error: e.code };

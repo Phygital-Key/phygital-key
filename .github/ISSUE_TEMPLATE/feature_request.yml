@@ -1,0 +1,40 @@
+name: Idea or feature
+description: Suggest something new or different
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Some things are left out on purpose. Please read [docs/decisions.md](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/blob/main/docs/decisions.md) and [docs/roadmap.md](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/blob/main/docs/roadmap.md) first.
+        A change to what a verifier accepts or refuses needs new test vectors and must land in both verifiers.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What should change. Include an example request or approval if it helps (no secrets).
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Effect on safety
+      description: Could the change let an agent do more than the person approved? Which part of the threat model does it touch?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Part of the project
+      options:
+        - "Spec and test vectors"
+        - "Rust verifier"
+        - "JavaScript checker"
+        - "Gate and MCP tools"
+        - "Approval page"
+        - "Secure install, updates and packaging"
+        - "Docs"

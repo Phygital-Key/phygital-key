@@ -88,3 +88,32 @@ test("junk in a revocation list is ignored, never thrown", async () => {
   const ids = await revocationsFrom([junk, "!!", 5], s.aud, keyringFrom(s.keyring), s.config);
   assert.equal(ids.size, 0);
 });
+
+test("async stores are awaited: a database-style seen store still stops a replay", async () => {
+  const i = load("vectors.json").vectors[0].input;
+  const inner = new MemorySeenStore();
+  const seen = { insertIfNew: async (id, exp, now) => inner.insertIfNew(id, exp, now) };
+  const e = { aud: i.aud, request: i.request, level: "medium" };
+  assert.equal((await verify(i.approval, e, keyringFrom(i.keyring), seen, i.config, i.now)).ok, true);
+  assert.equal((await verify(i.approval, e, keyringFrom(i.keyring), seen, i.config, i.now)).error, "REPLAYED");
+  // Anything but an exact `true` from the store is a no.
+  for (const answer of [1, "yes", {}, undefined]) {
+    const odd = { insertIfNew: async () => answer };
+    assert.equal((await verify(i.approval, e, keyringFrom(i.keyring), odd, i.config, i.now)).error, "REPLAYED");
+  }
+});
+
+test("async stores are awaited: a database-style use store still counts and stops reuse", async () => {
+  const ok = load("standing.json").vectors.find((v) => v.expected.ok && v.input.prior_uses.length === 0);
+  const i = ok.input;
+  const keyring = keyringFrom(i.keyring);
+  const inner = new MemoryUseStore();
+  const uses = { recordUse: async (...a) => inner.recordUse(...a) };
+  const e = { aud: i.aud, request: i.request, level: i.level };
+  const first = await verifyUse(i.standing, i.use, e, keyring, uses, new Set(), i.config, i.now);
+  assert.equal(first.ok, true);
+  assert.equal(Number.isSafeInteger(first.usesLeft), true);
+  assert.equal((await verifyUse(i.standing, i.use, e, keyring, uses, new Set(), i.config, i.now)).error, "REPLAYED");
+  const odd = { recordUse: async () => "many" };
+  assert.equal((await verifyUse(i.standing, i.use, e, keyring, odd, new Set(), i.config, i.now)).error, "MALFORMED");
+});

@@ -3,3 +3,5 @@ node_modules/
 /tests/e2e/test-results/
 .DS_Store
 *.log
+/examples/*/target
+/examples/*/Cargo.lock

@@ -92,6 +92,8 @@ try {
   check("MCP endpoint refuses a wrong access token", wrongToken.status === 401);
   await mcp.connect(new StreamableHTTPClientTransport(new URL(GATE + "/mcp"), { requestInit: { headers: { Authorization: "Bearer " + mcpToken } } }));
   const tools = (await mcp.listTools()).tools.map((t) => t.name).sort();
+  const ident = mcp.getServerVersion();
+  check("MCP server names itself phygital-key with its version", ident?.name === "phygital-key" && /^\d+\.\d+\.\d+$/.test(ident?.version ?? ""), JSON.stringify(ident));
   check("MCP lists exactly 6 tools, none can approve", JSON.stringify(tools) === JSON.stringify(["cancel_approval", "get_approval", "record_receipt", "request_approval", "request_standing_approval", "use_standing_approval"]), tools.join(","));
   const early = await tool(mcp, "request_approval", { request: { type: "deploy", params: deploy }, aud: DEMO, level: "high" });
   check("no key enrolled: request refused", early.isError && /enroll/.test(early.error));
@@ -260,6 +262,10 @@ try {
   await page.click("#approve");
   await page.waitForFunction(() => /Approved|active/.test(document.getElementById("title").textContent), null, { timeout: 15000 });
   check("standing approval approved", (await stWait).status === "approved");
+  const busy = await (await fetch(GATE + "/api/status")).json();
+  check("gate reports the active standing approval (the daily update waits for it)", busy.standing_active === 1 && Number.isInteger(busy.waiting), JSON.stringify({ w: busy.waiting, s: busy.standing_active }));
+  const stLead = await page.locator("#lead").textContent();
+  check("after approving, the page gives the end date and use cap (no one-time wording)", /Active until/.test(stLead) && /at most 2 uses/.test(stLead) && !/works once/.test(stLead), stLead);
   const use1 = await tool(mcp, "use_standing_approval", { id: st.id, request: { type: "payment", params: payParams(450) } });
   check("first use signed, one left", !!use1.use_token && use1.uses_left === 1, use1.error);
   const standingAlone = await demo("payment", payParams(450), use1.approval);
@@ -302,6 +308,9 @@ try {
   check("the signed revocation is published", revokedList.revocations.length === 1);
   const afterSigned = await fetch(`${DEMO}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Phygital-Approval": use2.approval, "Phygital-Use": use2.use_token }, body: JSON.stringify(payParams(2000)) });
   check("after the person signs the revocation, the service refuses the standing approval", (await afterSigned.json()).error === "REVOKED");
+  await page.goto(st.approve_url);
+  await page.waitForFunction(() => document.getElementById("title").textContent === "Revoked", null, { timeout: 5000 });
+  check("the revoked standing approval's page says revoked and signed", /Revoked and signed/.test(await page.locator("#lead").textContent()));
 
   // Bad input from the agent.
   const floaty = await tool(mcp, "request_approval", { request: { type: "payment", params: { amount: 10.5 } }, aud: DEMO, level: "high" });
@@ -460,6 +469,15 @@ try {
   const cdp2 = await context.newCDPSession(page2);
   await cdp2.send("WebAuthn.enable");
   check("stdio mode: approval page is served", (await (await fetch(s1.approve_url)).text()).includes("Phygital Key"));
+
+  // --- Flood limit: at most 30 new requests a minute (s1 above was the first).
+  let firstRefused = 0;
+  for (let i = 2; i <= 32 && !firstRefused; i++) {
+    const r = await tool(stdio, "request_approval", { request: { type: "deploy", params: { ...deploy, version: "9.0." + i } }, aud: DEMO, level: "high" });
+    if (r.isError) firstRefused = /Too many requests/.test(r.error) ? i : -1;
+  }
+  check("the 31st request in a minute is refused (flood limit)", firstRefused === 31, String(firstRefused));
+  check("the gate still answers after the flood limit", (await fetch(`http://localhost:${PORT + 10}/api/status`)).status === 200);
   await stdio.close();
 } catch (e) {
   check("no unexpected error", false, e.stack || String(e));

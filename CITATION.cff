@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use or build on this project, please credit it like this."
+title: "Phygital Key"
+abstract: "A person's signed yes, for one exact request, that anyone can check. A person approves exact AI actions with a passkey or hardware key."
+type: software
+authors:
+  - alias: "s17sh70x2jfl031ag"
+repository-code: "https://github.com/s17sh70x2jfl031ag/phygital-key-mcp"
+license: Apache-2.0
+version: 0.3.0
+keywords: [mcp, passkey, webauthn, approval, ai-agents, human-in-the-loop, fido2, security]

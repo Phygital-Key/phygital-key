@@ -159,7 +159,7 @@ export async function verifyUse(standing, useToken, expected, keyring, uses, rev
     if (signedRequest === undefined) no("MALFORMED");
     const sp = await standingParams(signedRequest);
     const person = await checkKind(standing, { aud: expected.aud, request: signedRequest, level: expected.level }, keyring, config, now, true);
-    if (revoked.has(person.id)) no("REVOKED");
+    if (await revoked.has(person.id)) no("REVOKED");
     const u = await readUse(useToken, sp.useKey);
     if (u.standing_id !== person.id) no("REQUEST_MISMATCH");
     if (u.aud !== expected.aud) no("WRONG_AUDIENCE");
@@ -171,7 +171,9 @@ export async function verifyUse(standing, useToken, expected, keyring, uses, rev
     const oursHash = b64encode(await sha256(utf8(ours)));
     if (ours !== theirs || oursHash !== u.request_hash) no("REQUEST_MISMATCH");
     if (!allows(sp, req)) no("NOT_ALLOWED");
-    const usesLeft = uses.recordUse(person.id, u.id, sp.maxUses, person.exp, now);
+    // The store may be sync or async; it throws Refused (REPLAYED, USED_UP) or returns the uses left.
+    const usesLeft = await uses.recordUse(person.id, u.id, sp.maxUses, person.exp, now);
+    if (!Number.isSafeInteger(usesLeft) || usesLeft < 0 || usesLeft >= sp.maxUses) no("MALFORMED");
     return { ok: true, usesLeft, standingId: person.id, useId: u.id };
   } catch (e) {
     if (e instanceof Refused) return { ok: false, error: e.code };

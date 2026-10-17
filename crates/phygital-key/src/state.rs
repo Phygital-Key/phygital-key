@@ -559,6 +559,32 @@ impl Gate {
         use_keys.retain(|id, _| requests.contains_key(id));
     }
 
+    /// What a restart would end: requests still waiting for the person, and
+    /// standing approvals that can still be used (their use keys live only in
+    /// memory). The daily update waits while either is above zero.
+    pub fn busy(&self) -> (usize, usize) {
+        let t = now();
+        let Ok(inner) = self.inner.lock() else {
+            return (0, 0);
+        };
+        let waiting = inner
+            .requests
+            .values()
+            .filter(|r| r.current_status(t) == Status::Pending)
+            .count();
+        let standing = inner
+            .requests
+            .values()
+            .filter(|r| {
+                r.usable
+                    && r.current_status(t) == Status::Approved
+                    && r.until.is_some_and(|u| t < u)
+                    && inner.use_keys.contains_key(&r.id)
+            })
+            .count();
+        (waiting, standing)
+    }
+
     /// Forget requests that ended more than an hour ago. Called on a timer.
     pub fn prune(&self) {
         let t = now();

@@ -1,0 +1,87 @@
+# Example: a deploy job that runs only with a person's approval of this exact deploy.
+#
+# Copy to .github/workflows/deploy.yml in your own repository and set the four
+# values under `env`. The person (or their AI agent) gets an approval for the
+# request built below, then starts this workflow with the approval string.
+# See examples/ci-approval/README.md for the whole flow and its limits.
+
+name: example-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to deploy, e.g. 2.4.1"
+        required: true
+        type: string
+      commit:
+        description: "Full commit SHA (40 characters) the person approved"
+        required: true
+        type: string
+      approval:
+        description: "The approval string from the gate (not secret, but works only for this exact deploy)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One deploy at a time.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PHYGITAL_KEY_VERSION: v0.3.0
+      # The approval page origin of the person's gate.
+      GATE_ORIGIN: https://approve.example.com
+      # The first key's fingerprint, learned once from the person (their gate's home page).
+      ROOT_FINGERPRINT: REPLACE_WITH_FINGERPRINT
+      # This job's audience id. Agents must ask for approvals with exactly this value.
+      AUD: https://github.com/${{ github.repository }}/deploy/production
+    steps:
+      # Pin actions to a full commit SHA in real use.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # install.sh checks that the release list is signed by a pinned release key
+      # (with openssl, which ubuntu-latest has) and that the SHA-256 matches.
+      # It refuses a release without a signed list, so pin v0.3.0 or later.
+      - name: Install phygital-key (signed release list and SHA-256 checked)
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/$PHYGITAL_KEY_VERSION/install.sh" | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # The keyring comes from this workflow's own branch, reviewed like code.
+      # Every key change in it must be signed, starting from the pinned fingerprint.
+      - name: Check the keyring
+        run: phygital-key keys --check "$ROOT_FINGERPRINT" --file .phygital-key/keyring.json --signed-on "$GATE_ORIGIN"
+
+      # Inputs reach the shell only through env, never pasted into the script.
+      - name: Check the approval for this exact deploy
+        env:
+          APPROVAL: ${{ inputs.approval }}
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+          REPO: ${{ github.repository }}
+        run: |
+          case "$COMMIT" in *[!0-9a-f]*|"") echo "commit must be a full SHA"; exit 1;; esac
+          [ "${#COMMIT}" -eq 40 ] || { echo "commit must be a full SHA"; exit 1; }
+          request="$(jq -cn --arg repo "$REPO" --arg commit "$COMMIT" --arg version "$VERSION" \
+            '{type: "deploy", params: {repo: $repo, commit: $commit, env: "production", version: $version}}')"
+          echo "request: $request"
+          phygital-key --home "$RUNNER_TEMP/phygital-key" --origin "$GATE_ORIGIN" verify \
+            --approval "$APPROVAL" --request "$request" --aud "$AUD" --level high \
+            --keyring .phygital-key/keyring.json
+
+      - name: Deploy the approved commit
+        env:
+          COMMIT: ${{ inputs.commit }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          git checkout --detach "$COMMIT"
+          echo "Deploying $VERSION from $COMMIT (replace this line with your deploy)"

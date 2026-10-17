@@ -210,12 +210,15 @@ async fn status(State(gate): State<Shared>) -> Response {
                 phygital_key_verify::history::verify_history(&ring, fp, &gate.settings.origin)
                     .is_ok()
             });
+            let busy = gate.busy();
             ok(json!({
                 "keys": ring.keys.iter().map(|k| json!({"name": k.name, "credential_id": k.credential_id, "created": k.created, "fingerprint": k.fingerprint()})).collect::<Vec<_>>(),
                 "rp_id": gate.settings.rp_id,
                 "origin": gate.settings.origin,
                 "root_fingerprint": root,
                 "history_ok": signed,
+                "waiting": busy.0,
+                "standing_active": busy.1,
             }))
         }
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),

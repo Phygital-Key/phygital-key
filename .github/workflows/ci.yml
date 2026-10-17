@@ -66,6 +66,21 @@ jobs:
         working-directory: verifier-js
         run: npm test
 
+  examples:
+    name: examples (build and syntax)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - run: node --check examples/node-service/server.mjs
+      - run: cargo build --manifest-path examples/rust-service/Cargo.toml
+      - run: ruby -ryaml -e 'YAML.safe_load(File.read("examples/ci-approval/example-deploy.yml"))'
+
   e2e:
     name: end-to-end and red team
     runs-on: ubuntu-latest

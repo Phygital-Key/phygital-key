@@ -29,6 +29,9 @@ axum = { version = "0.8", default-features = false, features = ["http1", "json",
 clap = { version = "4", features = ["derive", "env"] }
 url = "2"
 
+[dev-dependencies]
+base64.workspace = true
+
 
 [lints]
 workspace = true

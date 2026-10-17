@@ -1,0 +1,30 @@
+name: Question
+description: Ask how to do something with Phygital Key
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: "Issues are public. Never paste your MCP access token, an enrollment link or a private key."
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you are trying to do, and what you tried.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: It is about
+      options:
+        - "Installing, updating or running the gate"
+        - "Connecting an AI app"
+        - "Approving, keys and devices"
+        - "Standing approvals"
+        - "Checking approvals in my service (Rust, JavaScript, command line)"
+        - "Something else"
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "The output of `phygital-key --version`, if you have it installed"

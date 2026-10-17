@@ -1,4 +1,5 @@
-//! The MCP side: three tools. The agent can ask, wait and cancel. It can never approve.
+//! The MCP side: six tools. The agent can ask, wait, cancel, use a standing approval
+//! and pass back a receipt. It can never approve.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -6,7 +7,7 @@ use std::time::Duration;
 use phygital_key_verify::Level;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock, ServerCapabilities, ServerConfig};
+use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
 use rmcp::service::RoleServer;
 use rmcp::{Peer, ServerHandler, schemars, tool, tool_handler, tool_router};
 use serde::Deserialize;
@@ -35,7 +36,7 @@ pub enum LevelArg {
 /// Arguments for `request_approval`.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct RequestArgs {
-    /// The exact request: {"type": "<lowercase name>", "params": {...}}. Use strings or integers, never floats. No secrets: it is shown and logged.
+    /// The exact request: {"type": "<lowercase name>", "params": {...}}. Use strings or integers, never floats. No secrets: the person sees it, and anyone holding the approval can read it.
     pub request: Value,
     /// Who will act on the yes, e.g. "https://deploy.example.com". The approval only works there.
     pub aud: String,
@@ -114,8 +115,11 @@ fn fail(msg: impl Into<String>) -> CallToolResult {
 fn summary(v: &View, approval: Option<String>) -> Value {
     let next = match v.status {
         Status::Pending => "Still waiting for the person. Call get_approval again.",
+        Status::Approved if v.standing.is_some() => {
+            "Approved standing approval. For each action, call use_standing_approval with the exact request, then send both `approval` (header Phygital-Approval) and `use_token` (header Phygital-Use). It lasts until `exp` or until its uses run out."
+        }
         Status::Approved => {
-            "Approved. Send `approval` with the action to the service (header or field `approval`). It works once, before `exp`."
+            "Approved. Send `approval` with the action to the service, in the Phygital-Approval header (or the field the service names). It works once, before `exp`."
         }
         Status::Denied => "The person said no. Do not perform the action.",
         Status::Cancelled => "Cancelled. Do not perform the action.",
@@ -316,6 +320,10 @@ impl GateMcp {
 impl ServerHandler for GateMcp {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(
+                Implementation::new("phygital-key", env!("CARGO_PKG_VERSION"))
+                    .with_title("Phygital Key"),
+            )
             .with_instructions(INSTRUCTIONS)
     }
 }

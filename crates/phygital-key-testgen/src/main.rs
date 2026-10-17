@@ -1,4 +1,4 @@
-//! Writes `test-vectors/vectors.json` and `test-vectors/keys/test-keys.json`.
+//! Writes the shared test vectors (`test-vectors/vectors.json`, `keyrings.json`, `standing.json`) and `test-vectors/keys/test-keys.json`.
 //!
 //! Deterministic: fixed TEST ONLY keys and RFC 6979 signatures, so running it
 //! twice gives the same bytes. CI checks the committed files match.

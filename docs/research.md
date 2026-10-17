@@ -1,6 +1,9 @@
 # Phygital Key MCP: research notes
 
-Written 2026-10-17. I read docs and READMEs, not every source file. The CoSig GitHub repo returned a 404, so CoSig facts come from its PyPI page.
+Early planning notes, written on 2026-10-17 and kept as they were. They come from reading docs and READMEs, not every source file. The CoSig GitHub repo returned a 404, so CoSig facts come from its PyPI page.
+
+> [!NOTE]
+> Some plans here changed during the build. What was built and why is in [decisions](decisions.md) and the [roadmap](roadmap.md). The main differences: SD-JWT encoding and an AP2 export were not built ([decision 28](decisions.md)); the second verifier is an independent JavaScript checker that shares no code with the Rust one, not a wrapper; there is no Python package; there is no hosted option.
 
 ## 1. The idea
 
@@ -89,12 +92,12 @@ Also seen: SecureAuth (CIBA approval, enterprise), Rayrun and IdentArk gateways,
 - **Tool annotations** (`destructiveHint`, `readOnlyHint`) are advice only, not a security boundary.
 - Some servers run a tool without confirmation when the client lacks elicitation. Our gate must fail closed.
 - **MCP authorization:** OAuth 2.1 with PKCE between client and server. Separate from our approval.
-- **SDKs:** Python `mcp` (FastMCP), TypeScript, and the official Rust SDK `rmcp` (tokio; features for server, stdio, streamable HTTP, OAuth, elicitation). I did not check whether `rmcp` supports URL mode.
+- **SDKs:** Python `mcp` (FastMCP), TypeScript, and the official Rust SDK `rmcp` (tokio; features for server, stdio, streamable HTTP, OAuth, elicitation). I did not check whether `rmcp` supports URL mode. (It does: the gate uses URL-mode elicitation to open the approval page.)
 
 ## 8. Design decisions so far
 
 - Build on AP2 ideas and WebAuthn. No new approval format from scratch.
-- v0.1: one human-present approval per action. Standing approvals (AP2 open mandates) and SD-JWT encoding are v0.2.
+- v0.1: one human-present approval per action. Standing approvals (AP2 open mandates) and SD-JWT encoding are v0.2. (Built: standing approvals in v0.2.0; SD-JWT not built.)
 - The human's device signs a hash of the exact action. Service verifies offline.
 - Approval page = Trusted Surface. Gate and approver contain no LLM.
 - URL-mode elicitation for the approval step, with a safe fallback link.
@@ -106,11 +109,11 @@ Also seen: SecureAuth (CIBA approval, enterprise), Rayrun and IdentArk gateways,
 
 - All of Python, Go, TypeScript and Rust are memory-safe. The real risk is logic mistakes (a skipped check), not memory bugs. The real safety comes from audited libraries and shared test vectors.
 - Decision: Rust for the core (verifier and gate), on the official `rmcp` SDK. One checked implementation, a single static binary that runs anywhere, and later wrappers for Python and JavaScript (see `docs/decisions.md`).
-- Candidate libraries (all unverified, check existence, license, maintenance and last release before using): Python `cryptography`, `webauthn`, `rfc8785`, `mcp`; TypeScript `@simplewebauthn/server`, `canonicalize`, `jose`; Rust `webauthn-rs`, `p256`, `serde_jcs` or similar, `rmcp`.
+- Candidate libraries (all unchecked at the time: existence, license, maintenance and last release to be checked before use; what was chosen is in [decisions](decisions.md) 4 and 5): Python `cryptography`, `webauthn`, `rfc8785`, `mcp`; TypeScript `@simplewebauthn/server`, `canonicalize`, `jose`; Rust `webauthn-rs`, `p256`, `serde_jcs` or similar, `rmcp`.
 
 ## 10. Where we can win
 
-1. Generic action approvals (not just payments), as an AP2 extension.
+1. Generic action approvals (not only payments), as an AP2 extension.
 2. A tiny verifier library any service can add in about 5 lines.
 3. Real signatures made on the user's device (iVALT's is weak).
 4. Fully self-hosted, no cloud server (CoSig needs one).
@@ -150,3 +153,9 @@ Also seen: SecureAuth (CIBA approval, enterprise), Rayrun and IdentArk gateways,
 - Kontrol Freek: https://pypi.org/project/kontrol-freek-mcp/
 - linkedin-mcp: https://glama.ai/mcp/servers/PeterEkwere/linkedin-mcp
 - A2A vs MCP: https://vercel.com/i/a2a-vs-mcp
+
+## Next
+
+- [Decisions](decisions.md)
+- [AP2 and Verifiable Intent](ap2.md)
+- [Roadmap](roadmap.md)

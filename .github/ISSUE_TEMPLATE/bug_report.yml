@@ -1,0 +1,86 @@
+name: Something doesn't work
+description: A bug, an error, or something that behaves wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues are public. Never paste your MCP access token (`phygital-key mcp-token`), an enrollment link, a private key, or a request that holds a real secret.
+        Approvals and receipts are signed, not secret, but they show the request they cover: remove anything private from them first.
+        If someone could make a service act without a real yes, don't open an issue: [report it privately](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/security/advisories/new).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "The output of `phygital-key --version`"
+      placeholder: "phygital-key 0.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you run it
+      options:
+        - "phygital-key mcp (started by my AI app)"
+        - "phygital-key serve (HTTP)"
+        - "phygital-key demo"
+        - "Secure install on macOS"
+        - "Secure install on Linux"
+        - "On Windows"
+        - "Only the verifier library or the JavaScript checker"
+        - "Somewhere else"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 26, Ubuntu 24.04, Windows 11, ..."
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Secure install status (if you use it)
+      description: "The output of `phygital-key-admin status`: program version, automatic updates on or off, and the last update result."
+      render: text
+  - type: input
+    id: app
+    attributes:
+      label: Your AI app
+      placeholder: "Claude Code, Claude Desktop, Cursor, ..."
+  - type: input
+    id: key
+    attributes:
+      label: Your key and browser (if it matters)
+      placeholder: "Touch ID in Safari, a security key in Chrome, a phone via QR code, ..."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you or the AI did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands or clicks, in order.
+      placeholder: |
+        1. phygital-key demo
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message or log
+      description: What the AI app, the approval page or the gate printed. An error code like REQUEST_MISMATCH helps. Remove tokens and links first.
+      render: text
+  - type: checkboxes
+    id: private
+    attributes:
+      label: Before posting
+      options:
+        - label: I removed my MCP access token, enrollment links, private keys and any secrets
+          required: true

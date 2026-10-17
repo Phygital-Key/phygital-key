@@ -206,10 +206,18 @@ async function approvePage() {
     };
     return;
   }
+  if (view.standing && view.revocation_signed === true) {
+    stamp("revoked");
+    $("title").textContent = "Revoked";
+    $("lead").textContent = "Revoked and signed. No new uses can be signed, and the service refuses this permission as soon as it reads the revocation list.";
+    return;
+  }
   if (view.status !== "pending") {
     stamp(view.status === "approved" ? (view.service_reported === "success" ? "used" : "signed")
       : view.status === "denied" ? "refused" : view.status);
-    const [t, l] = done[view.status] || ["Closed", ""];
+    let [t, l] = done[view.status] || ["Closed", ""];
+    // Signed, then not used before its time ran out.
+    if (view.status === "expired" && view.approved_by) l = "Signed by " + view.approved_by + ", but its time ran out. It no longer works anywhere.";
     $("title").textContent = t;
     $("lead").textContent = l;
     if (view.service_reported) {
@@ -290,7 +298,9 @@ async function approvePage() {
       $("actions").hidden = true;
       stamp("signed");
       $("title").textContent = "Approved";
-      $("lead").textContent = "Signed by " + (result.approved_by || "your key") + ". It works once, within " + (claims.exp - claims.iat) + " seconds.";
+      $("lead").textContent = view.standing
+        ? "Signed by " + (result.approved_by || "your key") + ". Active until " + new Date(view.standing.until * 1000).toLocaleString() + ", at most " + view.standing.max_uses + " uses."
+        : "Signed by " + (result.approved_by || "your key") + ". It works once, within " + (claims.exp - claims.iat) + " seconds.";
       note("Done. You can close this page.", "good");
     } catch (e) {
       note(friendly(e), "bad");

@@ -41,19 +41,19 @@ kill $HIJACK 2>/dev/null || true; wait $HIJACK 2>/dev/null || true
 sleep 1
 
 "${INSTALL[@]}" || fail "install did not succeed"
-curl -fsS http://localhost:7468/api/status >/dev/null && pass "gate answers"
+curl -fsS http://localhost:7468/api/status >/dev/null && pass "gate answers" || fail "gate answers"
 for p in $(sudo lsof -nP -iTCP:7468 -sTCP:LISTEN -t | sort -u); do
   [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] || fail "a listener is not the gate user"
 done
 pass "only the gate user listens (IPv4 and IPv6)"
-[ "$(stat -f %Su "$PREFIX/bin/phygital-key" 2>/dev/null || stat -c %U "$PREFIX/bin/phygital-key")" = root ] && pass "program owned by root"
+[ "$(stat -f %Su "$PREFIX/bin/phygital-key" 2>/dev/null || stat -c %U "$PREFIX/bin/phygital-key")" = root ] && pass "program owned by root" || fail "program owned by root"
 if touch "$PREFIX/bin/phygital-key" 2>/dev/null; then fail "this user can change the program"; else pass "this user cannot change the program"; fi
 if ls "$DATA" >/dev/null 2>&1; then fail "this user can read the data folder"; else pass "this user cannot read the data folder"; fi
 if echo x > "$DATA/keyring.json" 2>/dev/null; then fail "this user can write the keyring"; else pass "this user cannot write the keyring"; fi
 ADMIN="$PREFIX/bin/phygital-key-admin"
-"$ADMIN" status | grep -q "only the gate" && pass "admin status confirms the listener"
+"$ADMIN" status | grep -q "only the gate" && pass "admin status confirms the listener" || fail "admin status confirms the listener"
 link=$("$ADMIN" enroll | grep -o 'http://localhost:7468/enroll#token=[A-Za-z0-9_-]*')
-[ -n "$link" ] && pass "admin helper makes an enrollment link"
+[ -n "$link" ] && pass "admin helper makes an enrollment link" || fail "admin helper makes an enrollment link"
 if "$ADMIN" logs 2>/dev/null | grep -q "token="; then fail "a secret is in the gate log"; else pass "no enrollment link or token in the gate log"; fi
 tok=$("$ADMIN" token | grep -o 'Bearer [A-Za-z0-9_-]*' | head -1 | cut -d' ' -f2)
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' http://localhost:7468/mcp -d '{}')
@@ -63,11 +63,51 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: bearer 
 [ "$code" = 200 ] && pass "MCP accepts the token (any case of Bearer)" || fail "MCP with token gave $code"
 
 "${INSTALL[@]}" >/dev/null
-curl -fsS http://localhost:7468/api/status >/dev/null && pass "installing again (update) works"
+curl -fsS http://localhost:7468/api/status >/dev/null && pass "installing again (update) works" || fail "installing again (update) works"
+
+# Automatic updates: on by default, a root-owned job, refused when not signed.
+BIN="$PREFIX/bin/phygital-key"
+updates_on() {
+  if [ "$(uname -s)" = Darwin ]; then
+    sudo test -f /Library/LaunchDaemons/io.phygitalkey.update.plist &&
+      [ "$(stat -f %Su /Library/LaunchDaemons/io.phygitalkey.update.plist)" = root ] &&
+      sudo launchctl print system/io.phygitalkey.update >/dev/null 2>&1
+  else
+    systemctl is-enabled phygital-key-update.timer >/dev/null 2>&1 &&
+      [ "$(stat -c %U /etc/systemd/system/phygital-key-update.service)" = root ]
+  fi
+}
+updates_on && pass "daily update job installed, owned by root" || fail "no daily update job"
+[ "$(cat "$PREFIX/auto-update")" = on ] && pass "automatic updates on by default" || fail "automatic updates on by default"
+T=$(mktemp -d)
+printf 'phygital-key release manifest v1\nversion v9.9.9\n%064d  phygital-key-v9.9.9-x86_64-unknown-linux-gnu.tar.gz\n' 0 > "$T/release.txt"
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$T/k.pem" 2>/dev/null
+openssl dgst -sha256 -sign "$T/k.pem" -out "$T/release.txt.sig" "$T/release.txt"
+if "$BIN" release-check --file "$T/release.txt" --sig "$T/release.txt.sig" >/dev/null 2>&1; then fail "accepted a release list signed by an unknown key"; else pass "refuses a release list signed by an unknown key"; fi
+rm -rf "$T"
+before=$("$BIN" --version)
+sudo "$BIN" install-service --auto-update-run >/dev/null 2>&1 || true
+[ "$("$BIN" --version)" = "$before" ] && curl -fsS http://localhost:7468/api/status >/dev/null && pass "update job leaves the gate running unless a newer signed release exists" || fail "update job leaves the gate running unless a newer signed release exists"
+sudo cat "$PREFIX/update-status" | grep -Eq "up to date|update check failed|update refused" && pass "update job records its result" || fail "no update result recorded"
+
+# A new program that does not start is switched back to the previous one.
+printf '#!/bin/sh\nexit 1\n' > /tmp/pka-broken
+sudo install -m 0755 -o root /tmp/pka-broken "$CI_DIR/broken"; rm -f /tmp/pka-broken
+if sudo "$CI_DIR/phygital-key" install-service --binary "$CI_DIR/broken" >/dev/null 2>&1; then fail "installed a program that does not start"; fi
+[ "$("$BIN" --version)" = "$before" ] && curl -fsS http://localhost:7468/api/status >/dev/null && pass "a failed update switches back to the previous program" || fail "no switch back after a failed update"
+
+# Turning updates off is remembered on the next install.
+"${INSTALL[@]}" --no-auto-update >/dev/null
+if updates_on; then fail "update job still there after --no-auto-update"; else pass "--no-auto-update removes the job"; fi
+"${INSTALL[@]}" >/dev/null
+if updates_on; then fail "a later install turned updates back on"; else pass "the off choice is kept on later installs"; fi
+"${INSTALL[@]}" --auto-update >/dev/null
+updates_on && pass "--auto-update turns it back on" || fail "--auto-update did not turn it on"
 sudo "$PREFIX/bin/phygital-key" install-service --uninstall
 sleep 1
 if curl -fsS http://localhost:7468/api/status >/dev/null 2>&1; then fail "still running after uninstall"; else pass "uninstall stops it"; fi
-sudo test -d "$DATA" && pass "uninstall keeps keys"
+sudo test -d "$DATA" && pass "uninstall keeps keys" || fail "uninstall keeps keys"
 sudo "$CI_DIR/phygital-key" install-service --uninstall --purge
 if sudo test -d "$DATA"; then fail "purge left data"; else pass "purge removes everything"; fi
+if updates_on; then fail "update job left after uninstall"; else pass "uninstall removes the update job"; fi
 echo "secure install: all checks passed"

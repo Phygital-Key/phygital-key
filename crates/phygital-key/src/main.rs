@@ -9,6 +9,7 @@ mod demo;
 mod mcp;
 mod seen;
 mod state;
+mod update;
 mod util;
 mod web;
 
@@ -82,6 +83,34 @@ enum Command {
         /// With --uninstall: also delete the service user, keys and log.
         #[arg(long)]
         purge: bool,
+        /// Update automatically every day to the latest signed release (the default).
+        #[arg(long, conflicts_with = "no_auto_update")]
+        auto_update: bool,
+        /// Turn automatic updates off (kept on later installs until --auto-update).
+        #[arg(long)]
+        no_auto_update: bool,
+        /// Used by the daily update job: install the latest signed release if it is newer.
+        #[arg(long, hide = true)]
+        auto_update_run: bool,
+        /// With --auto-update-run: update even while standing approvals are active.
+        #[arg(long, hide = true)]
+        now: bool,
+    },
+    /// Update this program to the latest signed release (for installs in your own folders).
+    Update {
+        /// Only say whether a newer release exists.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Check a signed release list (used by the secure installer).
+    #[command(hide = true)]
+    ReleaseCheck {
+        /// release.txt
+        #[arg(long)]
+        file: PathBuf,
+        /// release.txt.sig
+        #[arg(long)]
+        sig: PathBuf,
     },
     /// Print the trusted public key cards (give this to services that verify).
     Keys {
@@ -139,7 +168,7 @@ enum Command {
         /// The service's audience id.
         #[arg(long)]
         aud: String,
-        /// Its receipt public key, SPKI DER base64url (from its /.well-known/phygital-key-service.json).
+        /// Its receipt public key, SPKI DER base64url (or @file), from its /.well-known/phygital-key-service.json.
         #[arg(long)]
         key: String,
     },
@@ -278,14 +307,24 @@ async fn run(cli: Cli) -> Result<(), String> {
             purge,
             binary,
             release,
+            auto_update,
+            no_auto_update,
+            auto_update_run,
+            now,
         } => {
-            const SCRIPT: &str = include_str!("../assets/install-service.sh");
+            const SCRIPT: &str = update::INSTALL_SCRIPT;
             let mut args = vec!["-s".to_string(), "--".to_string()];
-            if uninstall {
-                args.push("--uninstall".into());
-            }
-            if purge {
-                args.push("--purge".into());
+            for (on, flag) in [
+                (uninstall, "--uninstall"),
+                (purge, "--purge"),
+                (auto_update, "--auto-update"),
+                (no_auto_update, "--no-auto-update"),
+                (auto_update_run, "--auto-update-run"),
+                (now, "--now"),
+            ] {
+                if on {
+                    args.push(flag.into());
+                }
             }
             let mut child = std::process::Command::new("/bin/bash")
                 .args(&args)
@@ -315,6 +354,8 @@ async fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+        Command::Update { check } => update::update(check),
+        Command::ReleaseCheck { file, sig } => update::release_check(&file, &sig),
         Command::McpToken => {
             println!("{}", mcp_hint(&s));
             Ok(())
@@ -416,6 +457,7 @@ async fn run(cli: Cli) -> Result<(), String> {
             }
         }
         Command::TrustService { aud, key } => {
+            let key = read_arg(&key)?;
             if phygital_key_verify::webauthn::parse_public_key(&key).is_none() {
                 return Err("--key is not a P-256 public key (SPKI DER, base64url)".into());
             }
@@ -437,7 +479,22 @@ async fn run(cli: Cli) -> Result<(), String> {
             Ok(())
         }
         Command::AuditCheck => {
-            let (n, last) = audit::verify_file(&s.home.join("audit.log"))?;
+            let log = s.home.join("audit.log");
+            if !log.exists() {
+                let enrolled = std::fs::read_to_string(s.home.join("keyring.json"))
+                    .ok()
+                    .and_then(|t| Keyring::from_json(&t).ok())
+                    .is_some_and(|k| !k.keys.is_empty());
+                if enrolled {
+                    return Err(format!(
+                        "no audit log at {}, but a key is enrolled: the log was deleted or moved",
+                        log.display()
+                    ));
+                }
+                println!("no audit log yet: nothing has happened on this gate");
+                return Ok(());
+            }
+            let (n, last) = audit::verify_file(&log)?;
             println!("audit log ok: {n} entries, last hash {last}");
             Ok(())
         }
