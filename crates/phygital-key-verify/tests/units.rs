@@ -169,3 +169,116 @@ fn root_fingerprint_reads_the_first_entry() {
     );
     assert_eq!(history::root_fingerprint(&Keyring::default()), None);
 }
+
+#[test]
+fn receipt_reference_known_answer() {
+    // base64url SHA-256 of "abc".
+    assert_eq!(
+        phygital_key_verify::receipt::reference_of("abc"),
+        "ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0"
+    );
+}
+
+#[test]
+fn receipt_peek_and_display() {
+    use phygital_key_verify::receipt::{ReceiptError, peek};
+    assert_eq!(peek("not.a.receipt"), None);
+    assert_eq!(peek(&"a.".repeat(3000)), None);
+    let body = phygital_key_verify::b64::encode(
+        br#"{"v":"pka.receipt.1","iss":"s","approval_id":"i","reference":"r","request_hash":"h","status":"error","error":"x","iat":1}"#,
+    );
+    let r = peek(&format!("h.{body}.s"));
+    assert_eq!(r.map(|r| r.status), Some("error".to_string()));
+    assert_eq!(ReceiptError::Malformed.to_string(), "MALFORMED");
+    assert_eq!(ReceiptError::BadSignature.to_string(), "BAD_SIGNATURE");
+    assert_eq!(ReceiptError::Mismatch.to_string(), "MISMATCH");
+}
+
+#[test]
+fn standing_params_rules() {
+    use phygital_key_verify::standing::StandingParams;
+    let key = alice().public_key;
+    let req = |vary: Value, max_uses: u32, for_type: &str, fixed: Value| json!({"type": "standing", "params": {"for_type": for_type, "fixed": fixed, "vary": vary, "max_uses": max_uses, "use_key": key}});
+    let ok = |r: &Value| StandingParams::from_request(r).is_ok();
+    assert!(ok(&req(
+        json!({"a": {"min": 1, "max": 2}}),
+        1,
+        "payment",
+        json!({})
+    )));
+    assert!(ok(&req(
+        json!({"a": {"min": 2, "max": 2}}),
+        1000,
+        "payment",
+        json!({})
+    )));
+    assert!(
+        !ok(&req(
+            json!({"a": {"min": 3, "max": 2}}),
+            1,
+            "payment",
+            json!({})
+        )),
+        "min above max"
+    );
+    assert!(
+        !ok(&req(json!({"a": {"max": 2}}), 1, "payment", json!({}))),
+        "min required"
+    );
+    assert!(
+        !ok(&req(
+            json!({"a": {"min": 1, "max": 2, "x": 1}}),
+            1,
+            "payment",
+            json!({})
+        )),
+        "extra field in limit"
+    );
+    assert!(
+        !ok(&req(json!({"a": {"one_of": []}}), 1, "payment", json!({}))),
+        "empty list"
+    );
+    let twenty: Vec<String> = (0..20).map(|i| i.to_string()).collect();
+    let twenty_one: Vec<String> = (0..21).map(|i| i.to_string()).collect();
+    assert!(ok(&req(
+        json!({"a": {"one_of": twenty}}),
+        1,
+        "payment",
+        json!({})
+    )));
+    assert!(
+        !ok(&req(
+            json!({"a": {"one_of": twenty_one}}),
+            1,
+            "payment",
+            json!({})
+        )),
+        "21 strings"
+    );
+    assert!(!ok(&req(json!({}), 0, "payment", json!({}))), "max_uses 0");
+    assert!(
+        !ok(&req(json!({}), 1001, "payment", json!({}))),
+        "max_uses 1001"
+    );
+    assert!(
+        !ok(&req(json!({}), 1, "standing", json!({}))),
+        "standing of standing"
+    );
+    assert!(!ok(&req(json!({}), 1, "Pay", json!({}))), "bad type name");
+    assert!(
+        !ok(&req(
+            json!({"a": {"min": 1, "max": 2}}),
+            1,
+            "payment",
+            json!({"a": 1})
+        )),
+        "fixed and vary overlap"
+    );
+    let mut bad_key = req(json!({}), 1, "payment", json!({}));
+    bad_key["params"]["use_key"] = json!("AAAA");
+    assert!(!ok(&bad_key), "bad use key");
+    assert!(
+        !ok(&json!({"type": "payment", "params": {}})),
+        "not a standing request"
+    );
+}

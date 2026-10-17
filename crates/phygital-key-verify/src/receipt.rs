@@ -355,6 +355,57 @@ mod tests {
             ),
             Err(ReceiptError::Mismatch)
         );
+        // A signed "error" receipt is valid (the service says it failed).
+        let mut failed = sample(&approval_text());
+        failed.status = "error".into();
+        failed.error = Some("OUT_OF_STOCK".into());
+        let failed_jws = sign(&failed, &k)?;
+        assert_eq!(
+            verify(
+                &failed_jws,
+                k.verifying_key(),
+                "https://deploy.example.com",
+                &approval_text()
+            )
+            .map(|r| r.status),
+            Ok("error".to_string())
+        );
+        // An unknown status is refused.
+        let mut odd = sample(&approval_text());
+        odd.status = "maybe".into();
+        let odd_jws = sign(&odd, &k)?;
+        assert_eq!(
+            verify(
+                &odd_jws,
+                k.verifying_key(),
+                "https://deploy.example.com",
+                &approval_text()
+            ),
+            Err(ReceiptError::Malformed)
+        );
+        // Oversize input is refused before parsing.
+        assert_eq!(
+            verify(
+                &"a".repeat(4097),
+                k.verifying_key(),
+                "https://deploy.example.com",
+                &approval_text()
+            ),
+            Err(ReceiptError::Malformed)
+        );
+        // A one-time receipt carrying a use id is refused by `verify`.
+        let mut with_use = sample(&approval_text());
+        with_use.use_id = Some("BwcHBwcHBwcHBwcHBwcHBw".into());
+        let with_use_jws = sign(&with_use, &k)?;
+        assert_eq!(
+            verify(
+                &with_use_jws,
+                k.verifying_key(),
+                "https://deploy.example.com",
+                &approval_text()
+            ),
+            Err(ReceiptError::Mismatch)
+        );
         Ok(())
     }
 }
