@@ -41,3 +41,6 @@ Not by an outside firm yet. It has had several independent security reviews, eve
 
 **Can I use it commercially?**
 Yes. It is Apache-2.0. Keep the `NOTICE` file (it credits s17sh70x2jfl031ag) with any copy or modified version.
+
+**Can a service accept only hardware keys (like YubiKeys)?**
+Yes, in a simple way: a service trusts only the keys in its keyring. If your company hands out hardware keys and adds only those to the keyring, nothing else can approve. Automatic proof that a key is certified hardware (checking its maker's certificate) is not built in yet: phone and laptop passkeys never provide it, and the extra code would add risk for few users. It can be added if a real need comes up.

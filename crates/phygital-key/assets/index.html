@@ -4,22 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>Phygital Key</title>
+<meta name="color-scheme" content="dark light">
+<link rel="icon" type="image/svg+xml" href="/assets/brand/phygital-key-wired-cyan.svg">
+<link rel="stylesheet" href="/assets/fonts.css">
 <link rel="stylesheet" href="/assets/style.css">
+<title>Phygital Key</title>
 </head>
 <body data-page="index">
 <main>
-  <header class="brand"><span class="dot" aria-hidden="true"></span> Phygital Key</header>
-  <h1>Your approval gate</h1>
+  <header class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#26D0F2"/><g fill="none" stroke="#0B0D12" stroke-linecap="round" stroke-linejoin="round"><circle cx="26" cy="31" r="7" stroke-width="5"/><path d="M31.5 36.5 L48 53" stroke-width="5" stroke-linecap="butt"/><path d="M41 46 L46 41" stroke-width="4.5" stroke-linecap="butt"/><path d="M46.5 51.5 L51 47" stroke-width="4.5" stroke-linecap="butt"/><path d="M26 24 V17 H38 L46 9" stroke-width="2.4"/><path d="M19 31 H13 L8 26 V19" stroke-width="2.4"/></g><circle cx="46" cy="9" r="3.4" fill="#FF6B5A"/><circle cx="8" cy="19" r="3.4" fill="#FF6B5A"/></svg><span class="brand-name">Phygital Key</span></header>
+  <p class="eyebrow">Approval gate</p>
+  <h1>Your signed yes</h1>
   <p class="lead">When an AI wants to do something that matters, it asks here first. You see the exact request and approve it with your key, or say no.</p>
   <section class="card">
-    <h2>Trusted keys</h2>
+    <h2 class="card-title">Trusted keys</h2>
     <ul id="keys" class="keys"><li>Loading…</li></ul>
-    <p class="small">To add a key, run <code>phygital-key enroll</code> on this computer and open the link it prints.</p>
+    <p class="small">To add a key, run <code>phygital-key enroll</code> (or <code>phygital-key-admin enroll</code> with the secure install) and open the link it prints.</p>
   </section>
   <section id="rootbox" class="card" hidden>
-    <h2>Your key fingerprint</h2>
-    <p><code id="root"></code></p>
+    <h2 class="card-title">Your key fingerprint</h2>
+    <code id="root" class="fingerprint"></code>
     <p id="signed" class="small"></p>
   </section>
   <p id="note" class="note" role="status" aria-live="polite"></p>

@@ -27,6 +27,23 @@ function concat(a, b) {
   out.set(b, a.length);
   return out;
 }
+// Status always carries a word and a glyph, never colour alone.
+const STAMPS = {
+  waiting: ["\u25F7 Waiting for you", ""],
+  signed: ["\u2713 Signed", "signed"],
+  used: ["\u25CF Used once", "signed"],
+  active: ["\u2713 Signed \u00B7 active", "signed"],
+  refused: ["\u2715 Refused", "refused"],
+  cancelled: ["\u2715 Cancelled", "refused"],
+  expired: ["\u2715 Expired", "refused"],
+  revoked: ["\u2715 Revoked", "refused"],
+};
+function stamp(kind) {
+  const el = $("stamp");
+  if (!el || !STAMPS[kind]) return;
+  el.textContent = STAMPS[kind][0];
+  el.className = "stamp" + (STAMPS[kind][1] ? " " + STAMPS[kind][1] : "");
+}
 function note(text, kind) {
   const n = $("note");
   if (!n) return;
@@ -156,6 +173,7 @@ async function approvePage() {
   };
   const until = view.standing ? new Date(view.standing.until * 1000).toLocaleString() : "";
   if (view.standing && view.status === "approved") {
+    stamp("active");
     $("title").textContent = "Standing permission active";
     $("lead").textContent = "Used " + view.standing.uses + " of " + view.standing.max_uses + " times. Ends " + until + ".";
     if (view.standing.usable) {
@@ -173,6 +191,7 @@ async function approvePage() {
     return;
   }
   if (view.standing && view.revocation_signed === false) {
+    stamp("revoked");
     // Revoked here, but the service has not been told yet: offer the signature again.
     $("title").textContent = "Revoked here";
     $("lead").textContent = "No new uses can be signed. Sign the revocation so the service refuses this permission too.";
@@ -188,6 +207,8 @@ async function approvePage() {
     return;
   }
   if (view.status !== "pending") {
+    stamp(view.status === "approved" ? (view.service_reported === "success" ? "used" : "signed")
+      : view.status === "denied" ? "refused" : view.status);
     const [t, l] = done[view.status] || ["Closed", ""];
     $("title").textContent = t;
     $("lead").textContent = l;
@@ -227,6 +248,7 @@ async function approvePage() {
     try {
       await api("/api/r/" + encodeURIComponent(id) + "/deny", {});
       $("actions").hidden = true;
+      stamp("refused");
       $("title").textContent = "Denied";
       $("lead").textContent = "You said no. Nothing will happen.";
       note("");
@@ -266,6 +288,7 @@ async function approvePage() {
         signature: b64u(r.signature),
       });
       $("actions").hidden = true;
+      stamp("signed");
       $("title").textContent = "Approved";
       $("lead").textContent = "Signed by " + (result.approved_by || "your key") + ". It works once, within " + (claims.exp - claims.iat) + " seconds.";
       note("Done. You can close this page.", "good");
@@ -341,8 +364,14 @@ async function indexPage() {
     }
     s.keys.forEach((k) => {
       const li = document.createElement("li");
-      const label = document.createElement("span");
-      label.textContent = k.name + " · added " + k.created;
+      const label = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "key-name";
+      name.textContent = k.name;
+      const meta = document.createElement("div");
+      meta.className = "key-meta";
+      meta.textContent = "added " + k.created + " \u00B7 " + k.fingerprint.slice(0, 16) + "\u2026";
+      label.append(name, meta);
       li.append(label);
       if (s.keys.length > 1) {
         const btn = document.createElement("button");
@@ -362,8 +391,8 @@ async function indexPage() {
     if (s.root_fingerprint) {
       $("root").textContent = s.root_fingerprint;
       $("signed").textContent = s.history_ok
-        ? "Every key change is signed. Share this fingerprint so others can check your key list."
-        : "Warning: the key history does not check out.";
+        ? "\u2713 Signed: every key change is approved by a key you already trust. Share this fingerprint so others can check your key list."
+        : "\u2715 Check this: the key history does not check out. Do not share or trust this key list until it is fixed.";
       $("rootbox").hidden = false;
     }
   } catch (e) { note(friendly(e), "bad"); }

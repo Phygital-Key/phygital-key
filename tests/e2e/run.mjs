@@ -116,7 +116,7 @@ try {
   const beforeConfirm = await (await fetch(GATE + "/api/status")).json();
   check("first key is not trusted until it signs itself", beforeConfirm.keys.length === 0);
   await page.locator("#actions").waitFor({ state: "visible" });
-  check("first-key page says confirm", (await page.locator("#title").innerText()).includes("Confirm your key"));
+  check("first-key page says confirm", (await page.locator("#title").textContent()).toLowerCase().includes("confirm your key"));
   await page.click("#approve");
   await page.waitForFunction(() => document.getElementById("title").textContent === "Approved", null, { timeout: 15000 });
   const afterConfirm = await (await fetch(GATE + "/api/status")).json();
@@ -256,7 +256,7 @@ try {
   const stWait = tool(mcp, "get_approval", { id: st.id, wait_seconds: 30 });
   await page.goto(st.approve_url);
   await page.locator("#actions").waitFor({ state: "visible" });
-  check("page explains the standing permission", (await page.locator("#lead").innerText()).includes("up to 2 times"));
+  check("page explains the standing permission", (await page.locator("#lead").textContent()).toLowerCase().includes("up to 2 times"));
   await page.click("#approve");
   await page.waitForFunction(() => /Approved|active/.test(document.getElementById("title").textContent), null, { timeout: 15000 });
   check("standing approval approved", (await stWait).status === "approved");
@@ -285,7 +285,7 @@ try {
   check("third use refused (max 2)", use3.isError && /No uses left/.test(use3.error));
   await page.goto(st.approve_url);
   await page.waitForFunction(() => /active/.test(document.getElementById("title").textContent), null, { timeout: 5000 });
-  check("page shows uses so far", (await page.locator("#lead").innerText()).includes("Used 2 of 2"));
+  check("page shows uses so far", (await page.locator("#lead").textContent()).toLowerCase().includes("used 2 of 2"));
   await page.click("#deny");
   await page.waitForURL(/\/r\//, { timeout: 5000 });
   await page.waitForFunction(() => /Tell the service/.test(document.getElementById("title").textContent), null, { timeout: 5000 });
@@ -336,6 +336,11 @@ try {
   const home_ = await fetch(GATE + "/");
   const csp = home_.headers.get("content-security-policy") || "";
   check("strict CSP header", csp.includes("default-src 'none'") && csp.includes("frame-ancestors 'none'"));
+  const fontRes = await fetch(GATE + "/assets/fonts/jetbrains-mono-latin-wght-normal.woff2");
+  check("fonts are served by the gate itself", fontRes.status === 200 && fontRes.headers.get("content-type") === "font/woff2");
+  check("the policy allows fonts only from the gate", csp.includes("font-src 'self'"));
+  const pages = await Promise.all(["/", "/enroll", "/r/x", "/assets/fonts.css", "/assets/style.css", "/assets/app.js"].map(async (u) => (await fetch(GATE + u)).text()));
+  check("no page loads anything from another site", pages.every((t) => !/https?:\/\/(?!localhost|www\.w3\.org)/.test(t.replace(/href="https:\/\/github[^"]*"/g, ""))));
   check("no-store and nosniff headers", home_.headers.get("cache-control") === "no-store" && home_.headers.get("x-content-type-options") === "nosniff");
 
   // Adding a second key needs approval from the first key.
@@ -353,7 +358,7 @@ try {
   // Unplug the new key, so the approval can only come from the trusted first key.
   await cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId: second });
   await page.locator("#actions").waitFor({ state: "visible" });
-  check("add-key page says so", (await page.locator("#title").innerText()).includes("new key"));
+  check("add-key page says so", (await page.locator("#title").textContent()).toLowerCase().includes("new key"));
   await page.click("#approve");
   await page.waitForFunction(() => document.getElementById("title").textContent === "Approved", null, { timeout: 15000 })
     .catch(async (e) => { throw new Error("add-key approval: " + (await page.locator("#note").innerText()) + " / " + e.message); });
@@ -391,7 +396,7 @@ try {
   const rm2 = await fetch(GATE + "/api/keys/remove", { method: "POST", headers: { "Content-Type": "application/json", Origin: GATE }, body: JSON.stringify({ credential_id: secondCred }) });
   check("a second removal of the same key is refused while one waits", rm2.status === 400);
   await page.locator("#actions").waitFor({ state: "visible" });
-  check("remove page says so", (await page.locator("#title").innerText()).includes("Remove this key"));
+  check("remove page says so", (await page.locator("#title").textContent()).toLowerCase().includes("remove this key"));
   check("key is still trusted before approval", (await (await fetch(GATE + "/api/status")).json()).keys.length === 2);
   await page.click("#approve");
   await page.waitForFunction(() => document.getElementById("title").textContent === "Approved", null, { timeout: 15000 });

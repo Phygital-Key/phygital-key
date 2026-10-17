@@ -4,19 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>Approve request · Phygital Key</title>
+<meta name="color-scheme" content="dark light">
+<link rel="icon" type="image/svg+xml" href="/assets/brand/phygital-key-wired-cyan.svg">
+<link rel="stylesheet" href="/assets/fonts.css">
 <link rel="stylesheet" href="/assets/style.css">
+<title>Approve request · Phygital Key</title>
 </head>
 <body data-page="approve">
 <main>
-  <header class="brand"><span class="dot" aria-hidden="true"></span> Phygital Key</header>
+  <header class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#26D0F2"/><g fill="none" stroke="#0B0D12" stroke-linecap="round" stroke-linejoin="round"><circle cx="26" cy="31" r="7" stroke-width="5"/><path d="M31.5 36.5 L48 53" stroke-width="5" stroke-linecap="butt"/><path d="M41 46 L46 41" stroke-width="4.5" stroke-linecap="butt"/><path d="M46.5 51.5 L51 47" stroke-width="4.5" stroke-linecap="butt"/><path d="M26 24 V17 H38 L46 9" stroke-width="2.4"/><path d="M19 31 H13 L8 26 V19" stroke-width="2.4"/></g><circle cx="46" cy="9" r="3.4" fill="#FF6B5A"/><circle cx="8" cy="19" r="3.4" fill="#FF6B5A"/></svg><span class="brand-name">Phygital Key</span></header>
+  <p class="eyebrow">Approval request</p>
   <h1 id="title">Loading request…</h1>
   <p id="lead" class="lead"></p>
 
-  <section id="card" class="card" hidden>
+  <section id="card" class="card approval" hidden>
+    <div class="card-head">
+      <h2 class="card-title" id="type"></h2>
+      <span id="stamp" class="stamp">◷ Waiting for you</span>
+    </div>
     <dl class="meta">
-      <div><dt>Action</dt><dd id="type"></dd></div>
-      <div><dt>Will be carried out by</dt><dd id="aud"></dd></div>
+      <div><dt>Carried out by</dt><dd id="aud"></dd></div>
       <div><dt>Proof needed</dt><dd id="level"></dd></div>
       <div><dt>Decide within</dt><dd id="deadline"></dd></div>
     </dl>
@@ -40,7 +47,7 @@
     <button id="approve" class="primary" type="button">Approve with my key</button>
   </div>
 
-  <footer class="small">Only approve what you expected to see. The AI cannot approve for you, and text inside the request never counts as approval.</footer>
+  <footer class="small">Only your own key can sign this. It works once, for this one request and this one service. The AI cannot approve for you, and text inside the request never counts as approval.</footer>
 </main>
 <script src="/assets/app.js"></script>
 </body>

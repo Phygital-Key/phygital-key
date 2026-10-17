@@ -24,8 +24,83 @@ const APPROVE_HTML: &str = include_str!("../assets/approve.html");
 const ENROLL_HTML: &str = include_str!("../assets/enroll.html");
 const APP_JS: &str = include_str!("../assets/app.js");
 const STYLE_CSS: &str = include_str!("../assets/style.css");
+const FONTS_CSS: &str = include_str!("../assets/fonts.css");
 
-const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; \
+/// Files built into the program (fonts and logo), served from the gate itself:
+/// the pages never load anything from another site.
+static FILES: &[(&str, &str, &[u8])] = &[
+    (
+        "fonts/anybody-latin-standard-normal.woff2",
+        "font/woff2",
+        include_bytes!("../assets/fonts/anybody-latin-standard-normal.woff2"),
+    ),
+    (
+        "fonts/anybody-latin-ext-standard-normal.woff2",
+        "font/woff2",
+        include_bytes!("../assets/fonts/anybody-latin-ext-standard-normal.woff2"),
+    ),
+    (
+        "fonts/hanken-grotesk-latin-wght-normal.woff2",
+        "font/woff2",
+        include_bytes!("../assets/fonts/hanken-grotesk-latin-wght-normal.woff2"),
+    ),
+    (
+        "fonts/hanken-grotesk-latin-ext-wght-normal.woff2",
+        "font/woff2",
+        include_bytes!("../assets/fonts/hanken-grotesk-latin-ext-wght-normal.woff2"),
+    ),
+    (
+        "fonts/jetbrains-mono-latin-wght-normal.woff2",
+        "font/woff2",
+        include_bytes!("../assets/fonts/jetbrains-mono-latin-wght-normal.woff2"),
+    ),
+    (
+        "fonts/jetbrains-mono-latin-ext-wght-normal.woff2",
+        "font/woff2",
+        include_bytes!("../assets/fonts/jetbrains-mono-latin-ext-wght-normal.woff2"),
+    ),
+    (
+        "fonts/jetbrains-mono-cyrillic-wght-normal.woff2",
+        "font/woff2",
+        include_bytes!("../assets/fonts/jetbrains-mono-cyrillic-wght-normal.woff2"),
+    ),
+    (
+        "fonts/jetbrains-mono-greek-wght-normal.woff2",
+        "font/woff2",
+        include_bytes!("../assets/fonts/jetbrains-mono-greek-wght-normal.woff2"),
+    ),
+    (
+        "brand/phygital-key-mark.svg",
+        "image/svg+xml",
+        include_bytes!("../assets/brand/phygital-key-mark.svg"),
+    ),
+    (
+        "brand/phygital-key-wired-cyan.svg",
+        "image/svg+xml",
+        include_bytes!("../assets/brand/phygital-key-wired-cyan.svg"),
+    ),
+    (
+        "brand/phygital-key-wired-ink.svg",
+        "image/svg+xml",
+        include_bytes!("../assets/brand/phygital-key-wired-ink.svg"),
+    ),
+];
+
+async fn asset_file(Path(rest): Path<String>) -> Response {
+    match FILES.iter().find(|(name, _, _)| *name == rest) {
+        Some((_, kind, bytes)) => (
+            [
+                (header::CONTENT_TYPE, *kind),
+                (header::CACHE_CONTROL, "public, max-age=86400, immutable"),
+            ],
+            *bytes,
+        )
+            .into_response(),
+        None => err(StatusCode::NOT_FOUND, "not found"),
+    }
+}
+
+const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self' data:; \
                    base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 type Shared = Arc<Gate>;
@@ -103,7 +178,9 @@ async fn guard(State(gate): State<Shared>, req: Request, next: Next) -> Response
             header::CONTENT_SECURITY_POLICY,
             HeaderValue::from_static(CSP),
         );
-        h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        if !h.contains_key(header::CACHE_CONTROL) {
+            h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        }
     }
     h.insert(
         header::X_CONTENT_TYPE_OPTIONS,
@@ -288,6 +365,11 @@ pub fn router(gate: Shared, extra: Option<Router>) -> Router {
             "/assets/style.css",
             get(|| async { page(STYLE_CSS, "text/css; charset=utf-8") }),
         )
+        .route(
+            "/assets/fonts.css",
+            get(|| async { page(FONTS_CSS, "text/css; charset=utf-8") }),
+        )
+        .route("/assets/{*rest}", get(asset_file))
         .route("/.well-known/phygital-key.json", get(well_known))
         .route("/.well-known/phygital-key-revoked.json", get(revoked_list))
         .route("/api/status", get(status))
