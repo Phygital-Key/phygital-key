@@ -150,7 +150,7 @@ Run the gate where the AI agent cannot change its files (another machine, or ano
 | [`docs/spec.md`](docs/spec.md) | The open spec (PKA v0.1): format, checks, error codes |
 | [`crates/phygital-key-verify`](crates/phygital-key-verify) | The verifier library. Pure, offline, fail closed |
 | [`crates/phygital-key`](crates/phygital-key) | The gate: MCP server, approval page, enrollment, audit log, demo |
-| [`test-vectors/`](test-vectors) | 55 approval, 24 key-list and 29 standing-approval test cases every implementation must pass |
+| [`test-vectors/`](test-vectors) | 55 approval, 25 key-list and 38 standing-approval test cases every implementation must pass |
 | [`tests/e2e/`](tests/e2e) | End-to-end and red-team tests: real browser, virtual passkey, real MCP client |
 | [`docs/threat-model.md`](docs/threat-model.md) | What it defends against, what it trusts, known limits |
 | [`docs/decisions.md`](docs/decisions.md) | Why each choice was made |

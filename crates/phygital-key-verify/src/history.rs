@@ -230,9 +230,7 @@ pub fn verify_history_update(
     root_fingerprint: &str,
     origin: &str,
 ) -> Result<(), HistoryError> {
-    if new.history.len() < accepted.history.len()
-        || new.history.get(..accepted.history.len()) != Some(accepted.history.as_slice())
-    {
+    if new.history.get(..accepted.history.len()) != Some(accepted.history.as_slice()) {
         return Err(HistoryError::NotAnUpdate);
     }
     verify_history(new, root_fingerprint, origin)

@@ -1197,6 +1197,413 @@
       "name": "negative_amount"
     },
     {
+      "description": "Use token issued 30 s in the future: clock drift allowed.",
+      "expected": {
+        "ok": true
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1760703600,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "amount_cents": 450,
+            "currency": "EUR",
+            "memo": "coffee",
+            "to": "ACME Ltd"
+          },
+          "type": "payment"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsiY3VycmVuY3kiOiJFVVIiLCJ0byI6IkFDTUUgTHRkIn0sImZvcl90eXBlIjoicGF5bWVudCIsIm1heF91c2VzIjozLCJ1c2Vfa2V5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMm1IZGFaaXlsQ1BoXzM1SlB0enRqbUx4SkxXVmE4TDBjWngyQ3J3cVNZa3N0MGFtWXBaMFpGQlNJTk9qdEZZUnRGYzVBUW5kWjliQll6UmE0elJRRGciLCJ2YXJ5Ijp7ImFtb3VudF9jZW50cyI6eyJtYXgiOjIwMDAsIm1pbiI6MX0sIm1lbW8iOnsib25lX29mIjpbImNvZmZlZSIsImx1bmNoIl19fX0sInR5cGUiOiJzdGFuZGluZyJ9LCJyZXF1ZXN0X2hhc2giOiJBeXpWeXU4R1NabWVZbzNudUZvNnE0QUJtVmREbTUwMy1vZWZwZFV4RmlRIiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tGQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUo1ZWt4UFpWaE9SM040T0RWdE9EWk9kamM0UXpSNGEwVnFOR05PYW1sa2J6VnRNbHBqUm1Kc1JqSnJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNZTGx1MUk1SUF2Z0NDYUkyaDh6c2VWcnd1MTItUEk2TkZGZVpYRE91WVRBSWdIT3lRVF9LVjdOaFlTNC1BczljTEFWRmhmcjQ0cTRCTm05bXdmR3BxZk1nIn1dfQ",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MDcwMzY5MCwiaWF0IjoxNzYwNzAzNjMwLCJpZCI6IkhCd2NIQndjSEJ3Y0hCd2NIQndjSEEiLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnRfY2VudHMiOjQ1MCwiY3VycmVuY3kiOiJFVVIiLCJtZW1vIjoiY29mZmVlIiwidG8iOiJBQ01FIEx0ZCJ9LCJ0eXBlIjoicGF5bWVudCJ9LCJyZXF1ZXN0X2hhc2giOiJOZWNQNFlmQWNLUkJGckd2R0E5dkFjbW5ld2doU3ZibVFVWmVLbExVWTkwIiwic3RhbmRpbmdfaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwidiI6InBrYS51c2UuMSJ9.aQz6p9f4ei4up-urlUT9_mFBQjnRYRK3ypVvZ-mRT6O6lbUdpadDpCCmHLy90wfCqK60Z3kAnX04NvbjjBf8GA"
+      },
+      "name": "use_iat_30s_ahead"
+    },
+    {
+      "description": "Use token issued 31 s in the future.",
+      "expected": {
+        "error": "EXPIRED",
+        "ok": false
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1760703600,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "amount_cents": 450,
+            "currency": "EUR",
+            "memo": "coffee",
+            "to": "ACME Ltd"
+          },
+          "type": "payment"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsiY3VycmVuY3kiOiJFVVIiLCJ0byI6IkFDTUUgTHRkIn0sImZvcl90eXBlIjoicGF5bWVudCIsIm1heF91c2VzIjozLCJ1c2Vfa2V5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMm1IZGFaaXlsQ1BoXzM1SlB0enRqbUx4SkxXVmE4TDBjWngyQ3J3cVNZa3N0MGFtWXBaMFpGQlNJTk9qdEZZUnRGYzVBUW5kWjliQll6UmE0elJRRGciLCJ2YXJ5Ijp7ImFtb3VudF9jZW50cyI6eyJtYXgiOjIwMDAsIm1pbiI6MX0sIm1lbW8iOnsib25lX29mIjpbImNvZmZlZSIsImx1bmNoIl19fX0sInR5cGUiOiJzdGFuZGluZyJ9LCJyZXF1ZXN0X2hhc2giOiJBeXpWeXU4R1NabWVZbzNudUZvNnE0QUJtVmREbTUwMy1vZWZwZFV4RmlRIiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tGQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUo1ZWt4UFpWaE9SM040T0RWdE9EWk9kamM0UXpSNGEwVnFOR05PYW1sa2J6VnRNbHBqUm1Kc1JqSnJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNZTGx1MUk1SUF2Z0NDYUkyaDh6c2VWcnd1MTItUEk2TkZGZVpYRE91WVRBSWdIT3lRVF9LVjdOaFlTNC1BczljTEFWRmhmcjQ0cTRCTm05bXdmR3BxZk1nIn1dfQ",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MDcwMzY5MSwiaWF0IjoxNzYwNzAzNjMxLCJpZCI6IkhSMGRIUjBkSFIwZEhSMGRIUjBkSFEiLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnRfY2VudHMiOjQ1MCwiY3VycmVuY3kiOiJFVVIiLCJtZW1vIjoiY29mZmVlIiwidG8iOiJBQ01FIEx0ZCJ9LCJ0eXBlIjoicGF5bWVudCJ9LCJyZXF1ZXN0X2hhc2giOiJOZWNQNFlmQWNLUkJGckd2R0E5dkFjbW5ld2doU3ZibVFVWmVLbExVWTkwIiwic3RhbmRpbmdfaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwidiI6InBrYS51c2UuMSJ9.B8zTS9u-USMsNNvJ1sF21rzhJ8AWRWTkFnOtVpem5BTNH6Uy8K18VcVguWcHpXEg9dqJuMcAJGAGGJIBnZM_sA"
+      },
+      "name": "use_iat_31s_ahead"
+    },
+    {
+      "description": "A use token may end exactly when the standing approval ends.",
+      "expected": {
+        "ok": true
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1761304770,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "amount_cents": 450,
+            "currency": "EUR",
+            "memo": "coffee",
+            "to": "ACME Ltd"
+          },
+          "type": "payment"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsiY3VycmVuY3kiOiJFVVIiLCJ0byI6IkFDTUUgTHRkIn0sImZvcl90eXBlIjoicGF5bWVudCIsIm1heF91c2VzIjozLCJ1c2Vfa2V5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMm1IZGFaaXlsQ1BoXzM1SlB0enRqbUx4SkxXVmE4TDBjWngyQ3J3cVNZa3N0MGFtWXBaMFpGQlNJTk9qdEZZUnRGYzVBUW5kWjliQll6UmE0elJRRGciLCJ2YXJ5Ijp7ImFtb3VudF9jZW50cyI6eyJtYXgiOjIwMDAsIm1pbiI6MX0sIm1lbW8iOnsib25lX29mIjpbImNvZmZlZSIsImx1bmNoIl19fX0sInR5cGUiOiJzdGFuZGluZyJ9LCJyZXF1ZXN0X2hhc2giOiJBeXpWeXU4R1NabWVZbzNudUZvNnE0QUJtVmREbTUwMy1vZWZwZFV4RmlRIiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tGQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUo1ZWt4UFpWaE9SM040T0RWdE9EWk9kamM0UXpSNGEwVnFOR05PYW1sa2J6VnRNbHBqUm1Kc1JqSnJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNZTGx1MUk1SUF2Z0NDYUkyaDh6c2VWcnd1MTItUEk2TkZGZVpYRE91WVRBSWdIT3lRVF9LVjdOaFlTNC1BczljTEFWRmhmcjQ0cTRCTm05bXdmR3BxZk1nIn1dfQ",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MTMwNDgwMCwiaWF0IjoxNzYxMzA0NzQwLCJpZCI6IkhoNGVIaDRlSGg0ZUhoNGVIaDRlSGciLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnRfY2VudHMiOjQ1MCwiY3VycmVuY3kiOiJFVVIiLCJtZW1vIjoiY29mZmVlIiwidG8iOiJBQ01FIEx0ZCJ9LCJ0eXBlIjoicGF5bWVudCJ9LCJyZXF1ZXN0X2hhc2giOiJOZWNQNFlmQWNLUkJGckd2R0E5dkFjbW5ld2doU3ZibVFVWmVLbExVWTkwIiwic3RhbmRpbmdfaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwidiI6InBrYS51c2UuMSJ9.-3N6bVYn7dOTOurnj4WxCMprvoOWBqbfbOXUjVm5SBTmnhB3hKeQNdW87AzvDeflLG4LSKELojrTN_ne_ctgyg"
+      },
+      "name": "use_ends_with_standing"
+    },
+    {
+      "description": "A use token may not end after the standing approval.",
+      "expected": {
+        "error": "EXPIRED",
+        "ok": false
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1761304770,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "amount_cents": 450,
+            "currency": "EUR",
+            "memo": "coffee",
+            "to": "ACME Ltd"
+          },
+          "type": "payment"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsiY3VycmVuY3kiOiJFVVIiLCJ0byI6IkFDTUUgTHRkIn0sImZvcl90eXBlIjoicGF5bWVudCIsIm1heF91c2VzIjozLCJ1c2Vfa2V5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMm1IZGFaaXlsQ1BoXzM1SlB0enRqbUx4SkxXVmE4TDBjWngyQ3J3cVNZa3N0MGFtWXBaMFpGQlNJTk9qdEZZUnRGYzVBUW5kWjliQll6UmE0elJRRGciLCJ2YXJ5Ijp7ImFtb3VudF9jZW50cyI6eyJtYXgiOjIwMDAsIm1pbiI6MX0sIm1lbW8iOnsib25lX29mIjpbImNvZmZlZSIsImx1bmNoIl19fX0sInR5cGUiOiJzdGFuZGluZyJ9LCJyZXF1ZXN0X2hhc2giOiJBeXpWeXU4R1NabWVZbzNudUZvNnE0QUJtVmREbTUwMy1vZWZwZFV4RmlRIiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tGQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUo1ZWt4UFpWaE9SM040T0RWdE9EWk9kamM0UXpSNGEwVnFOR05PYW1sa2J6VnRNbHBqUm1Kc1JqSnJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNZTGx1MUk1SUF2Z0NDYUkyaDh6c2VWcnd1MTItUEk2TkZGZVpYRE91WVRBSWdIT3lRVF9LVjdOaFlTNC1BczljTEFWRmhmcjQ0cTRCTm05bXdmR3BxZk1nIn1dfQ",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MTMwNDgwMSwiaWF0IjoxNzYxMzA0NzQxLCJpZCI6Ikh4OGZIeDhmSHg4Zkh4OGZIeDhmSHciLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnRfY2VudHMiOjQ1MCwiY3VycmVuY3kiOiJFVVIiLCJtZW1vIjoiY29mZmVlIiwidG8iOiJBQ01FIEx0ZCJ9LCJ0eXBlIjoicGF5bWVudCJ9LCJyZXF1ZXN0X2hhc2giOiJOZWNQNFlmQWNLUkJGckd2R0E5dkFjbW5ld2doU3ZibVFVWmVLbExVWTkwIiwic3RhbmRpbmdfaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwidiI6InBrYS51c2UuMSJ9.sx9HAbutyQDUG92Uyf4PCrqvLzUcmuNLqsayyJ2NNEzdP1Jyy9HK-LxJz-uigCBE3aMZkjqttK6SNW4W60CVeQ"
+      },
+      "name": "use_outlives_standing"
+    },
+    {
+      "description": "Same request, but the token's request_hash is wrong.",
+      "expected": {
+        "error": "REQUEST_MISMATCH",
+        "ok": false
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1760703600,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "amount_cents": 450,
+            "currency": "EUR",
+            "memo": "coffee",
+            "to": "ACME Ltd"
+          },
+          "type": "payment"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsiY3VycmVuY3kiOiJFVVIiLCJ0byI6IkFDTUUgTHRkIn0sImZvcl90eXBlIjoicGF5bWVudCIsIm1heF91c2VzIjozLCJ1c2Vfa2V5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMm1IZGFaaXlsQ1BoXzM1SlB0enRqbUx4SkxXVmE4TDBjWngyQ3J3cVNZa3N0MGFtWXBaMFpGQlNJTk9qdEZZUnRGYzVBUW5kWjliQll6UmE0elJRRGciLCJ2YXJ5Ijp7ImFtb3VudF9jZW50cyI6eyJtYXgiOjIwMDAsIm1pbiI6MX0sIm1lbW8iOnsib25lX29mIjpbImNvZmZlZSIsImx1bmNoIl19fX0sInR5cGUiOiJzdGFuZGluZyJ9LCJyZXF1ZXN0X2hhc2giOiJBeXpWeXU4R1NabWVZbzNudUZvNnE0QUJtVmREbTUwMy1vZWZwZFV4RmlRIiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tGQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUo1ZWt4UFpWaE9SM040T0RWdE9EWk9kamM0UXpSNGEwVnFOR05PYW1sa2J6VnRNbHBqUm1Kc1JqSnJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNZTGx1MUk1SUF2Z0NDYUkyaDh6c2VWcnd1MTItUEk2TkZGZVpYRE91WVRBSWdIT3lRVF9LVjdOaFlTNC1BczljTEFWRmhmcjQ0cTRCTm05bXdmR3BxZk1nIn1dfQ",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MDcwMzY1NSwiaWF0IjoxNzYwNzAzNTk1LCJpZCI6Ikl5TWpJeU1qSXlNakl5TWpJeU1qSXciLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnRfY2VudHMiOjQ1MCwiY3VycmVuY3kiOiJFVVIiLCJtZW1vIjoiY29mZmVlIiwidG8iOiJBQ01FIEx0ZCJ9LCJ0eXBlIjoicGF5bWVudCJ9LCJyZXF1ZXN0X2hhc2giOiJldE1aVktZT1ZOODR2QUhLcUxVLWJrc09ZWkVfUHhkY1ltSng3V3dnY0owIiwic3RhbmRpbmdfaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwidiI6InBrYS51c2UuMSJ9.UgZm1de8PVxL7avR8dFGvHacf1gFBZZabCGsx7pdkbkXtrqM5zhmv0GrBW-ixNccAOcN_AX9z7mb7BAUDi3ROw"
+      },
+      "name": "use_hash_wrong"
+    },
+    {
+      "description": "The service is about to run a request of type standing.",
+      "expected": {
+        "error": "MALFORMED",
+        "ok": false
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1760703600,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "fixed": {
+              "currency": "EUR",
+              "to": "ACME Ltd"
+            },
+            "for_type": "payment",
+            "max_uses": 3,
+            "use_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2mHdaZiylCPh_35JPtztjmLxJLWVa8L0cZx2CrwqSYkst0amYpZ0ZFBSINOjtFYRtFc5AQndZ9bBYzRa4zRQDg",
+            "vary": {
+              "amount_cents": {
+                "max": 2000,
+                "min": 1
+              },
+              "memo": {
+                "one_of": [
+                  "coffee",
+                  "lunch"
+                ]
+              }
+            }
+          },
+          "type": "standing"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsiY3VycmVuY3kiOiJFVVIiLCJ0byI6IkFDTUUgTHRkIn0sImZvcl90eXBlIjoicGF5bWVudCIsIm1heF91c2VzIjozLCJ1c2Vfa2V5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMm1IZGFaaXlsQ1BoXzM1SlB0enRqbUx4SkxXVmE4TDBjWngyQ3J3cVNZa3N0MGFtWXBaMFpGQlNJTk9qdEZZUnRGYzVBUW5kWjliQll6UmE0elJRRGciLCJ2YXJ5Ijp7ImFtb3VudF9jZW50cyI6eyJtYXgiOjIwMDAsIm1pbiI6MX0sIm1lbW8iOnsib25lX29mIjpbImNvZmZlZSIsImx1bmNoIl19fX0sInR5cGUiOiJzdGFuZGluZyJ9LCJyZXF1ZXN0X2hhc2giOiJBeXpWeXU4R1NabWVZbzNudUZvNnE0QUJtVmREbTUwMy1vZWZwZFV4RmlRIiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tGQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUo1ZWt4UFpWaE9SM040T0RWdE9EWk9kamM0UXpSNGEwVnFOR05PYW1sa2J6VnRNbHBqUm1Kc1JqSnJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNZTGx1MUk1SUF2Z0NDYUkyaDh6c2VWcnd1MTItUEk2TkZGZVpYRE91WVRBSWdIT3lRVF9LVjdOaFlTNC1BczljTEFWRmhmcjQ0cTRCTm05bXdmR3BxZk1nIn1dfQ",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MDcwMzY1NSwiaWF0IjoxNzYwNzAzNTk1LCJpZCI6IklDQWdJQ0FnSUNBZ0lDQWdJQ0FnSUEiLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJmaXhlZCI6eyJjdXJyZW5jeSI6IkVVUiIsInRvIjoiQUNNRSBMdGQifSwiZm9yX3R5cGUiOiJwYXltZW50IiwibWF4X3VzZXMiOjMsInVzZV9rZXkiOiJNRmt3RXdZSEtvWkl6ajBDQVFZSUtvWkl6ajBEQVFjRFFnQUUybUhkYVppeWxDUGhfMzVKUHR6dGptTHhKTFdWYThMMGNaeDJDcndxU1lrc3QwYW1ZcFowWkZCU0lOT2p0RllSdEZjNUFRbmRaOWJCWXpSYTR6UlFEZyIsInZhcnkiOnsiYW1vdW50X2NlbnRzIjp7Im1heCI6MjAwMCwibWluIjoxfSwibWVtbyI6eyJvbmVfb2YiOlsiY29mZmVlIiwibHVuY2giXX19fSwidHlwZSI6InN0YW5kaW5nIn0sInJlcXVlc3RfaGFzaCI6IkF5elZ5dThHU1ptZVlvM251Rm82cTRBQm1WZERtNTAzLW9lZnBkVXhGaVEiLCJzdGFuZGluZ19pZCI6IktDZ29LQ2dvS0Nnb0tDZ29LQ2dvS0EiLCJ2IjoicGthLnVzZS4xIn0.8kHun9R7FCUWRkryGPmFcec8EXuzAV4fXC7wD5j1FpOtU3OBtSu_nl5TA88flkCKLqzLM0cV6JJL1h5-Z8SSMQ"
+      },
+      "name": "standing_as_action"
+    },
+    {
+      "description": "Use token with an unknown version.",
+      "expected": {
+        "error": "MALFORMED",
+        "ok": false
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1760703600,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "amount_cents": 450,
+            "currency": "EUR",
+            "memo": "coffee",
+            "to": "ACME Ltd"
+          },
+          "type": "payment"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsiY3VycmVuY3kiOiJFVVIiLCJ0byI6IkFDTUUgTHRkIn0sImZvcl90eXBlIjoicGF5bWVudCIsIm1heF91c2VzIjozLCJ1c2Vfa2V5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMm1IZGFaaXlsQ1BoXzM1SlB0enRqbUx4SkxXVmE4TDBjWngyQ3J3cVNZa3N0MGFtWXBaMFpGQlNJTk9qdEZZUnRGYzVBUW5kWjliQll6UmE0elJRRGciLCJ2YXJ5Ijp7ImFtb3VudF9jZW50cyI6eyJtYXgiOjIwMDAsIm1pbiI6MX0sIm1lbW8iOnsib25lX29mIjpbImNvZmZlZSIsImx1bmNoIl19fX0sInR5cGUiOiJzdGFuZGluZyJ9LCJyZXF1ZXN0X2hhc2giOiJBeXpWeXU4R1NabWVZbzNudUZvNnE0QUJtVmREbTUwMy1vZWZwZFV4RmlRIiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tGQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUo1ZWt4UFpWaE9SM040T0RWdE9EWk9kamM0UXpSNGEwVnFOR05PYW1sa2J6VnRNbHBqUm1Kc1JqSnJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNZTGx1MUk1SUF2Z0NDYUkyaDh6c2VWcnd1MTItUEk2TkZGZVpYRE91WVRBSWdIT3lRVF9LVjdOaFlTNC1BczljTEFWRmhmcjQ0cTRCTm05bXdmR3BxZk1nIn1dfQ",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MDcwMzY1NSwiaWF0IjoxNzYwNzAzNTk1LCJpZCI6IkpDUWtKQ1FrSkNRa0pDUWtKQ1FrSkEiLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnRfY2VudHMiOjQ1MCwiY3VycmVuY3kiOiJFVVIiLCJtZW1vIjoiY29mZmVlIiwidG8iOiJBQ01FIEx0ZCJ9LCJ0eXBlIjoicGF5bWVudCJ9LCJyZXF1ZXN0X2hhc2giOiJOZWNQNFlmQWNLUkJGckd2R0E5dkFjbW5ld2doU3ZibVFVWmVLbExVWTkwIiwic3RhbmRpbmdfaWQiOiJLQ2dvS0Nnb0tDZ29LQ2dvS0Nnb0tBIiwidiI6InBrYS51c2UuMiJ9.F2cxy4jFOUfBPuQzrw076zSdz2572UoDD6Nc96PQbkZaBmuGr0X9QyUAV1TlHSUtxAhwG7ixK-gnRe_F4FqkXg"
+      },
+      "name": "use_wrong_version"
+    },
+    {
+      "description": "Field counting: one fixed and three varying fields.",
+      "expected": {
+        "ok": true
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1760703600,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "amount_cents": 450,
+            "currency": "EUR",
+            "memo": "coffee",
+            "to": "ACME Ltd"
+          },
+          "type": "payment"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJMaTR1TGk0dUxpNHVMaTR1TGk0dUxnIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsidG8iOiJBQ01FIEx0ZCJ9LCJmb3JfdHlwZSI6InBheW1lbnQiLCJtYXhfdXNlcyI6MywidXNlX2tleSI6Ik1Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERBUWNEUWdBRTJtSGRhWml5bENQaF8zNUpQdHp0am1MeEpMV1ZhOEwwY1p4MkNyd3FTWWtzdDBhbVlwWjBaRkJTSU5PanRGWVJ0RmM1QVFuZFo5YkJZelJhNHpSUURnIiwidmFyeSI6eyJhbW91bnRfY2VudHMiOnsibWF4IjoyMDAwLCJtaW4iOjF9LCJjdXJyZW5jeSI6eyJvbmVfb2YiOlsiRVVSIl19LCJtZW1vIjp7Im9uZV9vZiI6WyJjb2ZmZWUiLCJsdW5jaCJdfX19LCJ0eXBlIjoic3RhbmRpbmcifSwicmVxdWVzdF9oYXNoIjoiZUsyeVNlUnBqdjZTbDN4eUplVXNDOFBEN0ljazRReFJEX3dRcFVHVjAzOCIsInYiOiJwa2EuMSJ9LCJzaWduYXR1cmVzIjpbeyJhdXRoZW50aWNhdG9yX2RhdGEiOiJfcGdMdUhRRlBKZUZzLUEtSDN4Q3FfUmZZODdIdzdhM0wzeDRMcjdyRUtrRkFBQUFBQSIsImNsaWVudF9kYXRhX2pzb24iOiJleUpqYUdGc2JHVnVaMlVpT2lKRmRFSm5kR3RhVGtGTlF6VjBMVFJSTkdOWGNESlRUVWN5VEVwV056UkZZVFZTVjFaNWJuTm5aa2t3SWl3aVkzSnZjM05QY21sbmFXNGlPbVpoYkhObExDSnZjbWxuYVc0aU9pSm9kSFJ3Y3pvdkwyRndjSEp2ZG1VdVpYaGhiWEJzWlM1amIyMGlMQ0owZVhCbElqb2lkMlZpWVhWMGFHNHVaMlYwSW4wIiwiY3JlZGVudGlhbF9pZCI6InZTelVHU0Q3QUJHemdScms1RmlqQWciLCJzaWduYXR1cmUiOiJNRVlDSVFDa002MmdQZnU1REFhX3hyTlU0Qkp2RUY1dUtYMjQ2LUFXajdxdTBVVkVEUUloQU8zZmJlaUJGWG5zam83alkxUl95eGpBNlAwRC1GNTUzbzlxYndWOS1oQXUifV19",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MDcwMzY1NSwiaWF0IjoxNzYwNzAzNTk1LCJpZCI6IklTRWhJU0VoSVNFaElTRWhJU0VoSVEiLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnRfY2VudHMiOjQ1MCwiY3VycmVuY3kiOiJFVVIiLCJtZW1vIjoiY29mZmVlIiwidG8iOiJBQ01FIEx0ZCJ9LCJ0eXBlIjoicGF5bWVudCJ9LCJyZXF1ZXN0X2hhc2giOiJOZWNQNFlmQWNLUkJGckd2R0E5dkFjbW5ld2doU3ZibVFVWmVLbExVWTkwIiwic3RhbmRpbmdfaWQiOiJMaTR1TGk0dUxpNHVMaTR1TGk0dUxnIiwidiI6InBrYS51c2UuMSJ9.f2EYeY4WU6bcjlYNIatxZDl6x3fovrJFMOOSXo3Gw-iJOvEwy2VM43T1QvXSsdfrdBIlqkrGQWFJT4yzTJ2NwQ"
+      },
+      "name": "one_fixed_three_vary"
+    },
+    {
+      "description": "Field counting: one varying field missing.",
+      "expected": {
+        "error": "NOT_ALLOWED",
+        "ok": false
+      },
+      "input": {
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "high",
+        "now": 1760703600,
+        "prior_uses": [],
+        "request": {
+          "params": {
+            "amount_cents": 450,
+            "currency": "EUR",
+            "to": "ACME Ltd"
+          },
+          "type": "payment"
+        },
+        "standing": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjEzMDQ4MDAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJMaTR1TGk0dUxpNHVMaTR1TGk0dUxnIiwibGV2ZWwiOiJoaWdoIiwicmVxdWVzdCI6eyJwYXJhbXMiOnsiZml4ZWQiOnsidG8iOiJBQ01FIEx0ZCJ9LCJmb3JfdHlwZSI6InBheW1lbnQiLCJtYXhfdXNlcyI6MywidXNlX2tleSI6Ik1Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERBUWNEUWdBRTJtSGRhWml5bENQaF8zNUpQdHp0am1MeEpMV1ZhOEwwY1p4MkNyd3FTWWtzdDBhbVlwWjBaRkJTSU5PanRGWVJ0RmM1QVFuZFo5YkJZelJhNHpSUURnIiwidmFyeSI6eyJhbW91bnRfY2VudHMiOnsibWF4IjoyMDAwLCJtaW4iOjF9LCJjdXJyZW5jeSI6eyJvbmVfb2YiOlsiRVVSIl19LCJtZW1vIjp7Im9uZV9vZiI6WyJjb2ZmZWUiLCJsdW5jaCJdfX19LCJ0eXBlIjoic3RhbmRpbmcifSwicmVxdWVzdF9oYXNoIjoiZUsyeVNlUnBqdjZTbDN4eUplVXNDOFBEN0ljazRReFJEX3dRcFVHVjAzOCIsInYiOiJwa2EuMSJ9LCJzaWduYXR1cmVzIjpbeyJhdXRoZW50aWNhdG9yX2RhdGEiOiJfcGdMdUhRRlBKZUZzLUEtSDN4Q3FfUmZZODdIdzdhM0wzeDRMcjdyRUtrRkFBQUFBQSIsImNsaWVudF9kYXRhX2pzb24iOiJleUpqYUdGc2JHVnVaMlVpT2lKRmRFSm5kR3RhVGtGTlF6VjBMVFJSTkdOWGNESlRUVWN5VEVwV056UkZZVFZTVjFaNWJuTm5aa2t3SWl3aVkzSnZjM05QY21sbmFXNGlPbVpoYkhObExDSnZjbWxuYVc0aU9pSm9kSFJ3Y3pvdkwyRndjSEp2ZG1VdVpYaGhiWEJzWlM1amIyMGlMQ0owZVhCbElqb2lkMlZpWVhWMGFHNHVaMlYwSW4wIiwiY3JlZGVudGlhbF9pZCI6InZTelVHU0Q3QUJHemdScms1RmlqQWciLCJzaWduYXR1cmUiOiJNRVlDSVFDa002MmdQZnU1REFhX3hyTlU0Qkp2RUY1dUtYMjQ2LUFXajdxdTBVVkVEUUloQU8zZmJlaUJGWG5zam83alkxUl95eGpBNlAwRC1GNTUzbzlxYndWOS1oQXUifV19",
+        "use": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBrYS11c2Urand0In0.eyJhdWQiOiJodHRwczovL2RlcGxveS5leGFtcGxlLmNvbSIsImV4cCI6MTc2MDcwMzY1NSwiaWF0IjoxNzYwNzAzNTk1LCJpZCI6IklpSWlJaUlpSWlJaUlpSWlJaUlpSWciLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnRfY2VudHMiOjQ1MCwiY3VycmVuY3kiOiJFVVIiLCJ0byI6IkFDTUUgTHRkIn0sInR5cGUiOiJwYXltZW50In0sInJlcXVlc3RfaGFzaCI6InBSUk9YdWxNWG11Nm9tc1JCMHE3Wl9wbTY5RTAxMGhpNGZVRjdpV0JFV2MiLCJzdGFuZGluZ19pZCI6IkxpNHVMaTR1TGk0dUxpNHVMaTR1TGciLCJ2IjoicGthLnVzZS4xIn0.l-z4Wzy61Ra8onXLM8HsGx1vIF5poP4CX8Qgvl51ah7eeF2qsDuBWq9_miASXVOSlVBfpwIIM1khgH2f8nbU0A"
+      },
+      "name": "one_fixed_three_vary_missing_one"
+    },
+    {
       "description": "A standing approval alone is not enough.",
       "expected": {
         "error": "APPROVAL_REQUIRED",

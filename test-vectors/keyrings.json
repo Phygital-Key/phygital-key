@@ -563,6 +563,39 @@
     },
     {
       "accepted": null,
+      "description": "Two key changes in the same second are fine.",
+      "expected": {
+        "ok": true
+      },
+      "keyring": {
+        "history": [
+          "eyJjbGFpbXMiOnsiYXVkIjoicGh5Z2l0YWwta2V5OmtleXJpbmc6aHR0cHM6Ly9hcHByb3ZlLmV4YW1wbGUuY29tIiwiZXhwIjoxNzYwNzAwMTYwLCJpYXQiOjE3NjA3MDAxMDAsImlkIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUSIsImxldmVsIjoiaGlnaCIsInJlcXVlc3QiOnsicGFyYW1zIjp7ImNyZWF0ZWQiOiIyMDI2LTEwLTE3IiwiY3JlZGVudGlhbF9pZCI6InZTelVHU0Q3QUJHemdScms1RmlqQWciLCJuYW1lIjoiYWxpY2UgKFRFU1QgT05MWSkiLCJwdWJsaWNfa2V5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFd0lFQlJlbzQ3RTVQZWtCcmdMeE9kQnVyaERlNm1ZcmxwQ3VXRFZtUHlHbHNBMFFRaFFScU1RTGxXb3BHYXU5RXlVMV9NQ3BhSl93b3J4ZWEtalpOU0EiLCJycF9pZCI6ImFwcHJvdmUuZXhhbXBsZS5jb20ifSwidHlwZSI6ImFkZF9rZXkifSwicmVxdWVzdF9oYXNoIjoiTncxMVY2LWV0S2kzNW8yTmctNkhINm1DZjVPVkx3ck5mU0EtNjNLZ3NiYyIsInYiOiJwa2EuMSJ9LCJzaWduYXR1cmVzIjpbeyJhdXRoZW50aWNhdG9yX2RhdGEiOiJfcGdMdUhRRlBKZUZzLUEtSDN4Q3FfUmZZODdIdzdhM0wzeDRMcjdyRUtrRkFBQUFBQSIsImNsaWVudF9kYXRhX2pzb24iOiJleUpqYUdGc2JHVnVaMlVpT2lKQ1VtSmlXbU5TTUZVMFJVazRaV3cyVUd4emFuUmtSekZmYzI1NGVIcFpkV3h4ZG05NWVtUlRaV2haSWl3aVkzSnZjM05QY21sbmFXNGlPbVpoYkhObExDSnZjbWxuYVc0aU9pSm9kSFJ3Y3pvdkwyRndjSEp2ZG1VdVpYaGhiWEJzWlM1amIyMGlMQ0owZVhCbElqb2lkMlZpWVhWMGFHNHVaMlYwSW4wIiwiY3JlZGVudGlhbF9pZCI6InZTelVHU0Q3QUJHemdScms1RmlqQWciLCJzaWduYXR1cmUiOiJNRVlDSVFDTVpVcGpVRTBRNEJkbUZCRk51Rmdmb1RPTGpVbEFwZHZ4RVQyZm03bkU3UUloQUtGLWFVYUVXaXdoOXdsX2daUWptTm1EUlRjNUhzYk51a0xMcm96SFJGZkMifV19",
+          "eyJjbGFpbXMiOnsiYXVkIjoicGh5Z2l0YWwta2V5OmtleXJpbmc6aHR0cHM6Ly9hcHByb3ZlLmV4YW1wbGUuY29tIiwiZXhwIjoxNzYwNzAwMTYwLCJpYXQiOjE3NjA3MDAxMDAsImlkIjoiVFUxTlRVMU5UVTFOVFUxTlRVMU5UUSIsImxldmVsIjoiaGlnaCIsInJlcXVlc3QiOnsicGFyYW1zIjp7ImNyZWF0ZWQiOiIyMDI2LTEwLTE3IiwiY3JlZGVudGlhbF9pZCI6IjFGTGF1dFJYODUtcm9fMVZ2V2pidVEiLCJuYW1lIjoiYm9iIChURVNUIE9OTFkpIiwicHVibGljX2tleSI6Ik1Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERBUWNEUWdBRWpBenRZRm9kVnRfc3h6X25DNzVMcVpDUkstd04taHZxUHZid2huYW5wZnRPcXd2UmNHeTZqMWpOQk5KV1g2QnNSSDc0eFRkZmRzbVVWN0RDNDhrMG9nIiwicnBfaWQiOiJhcHByb3ZlLmV4YW1wbGUuY29tIn0sInR5cGUiOiJhZGRfa2V5In0sInJlcXVlc3RfaGFzaCI6Im5oS2hhM3J5OVhHTkVYa1pDY1VxNGJEclZUNVpBOUoxUk81MzMxbUROYzAiLCJ2IjoicGthLjEifSwic2lnbmF0dXJlcyI6W3siYXV0aGVudGljYXRvcl9kYXRhIjoiX3BnTHVIUUZQSmVGcy1BLUgzeENxX1JmWTg3SHc3YTNMM3g0THI3ckVLa0ZBQUFBQUEiLCJjbGllbnRfZGF0YV9qc29uIjoiZXlKamFHRnNiR1Z1WjJVaU9pSjRialphUjBOZk5YWnVabkJyTkRkaWRVaEJYMVZOYTFGUFYwTXlaMTlIYnpKS1ZVUm9hRU5UUkRkRklpd2lZM0p2YzNOUGNtbG5hVzRpT21aaGJITmxMQ0p2Y21sbmFXNGlPaUpvZEhSd2N6b3ZMMkZ3Y0hKdmRtVXVaWGhoYlhCc1pTNWpiMjBpTENKMGVYQmxJam9pZDJWaVlYVjBhRzR1WjJWMEluMCIsImNyZWRlbnRpYWxfaWQiOiJ2U3pVR1NEN0FCR3pnUnJrNUZpakFnIiwic2lnbmF0dXJlIjoiTUVVQ0lGeXhBR3ZnT2RNY05KRUhvUmR3ME9yYTJTaHVDdlFmWWxEZktOLW12eTdiQWlFQTBoOFBJUnlmSjhSR0RRQUxUb0ViOGlZeVR4YXZuNmVjeXdTRFFPalRVWm8ifV19"
+        ],
+        "keys": [
+          {
+            "created": "2026-10-17",
+            "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+            "name": "alice (TEST ONLY)",
+            "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+            "rp_id": "approve.example.com"
+          },
+          {
+            "created": "2026-10-17",
+            "credential_id": "1FLautRX85-ro_1VvWjbuQ",
+            "name": "bob (TEST ONLY)",
+            "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjAztYFodVt_sxz_nC75LqZCRK-wN-hvqPvbwhnanpftOqwvRcGy6j1jNBNJWX6BsRH74xTdfdsmUV7DC48k0og",
+            "rp_id": "approve.example.com"
+          }
+        ],
+        "origin": "https://approve.example.com"
+      },
+      "name": "valid_same_second",
+      "origin": "https://approve.example.com",
+      "root_fingerprint": "Pp0IrvTI9djhcmFJeel-FJXJd1_u_tJ2R8j8hpMh1xo"
+    },
+    {
+      "accepted": null,
       "description": "Same key, but the listed name was changed after signing.",
       "expected": {
         "error": "KEYS_DO_NOT_MATCH",

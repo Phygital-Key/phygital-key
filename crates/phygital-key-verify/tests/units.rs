@@ -282,3 +282,144 @@ fn standing_params_rules() {
         "not a standing request"
     );
 }
+
+const STANDING: &str = include_str!("../../../test-vectors/standing.json");
+const TEST_KEYS: &str = include_str!("../../../test-vectors/keys/test-keys.json");
+
+fn use_signing_key() -> Option<p256::ecdsa::SigningKey> {
+    let doc: Value = serde_json::from_str(TEST_KEYS).ok()?;
+    let k = doc["keys"]
+        .as_array()?
+        .iter()
+        .find(|k| k["name"] == json!("gate use key"))?;
+    let raw = phygital_key_verify::b64::decode(k["private_scalar_b64"].as_str()?)?;
+    p256::ecdsa::SigningKey::from_slice(&raw).ok()
+}
+
+fn standing_input() -> Value {
+    let doc: Value = serde_json::from_str(STANDING).unwrap_or_default();
+    doc["vectors"][0]["input"].clone()
+}
+
+#[test]
+fn standing_request_round_trip() {
+    use phygital_key_verify::standing::StandingParams;
+    let input = standing_input();
+    let standing = input["standing"].as_str().unwrap_or("");
+    let raw = phygital_key_verify::b64::decode(standing).unwrap_or_default();
+    let doc: Value = serde_json::from_slice(&raw).unwrap_or_default();
+    let req = &doc["claims"]["request"];
+    let params =
+        StandingParams::from_request(req).unwrap_or_else(|_| unreachable!("vector is valid"));
+    assert_eq!(&params.to_request(), req);
+    assert!(params.allows(&input["request"]));
+}
+
+#[test]
+fn sign_use_round_trip_and_uses_left() {
+    use phygital_key_verify::standing::{MemoryUseStore, Use, UseStore, sign_use, verify_use};
+    let Some(key) = use_signing_key() else {
+        unreachable!("test key")
+    };
+    let input = standing_input();
+    let request = input["request"].clone();
+    let now = input["now"].as_i64().unwrap_or(0);
+    let keyring: Keyring = serde_json::from_value(input["keyring"].clone()).unwrap_or_default();
+    let config: Config = serde_json::from_value(input["config"].clone()).unwrap_or(Config {
+        origins: vec![],
+        rp_ids: vec![],
+    });
+    let standing = input["standing"].as_str().unwrap_or("").to_string();
+    let sid = phygital_key_verify::b64::encode([40u8; 16]);
+    let uses = MemoryUseStore::new();
+    let expected = phygital_key_verify::Expected {
+        aud: input["aud"].as_str().unwrap_or(""),
+        request: &request,
+        level: Level::High,
+    };
+    let mut left = Vec::new();
+    for n in 0u8..4 {
+        let u = Use {
+            v: "pka.use.1".into(),
+            standing_id: sid.clone(),
+            id: phygital_key_verify::b64::encode([200 + n; 16]),
+            aud: input["aud"].as_str().unwrap_or("").into(),
+            request: request.clone(),
+            request_hash: canonical::hash_b64(&request).unwrap_or_default(),
+            iat: now - 5,
+            exp: now + 55,
+        };
+        let token = sign_use(&u, &key).unwrap_or_default();
+        assert_eq!(token.split('.').count(), 3);
+        left.push(
+            verify_use(&standing, &token, &expected, &keyring, &uses, &config, now)
+                .map(|v| v.uses_left),
+        );
+    }
+    // max_uses is 3 in the vectors.
+    assert_eq!(left, vec![Ok(2), Ok(1), Ok(0), Err(ErrorCode::UsedUp)]);
+    assert_eq!(uses.record_use("other", "x", 2, now + 100, now), Ok(1));
+}
+
+#[test]
+fn use_receipts_are_bound_to_the_use() {
+    use phygital_key_verify::receipt::{
+        Receipt, ReceiptError, reference_of, sign, verify_use_receipt,
+    };
+    let Some(service) = use_signing_key() else {
+        unreachable!("test key")
+    };
+    let input = standing_input();
+    let standing = input["standing"].as_str().unwrap_or("").to_string();
+    let token = input["use"].as_str().unwrap_or("").to_string();
+    let aud = input["aud"].as_str().unwrap_or("").to_string();
+    let payload: Value = token
+        .split('.')
+        .nth(1)
+        .and_then(phygital_key_verify::b64::decode)
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let good = Receipt {
+        v: "pka.receipt.1".into(),
+        iss: aud.clone(),
+        approval_id: payload["standing_id"].as_str().unwrap_or("").into(),
+        reference: reference_of(&standing),
+        request_hash: payload["request_hash"].as_str().unwrap_or("").into(),
+        status: "success".into(),
+        error: None,
+        use_id: payload["id"].as_str().map(String::from),
+        iat: 1,
+    };
+    let check = |r: &Receipt| {
+        let jws = sign(r, &service).unwrap_or_default();
+        verify_use_receipt(&jws, service.verifying_key(), &aud, &standing, &token).map(|x| x.status)
+    };
+    assert_eq!(check(&good), Ok("success".to_string()));
+    let mut no_use = good.clone();
+    no_use.use_id = None;
+    assert_eq!(check(&no_use), Err(ReceiptError::Mismatch));
+    let mut other_use = good.clone();
+    other_use.use_id = Some("AAAAAAAAAAAAAAAAAAAAAA".into());
+    assert_eq!(check(&other_use), Err(ReceiptError::Mismatch));
+    let mut other_hash = good.clone();
+    other_hash.request_hash = "x".into();
+    assert_eq!(check(&other_hash), Err(ReceiptError::Mismatch));
+    let mut other_standing = good.clone();
+    other_standing.approval_id = "AAAAAAAAAAAAAAAAAAAAAA".into();
+    assert_eq!(check(&other_standing), Err(ReceiptError::Mismatch));
+    // A one-time approval is not a standing one.
+    let one_time = {
+        let doc: Value = serde_json::from_str(VECTORS).unwrap_or_default();
+        doc["vectors"][0]["input"]["approval"]
+            .as_str()
+            .unwrap_or("")
+            .to_string()
+    };
+    let mut r1 = good.clone();
+    r1.reference = reference_of(&one_time);
+    let jws = sign(&r1, &service).unwrap_or_default();
+    assert_eq!(
+        verify_use_receipt(&jws, service.verifying_key(), &aud, &one_time, &token),
+        Err(ReceiptError::Mismatch)
+    );
+}

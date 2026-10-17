@@ -32,6 +32,17 @@
       },
       "name": "bob",
       "private_scalar_b64": "TUWktdIkSbCrsBD-umtrw9eQqNyswZGzfdhM8we_IGo"
+    },
+    {
+      "card": {
+        "created": "2026-10-17",
+        "credential_id": "9pYRJMY1QQXaVtew78Fx0A",
+        "name": "gate use key (TEST ONLY)",
+        "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2mHdaZiylCPh_35JPtztjmLxJLWVa8L0cZx2CrwqSYkst0amYpZ0ZFBSINOjtFYRtFc5AQndZ9bBYzRa4zRQDg",
+        "rp_id": "approve.example.com"
+      },
+      "name": "gate use key",
+      "private_scalar_b64": "ipJdDWhuKRYo2qsbGlijHP0qhu8gcyuVML0avI6s6b4"
     }
   ],
   "warning": "TEST ONLY. These private keys are public. Never trust them anywhere."
