@@ -72,6 +72,8 @@ struct Build {
     challenge: Option<Vec<u8>>,
     flip_signature_bit: bool,
     extra_signature: bool,
+    /// Padding inside client data (browsers may add unknown fields).
+    client_pad: usize,
 }
 
 fn base_request() -> Value {
@@ -103,6 +105,7 @@ impl Build {
             challenge: None,
             flip_signature_bit: false,
             extra_signature: false,
+            client_pad: 0,
         }
     }
 
@@ -116,13 +119,21 @@ impl Build {
                     Sha256::digest(self.claims.to_string()).to_vec()
                 })
         });
-        let client_data = json!({
+        let mut cd = json!({
             "type": self.kind,
             "challenge": b64::encode(&challenge),
             "origin": self.origin,
             "crossOrigin": self.cross_origin
-        })
-        .to_string();
+        });
+        if self.client_pad > 0
+            && let Some(o) = cd.as_object_mut()
+        {
+            o.insert(
+                "other_keys_can_be_added_here".into(),
+                json!("x".repeat(self.client_pad)),
+            );
+        }
+        let client_data = cd.to_string();
         let mut auth_data = Sha256::digest(self.rp_id.as_bytes()).to_vec();
         auth_data.push(self.flags);
         auth_data.extend_from_slice(&[0, 0, 0, 0]);
@@ -704,6 +715,85 @@ fn run() -> Result<(), String> {
         Some("BAD_SIGNATURE"),
     );
 
+    // Exact size limits (the boundaries themselves).
+    let padded = |n: usize| json!({"type": "deploy", "params": {"pad": "x".repeat(n)}});
+    let base_len = canonical::canonical_bytes(&padded(0))
+        .map(|b| b.len())
+        .unwrap_or(0);
+    for (name, extra, err) in [
+        ("request_exactly_8192_bytes", 0usize, None),
+        ("request_8193_bytes", 1, Some("MALFORMED")),
+    ] {
+        let r = padded(8192 - base_len + extra);
+        let mut b = Build::new("medium");
+        b.claims = claims_for(&r, "medium", IAT, IAT + 60);
+        v.push_full(
+            name,
+            "Canonical request size limit is 8192 bytes.",
+            b.approval(&alice),
+            r,
+            "medium",
+            NOW,
+            &[],
+            err,
+        );
+    }
+    // Client data exactly 4096 bytes is fine; 4097 is refused.
+    for (name, target, err) in [
+        ("client_data_exactly_4096_bytes", 4096usize, None),
+        ("client_data_4097_bytes", 4097, Some("BAD_SIGNATURE")),
+    ] {
+        let mut b = Build::new("medium");
+        let size = |b: &Build| -> usize {
+            let a = b.assertion(&alice);
+            a.get("client_data_json")
+                .and_then(Value::as_str)
+                .and_then(b64::decode)
+                .map_or(0, |d| d.len())
+        };
+        b.client_pad = 1;
+        let first = size(&b);
+        b.client_pad = 1 + target.saturating_sub(first);
+        v.push(
+            name,
+            "Client data JSON size limit is 4096 bytes.",
+            b.approval(&alice),
+            err,
+        );
+    }
+    // Encoded approval exactly 16384 characters is fine; longer is refused.
+    for (name, target, err) in [
+        ("approval_exactly_16384_chars", 16384usize, None),
+        ("approval_16386_chars", 16386, Some("MALFORMED")),
+    ] {
+        // Request padding moves the size in small steps, client padding in big ones.
+        let mut found = None;
+        'search: for cpad in 1..3500 {
+            for rpad in 7000..7012 {
+                let r = padded(rpad);
+                let mut b = Build::new("medium");
+                b.claims = claims_for(&r, "medium", IAT, IAT + 60);
+                b.client_pad = cpad;
+                let a = b.approval(&alice);
+                if a.len() == target {
+                    found = Some((a, r));
+                    break 'search;
+                }
+            }
+        }
+        let (a, r) = found.ok_or("could not hit the exact approval size")?;
+        v.push_full(
+            name,
+            "Encoded approval size limit is 16384 characters.",
+            a,
+            r,
+            "medium",
+            NOW,
+            &[],
+            err,
+        );
+    }
+
     // REPLAYED.
     v.push_full(
         "replayed_id",
@@ -724,11 +814,16 @@ fn run() -> Result<(), String> {
     std::fs::create_dir_all(out.join("keys")).map_err(|e| e.to_string())?;
     let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n";
     std::fs::write(out.join("vectors.json"), text).map_err(|e| e.to_string())?;
+    let bob = TestKey::new("bob")?;
+    let rings = keyring_vectors(&alice, &bob, &mallory)?;
+    let rings_text = serde_json::to_string_pretty(&rings).map_err(|e| e.to_string())? + "\n";
+    std::fs::write(out.join("keyrings.json"), rings_text).map_err(|e| e.to_string())?;
     let keys = json!({
         "warning": "TEST ONLY. These private keys are public. Never trust them anywhere.",
         "keys": [
             {"name": alice.name, "private_scalar_b64": b64::encode(alice.secret), "card": alice.card()?},
-            {"name": mallory.name, "private_scalar_b64": b64::encode(mallory.secret), "card": mallory.card()?}
+            {"name": mallory.name, "private_scalar_b64": b64::encode(mallory.secret), "card": mallory.card()?},
+            {"name": bob.name, "private_scalar_b64": b64::encode(bob.secret), "card": bob.card()?}
         ]
     });
     let keys_text = serde_json::to_string_pretty(&keys).map_err(|e| e.to_string())? + "\n";
@@ -736,6 +831,90 @@ fn run() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     println!("wrote {} vectors to {}", v.list.len(), out.display());
     Ok(())
+}
+
+/// One signed key change: `request` approved at level high by `signer`.
+fn key_change(request: &Value, signer: &TestKey, n: u8, origin: &str, level: &str) -> String {
+    let aud = phygital_key_verify::history::keyring_aud(origin);
+    let claims = json!({
+        "v": "pka.1",
+        "id": b64::encode([n; 16]),
+        "aud": aud,
+        "request": request,
+        "request_hash": canonical::hash_b64(request).unwrap_or_default(),
+        "level": level,
+        "iat": IAT + i64::from(n) * 100,
+        "exp": IAT + i64::from(n) * 100 + 60,
+    });
+    let mut b = Build::new("high");
+    b.claims = claims;
+    b.approval(signer)
+}
+
+fn keyring_vectors(alice: &TestKey, bob: &TestKey, mallory: &TestKey) -> Result<Value, String> {
+    use phygital_key_verify::KeyCard;
+    use phygital_key_verify::history::{add_key_request, remove_key_request};
+    let card = |k: &TestKey| -> Result<KeyCard, String> {
+        serde_json::from_value(k.card()?).map_err(|e| e.to_string())
+    };
+    let (a, b, m) = (card(alice)?, card(bob)?, card(mallory)?);
+    let o = ORIGIN;
+    let a_self = key_change(&add_key_request(&a), alice, 1, o, "high");
+    let b_by_a = key_change(&add_key_request(&b), alice, 2, o, "high");
+    let a_out_by_b = key_change(&remove_key_request(&a), bob, 3, o, "high");
+    let m_by_m = key_change(&add_key_request(&m), mallory, 2, o, "high");
+    let a_by_b = key_change(&add_key_request(&a), bob, 1, o, "high");
+    let a_out_first = key_change(&remove_key_request(&a), alice, 1, o, "high");
+    let a_again = key_change(&add_key_request(&a), alice, 2, o, "high");
+    let m_out_by_a = key_change(&remove_key_request(&m), alice, 3, o, "high");
+    let a_out_by_a = key_change(&remove_key_request(&a), alice, 2, o, "high");
+    let b_medium = key_change(&add_key_request(&b), alice, 2, o, "medium");
+    let b_other_origin = key_change(
+        &add_key_request(&b),
+        alice,
+        2,
+        "https://other.example",
+        "high",
+    );
+    // Same signature, but the name inside the signed request was changed afterwards.
+    let tampered = {
+        let raw = b64::decode(&b_by_a).unwrap_or_default();
+        let text = String::from_utf8(raw)
+            .unwrap_or_default()
+            .replace("bob (TEST ONLY)", "bob (trusted!)");
+        b64::encode(text.as_bytes())
+    };
+    let ring = |keys: Vec<&KeyCard>, history: Vec<&String>| json!({"keys": keys, "origin": o, "history": history});
+    let fa = a.fingerprint();
+    let case = |name: &str, desc: &str, keyring: Value, root: &str, err: Option<&str>| {
+        json!({"name": name, "description": desc, "keyring": keyring, "root_fingerprint": root,
+               "expected": match err { None => json!({"ok": true}), Some(c) => json!({"ok": false, "error": c}) }})
+    };
+    Ok(json!({
+        "spec": "pka.1 key history",
+        "note": "Generated by crates/phygital-key-testgen. Keys are TEST ONLY.",
+        "vectors": [
+            case("valid_single_key", "The first key approved itself.", ring(vec![&a], vec![&a_self]), &fa, None),
+            case("valid_add_then_remove", "Alice adds Bob, Bob removes Alice.", ring(vec![&b], vec![&a_self, &b_by_a, &a_out_by_b]), &fa, None),
+            case("valid_two_keys", "Alice adds Bob.", ring(vec![&a, &b], vec![&a_self, &b_by_a]), &fa, None),
+            case("unsigned", "No history at all.", json!({"keys": [a]}), &fa, Some("UNSIGNED")),
+            case("wrong_root", "The pinned fingerprint is Bob's, the history starts with Alice.", ring(vec![&a], vec![&a_self]), &b.fingerprint(), Some("WRONG_ROOT")),
+            case("first_not_self_signed", "Alice's first entry was signed by Bob.", ring(vec![&a], vec![&a_by_b]), &fa, Some("BAD_ENTRY")),
+            case("extra_unsigned_key", "Mallory is listed but was never approved.", ring(vec![&a, &m], vec![&a_self]), &fa, Some("KEYS_DO_NOT_MATCH")),
+            case("added_by_untrusted_key", "Mallory approved her own addition.", ring(vec![&a, &m], vec![&a_self, &m_by_m]), &fa, Some("BAD_ENTRY")),
+            case("removed_key_still_listed", "Alice was removed but is still listed.", ring(vec![&a, &b], vec![&a_self, &b_by_a, &a_out_by_b]), &fa, Some("KEYS_DO_NOT_MATCH")),
+            case("tampered_entry", "A signed entry was edited afterwards.", ring(vec![&a, &b], vec![&a_self, &tampered]), &fa, Some("BAD_ENTRY")),
+            case("replayed_entry", "The same entry twice.", ring(vec![&a], vec![&a_self, &a_self]), &fa, Some("BAD_ENTRY")),
+            case("medium_level_change", "Key changes need level high.", ring(vec![&a, &b], vec![&a_self, &b_medium]), &fa, Some("BAD_ENTRY")),
+            case("change_from_other_gate", "Approved on another gate's page.", ring(vec![&a, &b], vec![&a_self, &b_other_origin]), &fa, Some("BAD_ENTRY")),
+            case("remove_before_add", "Out of order.", ring(vec![&b], vec![&a_self, &a_out_by_b, &b_by_a]), &fa, Some("BAD_ENTRY")),
+            case("swapped_key", "Same number of keys, but Mallory instead of Bob.", ring(vec![&a, &m], vec![&a_self, &b_by_a]), &fa, Some("KEYS_DO_NOT_MATCH")),
+            case("first_entry_is_a_removal", "A history must start by adding the root.", ring(vec![&a], vec![&a_out_first]), &fa, Some("WRONG_ROOT")),
+            case("key_added_twice", "The same key added again.", ring(vec![&a], vec![&a_self, &a_again]), &fa, Some("BAD_ENTRY")),
+            case("remove_unknown_key", "Removes a key that was never added.", ring(vec![&a, &b], vec![&a_self, &b_by_a, &m_out_by_a]), &fa, Some("BAD_ENTRY")),
+            case("remove_last_key", "The last key cannot be removed.", ring(vec![], vec![&a_self, &a_out_by_a]), &fa, Some("BAD_ENTRY")),
+        ]
+    }))
 }
 
 fn changed_request() -> Value {

@@ -7,7 +7,7 @@
 // Usage: PKA_BIN=path/to/phygital-key node run.mjs
 
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import http from "node:http";
@@ -86,7 +86,7 @@ try {
   const mcp = new Client({ name: "e2e-agent", version: "1.0.0" });
   await mcp.connect(new StreamableHTTPClientTransport(new URL(GATE + "/mcp")));
   const tools = (await mcp.listTools()).tools.map((t) => t.name).sort();
-  check("MCP lists exactly 3 tools", JSON.stringify(tools) === JSON.stringify(["cancel_approval", "get_approval", "request_approval"]), tools.join(","));
+  check("MCP lists exactly 4 tools, none can approve", JSON.stringify(tools) === JSON.stringify(["cancel_approval", "get_approval", "record_receipt", "request_approval"]), tools.join(","));
   const early = await tool(mcp, "request_approval", { request: { type: "deploy", params: deploy }, aud: DEMO, level: "high" });
   check("no key enrolled: request refused", early.isError && /enroll/.test(early.error));
   const noToken = await fetch(GATE + "/api/enroll/begin", { method: "POST", headers: { "Content-Type": "application/json", Origin: GATE }, body: JSON.stringify({ token: "guess", name: "x" }) });
@@ -106,8 +106,17 @@ try {
   check("token is removed from the address bar", !page.url().includes("token="));
   await page.fill("#name", "E2E laptop");
   await page.click("#enroll");
-  await page.waitForFunction(() => /Key added/.test(document.getElementById("note").textContent), null, { timeout: 15000 });
-  check("first key enrolled", true);
+  await page.waitForURL(/\/r\//, { timeout: 15000 });
+  const beforeConfirm = await (await fetch(GATE + "/api/status")).json();
+  check("first key is not trusted until it signs itself", beforeConfirm.keys.length === 0);
+  await page.locator("#actions").waitFor({ state: "visible" });
+  check("first-key page says confirm", (await page.locator("#title").innerText()).includes("Confirm your key"));
+  await page.click("#approve");
+  await page.waitForFunction(() => document.getElementById("title").textContent === "Approved", null, { timeout: 15000 });
+  const afterConfirm = await (await fetch(GATE + "/api/status")).json();
+  check("first key enrolled after signing itself", afterConfirm.keys.length === 1 && afterConfirm.history_ok === true);
+  const rootFp = afterConfirm.root_fingerprint;
+  check("root fingerprint shown", typeof rootFp === "string" && rootFp.length === 43);
   const reuse = await fetch(GATE + "/api/enroll/begin", { method: "POST", headers: { "Content-Type": "application/json", Origin: GATE }, body: JSON.stringify({ token: link.split("token=")[1], name: "again" }) });
   check("enrollment link works only once", reuse.status === 403);
 
@@ -125,6 +134,27 @@ try {
   check("approved_by names the key", got.approved_by === "E2E laptop");
   const ok = await demo("deploy", deploy, got.approval);
   check("service acts with a valid approval", ok.status === 200 && ok.body.ok === true, JSON.stringify(ok.body));
+  // Receipts: the service signs what it did; the agent passes it back.
+  check("service returns a signed receipt", typeof ok.body.receipt === "string" && ok.body.receipt.split(".").length === 3);
+  const rec = await tool(mcp, "record_receipt", { id: req.id, receipt: ok.body.receipt });
+  check("gate records the receipt for this approval", rec.service_reported === "success", JSON.stringify(rec));
+  const recAgain = await tool(mcp, "record_receipt", { id: req.id, receipt: ok.body.receipt });
+  check("a receipt is recorded only once", recAgain.isError);
+  const svc = await (await fetch(DEMO + "/.well-known/phygital-key-service.json")).json();
+  let receiptOk = false;
+  try {
+    const out = execFileSync(BIN, ["receipt-check", "--receipt", ok.body.receipt, "--key", svc.receipt_public_key, "--iss", DEMO, "--approval", got.approval]).toString();
+    receiptOk = JSON.parse(out).ok === true && JSON.parse(out).status === "success";
+  } catch { receiptOk = false; }
+  check("receipt signature checks out with the service's key", receiptOk);
+  let receiptWrong = false;
+  try {
+    execFileSync(BIN, ["receipt-check", "--receipt", ok.body.receipt, "--key", svc.receipt_public_key, "--iss", DEMO, "--approval", got.approval + "x"], { stdio: ["ignore", "pipe", "ignore"] });
+  } catch (e) { receiptWrong = e.status === 1; }
+  check("receipt for another approval is refused", receiptWrong);
+  await page.goto(req.approve_url);
+  await page.waitForFunction(() => /service reported: done/.test(document.getElementById("note").textContent), null, { timeout: 5000 }).catch(() => {});
+  check("approval page shows the service reported done", /service reported: done/.test(await page.locator("#note").innerText()));
   const replay = await demo("deploy", deploy, got.approval);
   check("replay is refused", replay.status === 403 && replay.body.error === "REPLAYED");
 
@@ -200,7 +230,7 @@ try {
   check("look-alike KELVIN SIGN payee refused at the gate (not NFC)", kelvin.isError && /NFC/.test(kelvin.error));
   const spaced = await tool(mcp, "request_approval", { request: { type: "deploy", params: deploy }, aud: "https://pay.example.com\u202E", level: "high" });
   check("audience with invisible characters refused", spaced.isError);
-  const reserved = await tool(mcp, "request_approval", { request: { type: "add_key", params: { name: "x" } }, aud: "phygital-key:keyring", level: "high" });
+  const reserved = await tool(mcp, "request_approval", { request: { type: "add_key", params: { name: "x" } }, aud: `phygital-key:keyring:${GATE}`, level: "high" });
   check("agent cannot use the gate's own audience", reserved.isError && /reserved/.test(reserved.error));
   const deepParams = { a: { b: { c: { d: { e: { f: { g: { h: { i: { j: { k: { l: { m: 1 } } } } } } } } } } } } };
   const deep = await tool(mcp, "request_approval", { request: { type: "deploy", params: deepParams }, aud: DEMO, level: "high" });
@@ -244,9 +274,35 @@ try {
   await page.waitForFunction(() => document.getElementById("title").textContent === "Approved", null, { timeout: 15000 })
     .catch(async (e) => { throw new Error("add-key approval: " + (await page.locator("#note").innerText()) + " / " + e.message); });
   const afterApproval = await (await fetch(GATE + "/api/status")).json();
-  check("second key trusted after the first key approved it", afterApproval.keys.length === 2);
+  check("second key trusted after the first key approved it", afterApproval.keys.length === 2 && afterApproval.history_ok === true);
+  check("signed key list checks out from the command line",
+    execFileSync(BIN, args(["keys", "--check", rootFp])).toString().startsWith("keyring ok: 2 keys"));
+  const ringFile = join(home, "keyring.json");
+  const ringDoc = JSON.parse(readFileSync(ringFile, "utf8"));
+  const forgedRing = { ...ringDoc, keys: [...ringDoc.keys, { ...ringDoc.keys[0], credential_id: "Zm9yZ2Vk", name: "sneaked in" }] };
+  const forgedPath = join(home, "forged-keyring.json");
+  writeFileSync(forgedPath, JSON.stringify(forgedRing));
+  let forgedRefused = false;
+  try { execFileSync(BIN, args(["keys", "--check", rootFp, "--file", forgedPath]), { stdio: ["ignore", "pipe", "ignore"] }); }
+  catch (e) { forgedRefused = e.status === 1 && /NOT ok/.test(e.stdout.toString()); }
+  check("a key slipped into the file without a signature is caught", forgedRefused);
+
+  // Remove the second key: needs approval by a trusted key.
+  await page.goto(GATE + "/");
+  await page.locator("button.link").first().waitFor({ state: "visible" });
+  await page.locator("li", { hasText: "E2E second key" }).locator("button.link").click();
+  await page.waitForURL(/\/r\//, { timeout: 15000 });
+  await page.locator("#actions").waitFor({ state: "visible" });
+  check("remove page says so", (await page.locator("#title").innerText()).includes("Remove this key"));
+  check("key is still trusted before approval", (await (await fetch(GATE + "/api/status")).json()).keys.length === 2);
+  await page.click("#approve");
+  await page.waitForFunction(() => document.getElementById("title").textContent === "Approved", null, { timeout: 15000 });
+  const afterRemove = await (await fetch(GATE + "/api/status")).json();
+  check("key removed after approval, history still checks out", afterRemove.keys.length === 1 && afterRemove.history_ok === true);
+  const onlyOne = await fetch(GATE + "/api/keys/remove", { method: "POST", headers: { "Content-Type": "application/json", Origin: GATE }, body: JSON.stringify({ credential_id: afterRemove.keys[0].credential_id }) });
+  check("the last key cannot be removed", onlyOne.status === 400);
   const wk = await (await fetch(GATE + "/.well-known/phygital-key.json")).json();
-  check("public key cards published at /.well-known", wk.keys.length === 2 && !JSON.stringify(wk).includes("private"));
+  check("public key cards and signed history published at /.well-known", wk.keys.length === 1 && wk.history.length === 3 && !JSON.stringify(wk).includes("private"));
   void authenticatorId;
 
   // The command-line verifier (for any language).
@@ -261,6 +317,11 @@ try {
     cliOk = JSON.parse(out).ok === true;
   } catch { cliOk = false; }
   check("CLI verify accepts a valid approval", cliOk);
+  let cliReplay = false;
+  try {
+    execFileSync(BIN, args(["verify", "--approval", a3, "--request", cliReq, "--aud", DEMO, "--level", "high"]), { stdio: ["ignore", "pipe", "ignore"] });
+  } catch (e) { cliReplay = e.status === 1 && JSON.parse(e.stdout.toString()).error === "REPLAYED"; }
+  check("CLI verify remembers used approvals (second use refused)", cliReplay);
   let cliRefused = false;
   try {
     execFileSync(BIN, args(["verify", "--approval", a3, "--request", cliReq.replace("2.4.1", "6.6.6"), "--aud", DEMO]), { stdio: ["ignore", "pipe", "ignore"] });

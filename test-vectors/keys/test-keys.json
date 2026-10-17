@@ -21,6 +21,17 @@
       },
       "name": "mallory",
       "private_scalar_b64": "xd27xq4dizuEFBGn_aS7r3s9VrCIYh_fm_Mbb3ql19o"
+    },
+    {
+      "card": {
+        "created": "2026-10-17",
+        "credential_id": "1FLautRX85-ro_1VvWjbuQ",
+        "name": "bob (TEST ONLY)",
+        "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjAztYFodVt_sxz_nC75LqZCRK-wN-hvqPvbwhnanpftOqwvRcGy6j1jNBNJWX6BsRH74xTdfdsmUV7DC48k0og",
+        "rp_id": "approve.example.com"
+      },
+      "name": "bob",
+      "private_scalar_b64": "TUWktdIkSbCrsBD-umtrw9eQqNyswZGzfdhM8we_IGo"
     }
   ],
   "warning": "TEST ONLY. These private keys are public. Never trust them anywhere."

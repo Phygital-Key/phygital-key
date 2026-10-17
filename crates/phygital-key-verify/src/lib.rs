@@ -13,7 +13,9 @@
 
 pub mod b64;
 pub mod canonical;
+pub mod history;
 mod model;
+pub mod receipt;
 pub mod strict;
 mod verify;
 pub mod webauthn;

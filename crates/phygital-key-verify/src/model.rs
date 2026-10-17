@@ -118,6 +118,13 @@ pub struct KeyCard {
 pub struct Keyring {
     /// Trusted key cards.
     pub keys: Vec<KeyCard>,
+    /// Approval page origin the key history was signed on (signed keyrings only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    /// Signed key history: one approval per added or removed key, oldest first.
+    /// The first entry is the first key approving itself. See [`crate::history`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<String>,
 }
 
 impl Keyring {
@@ -134,6 +141,41 @@ impl Keyring {
     /// Find a key by credential id.
     pub fn find(&self, credential_id: &str) -> Option<&KeyCard> {
         self.keys.iter().find(|k| k.credential_id == credential_id)
+    }
+
+    /// A keyring holding just these cards.
+    pub fn of(keys: Vec<KeyCard>) -> Keyring {
+        Keyring {
+            keys,
+            origin: None,
+            history: Vec::new(),
+        }
+    }
+}
+
+impl KeyCard {
+    /// base64url SHA-256 of the public key (SPKI DER). Short enough to read
+    /// out or print, and what people pin to trust a whole key history.
+    pub fn fingerprint(&self) -> String {
+        use sha2::Digest;
+        let der = crate::b64::decode(&self.public_key).unwrap_or_default();
+        crate::b64::encode(sha2::Sha256::digest(der))
+    }
+
+    /// The card as request params for `add_key`.
+    pub fn to_params(&self) -> Value {
+        serde_json::json!({
+            "credential_id": self.credential_id,
+            "public_key": self.public_key,
+            "rp_id": self.rp_id,
+            "name": self.name,
+            "created": self.created,
+        })
+    }
+
+    /// Read a card back from `add_key` params.
+    pub fn from_params(params: &Value) -> Option<KeyCard> {
+        serde_json::from_value(params.clone()).ok()
     }
 }
 

@@ -111,11 +111,19 @@ async fn guard(State(gate): State<Shared>, req: Request, next: Next) -> Response
 
 async fn status(State(gate): State<Shared>) -> Response {
     match gate.keyring() {
-        Ok(ring) => ok(json!({
-            "keys": ring.keys.iter().map(|k| json!({"name": k.name, "credential_id": k.credential_id, "created": k.created})).collect::<Vec<_>>(),
-            "rp_id": gate.settings.rp_id,
-            "origin": gate.settings.origin,
-        })),
+        Ok(ring) => {
+            let root = phygital_key_verify::history::root_fingerprint(&ring);
+            let signed = root
+                .as_deref()
+                .is_some_and(|fp| phygital_key_verify::history::verify_history(&ring, fp).is_ok());
+            ok(json!({
+                "keys": ring.keys.iter().map(|k| json!({"name": k.name, "credential_id": k.credential_id, "created": k.created, "fingerprint": k.fingerprint()})).collect::<Vec<_>>(),
+                "rp_id": gate.settings.rp_id,
+                "origin": gate.settings.origin,
+                "root_fingerprint": root,
+                "history_ok": signed,
+            }))
+        }
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
@@ -197,6 +205,18 @@ async fn enroll_finish(State(gate): State<Shared>, Json(b): Json<FinishBody>) ->
     }
 }
 
+#[derive(Deserialize)]
+struct RemoveBody {
+    credential_id: String,
+}
+
+async fn remove_key(State(gate): State<Shared>, Json(b): Json<RemoveBody>) -> Response {
+    match gate.remove_key(&b.credential_id) {
+        Ok(v) => ok(json!({"approve_url": v.approve_url})),
+        Err(e) => err(StatusCode::BAD_REQUEST, e),
+    }
+}
+
 async fn not_found(_h: HeaderMap) -> Response {
     err(StatusCode::NOT_FOUND, "not found")
 }
@@ -232,6 +252,7 @@ pub fn router(gate: Shared, extra: Option<Router>) -> Router {
         .route("/api/r/{id}/deny", post(deny))
         .route("/api/enroll/begin", post(enroll_begin))
         .route("/api/enroll/finish", post(enroll_finish))
+        .route("/api/keys/remove", post(remove_key))
         .fallback(not_found)
         .layer(DefaultBodyLimit::max(64 * 1024))
         .with_state(gate.clone());

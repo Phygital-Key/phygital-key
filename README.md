@@ -30,10 +30,19 @@ sequenceDiagram
 
 ## Try it in 2 minutes
 
-You need [Rust](https://rustup.rs) (or download a ready binary from [Releases](../../releases)).
+Install (pick one):
+
+| Where | Command |
+|---|---|
+| macOS, Linux (Homebrew) | `brew install s17sh70x2jfl031ag/tap/phygital-key` |
+| macOS, Linux (script) | `curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/main/install.sh \| sh` |
+| Windows (Scoop) | `scoop bucket add phygital-key https://github.com/s17sh70x2jfl031ag/phygital-key-mcp` then `scoop install phygital-key` |
+| Anywhere with Rust | `cargo install --locked --git https://github.com/s17sh70x2jfl031ag/phygital-key-mcp phygital-key` |
+| Manual | download from [Releases](../../releases) (each file has a `.sha256`) |
+
+The script checks the download's SHA-256 before installing and only writes `~/.local/bin/phygital-key`.
 
 ```bash
-cargo install --locked --git https://github.com/s17sh70x2jfl031ag/phygital-key-mcp phygital-key
 phygital-key demo
 ```
 
@@ -64,7 +73,7 @@ Claude Desktop (`claude_desktop_config.json`), and most other apps take the same
 
 Add your key once: `phygital-key enroll` prints a one-time link (valid 10 minutes).
 
-The agent gets three tools: `request_approval`, `get_approval`, `cancel_approval`. It can ask, wait and cancel. It can never approve.
+The agent gets four tools: `request_approval`, `get_approval`, `cancel_approval` and `record_receipt` (to pass back the service's signed "done"). It can ask, wait, cancel and report. It can never approve.
 
 ## Check approvals in your service
 
@@ -89,9 +98,15 @@ verifier.verify(&approval, &request, Level::High)?; // refuses on any doubt
 phygital-key verify --approval "$APPROVAL" --request '{"type":"deploy","params":{"service":"api","env":"production","version":"2.4.1"}}' --aud https://deploy.example.com --level high
 ```
 
-It prints `{"ok": true, ...}` and exits 0, or prints `{"ok": false, "error": "REQUEST_MISMATCH"}` and exits 1. (The command line cannot remember used approvals, so record each `id` yourself, or use the library.)
+It prints `{"ok": true, ...}` and exits 0, or prints `{"ok": false, "error": "REQUEST_MISMATCH"}` and exits 1. It remembers used approvals in a local file, so each works once.
 
 **Give services your public keys:** `phygital-key keys` prints them, and the gate serves them at `/.well-known/phygital-key.json`. They are public key cards only. Private keys never leave your devices.
+
+**Signed key list:** every key you add or remove is approved with a key you already trust, starting with your first key signing itself. Share your first key's fingerprint once (the home page shows it), and anyone can check your whole key list:
+
+```bash
+phygital-key keys --check <fingerprint> --file keyring.json
+```
 
 ## Levels
 
@@ -119,7 +134,7 @@ Run the gate where the AI agent cannot change its files (another machine, or ano
 | [`docs/spec.md`](docs/spec.md) | The open spec (PKA v0.1): format, checks, error codes |
 | [`crates/phygital-key-verify`](crates/phygital-key-verify) | The verifier library. Pure, offline, fail closed |
 | [`crates/phygital-key`](crates/phygital-key) | The gate: MCP server, approval page, enrollment, audit log, demo |
-| [`test-vectors/`](test-vectors) | 48 shared test cases every implementation must pass |
+| [`test-vectors/`](test-vectors) | 54 approval and 19 key-list test cases every implementation must pass |
 | [`tests/e2e/`](tests/e2e) | End-to-end and red-team tests: real browser, virtual passkey, real MCP client |
 | [`docs/threat-model.md`](docs/threat-model.md) | What it defends against, what it trusts, known limits |
 | [`docs/decisions.md`](docs/decisions.md) | Why each choice was made |

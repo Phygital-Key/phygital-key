@@ -23,3 +23,6 @@ Each entry: what we chose, and why. Newest last.
 19. **No token in `mcp` mode output, token used up at the first step** (from the security review). AI apps keep the server's stderr in logs an agent may read.
 20. **Claims stay fixed while valid.** A second "start" returns the same claims, so another program cannot swap them while the person is signing.
 21. **Keep SHA-256 and ES256.** SHA-256 has no known practical attack (128-bit collision strength), and every passkey, phone and security key signs with ES256, which uses SHA-256 inside the authenticator. A "stronger" hash (SHA-512, SHA-3) would add no real safety and would break support on common devices. Revisit when post-quantum signatures reach WebAuthn authenticators.
+22. **Signed key history instead of a signed file.** Each add or remove is a normal approval, kept in the keyring. One pinned fingerprint checks it all, rotation is just more entries, and no new signing format is needed.
+23. **The first key signs itself.** It proves the key works before it is trusted, and gives the history a root.
+24. **Fuzzing and mutation testing** (ideas from `ap2-evidence-pack`): coverage-guided fuzzing of the verifier, the parser and the key history, and `cargo-mutants` to prove each check is covered by a test.

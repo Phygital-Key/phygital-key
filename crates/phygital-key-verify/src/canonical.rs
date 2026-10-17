@@ -34,11 +34,10 @@ pub fn validate(value: &Value) -> Result<(), CanonError> {
     match value {
         Value::Null | Value::Bool(_) => Ok(()),
         Value::Number(n) => {
-            let ok = match (n.as_i64(), n.as_u64()) {
-                (Some(i), _) => (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&i),
-                (None, Some(u)) => u <= MAX_SAFE_INTEGER as u64,
-                _ => false,
-            };
+            // Every safe integer fits in i64; anything else (floats, huge u64) is refused.
+            let ok = n
+                .as_i64()
+                .is_some_and(|i| (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&i));
             if ok {
                 Ok(())
             } else {

@@ -104,3 +104,34 @@ fn a_valid_approval_works_once() -> Result<(), String> {
     );
     Ok(())
 }
+
+const KEYRINGS: &str = include_str!("../../../test-vectors/keyrings.json");
+
+#[test]
+fn every_keyring_vector_passes() -> Result<(), String> {
+    let doc: Value = serde_json::from_str(KEYRINGS).map_err(|e| e.to_string())?;
+    let mut failures = Vec::new();
+    for v in doc["vectors"].as_array().ok_or("no vectors")? {
+        let ring: Keyring =
+            serde_json::from_value(v["keyring"].clone()).map_err(|e| e.to_string())?;
+        let got = phygital_key_verify::history::verify_history(
+            &ring,
+            v["root_fingerprint"].as_str().unwrap_or(""),
+        );
+        let want = v["expected"]["error"].as_str();
+        let pass = match &got {
+            Ok(()) => want.is_none(),
+            Err(e) => want == Some(e.code()),
+        };
+        if !pass {
+            failures.push(format!(
+                "{}: want {:?}, got {:?}",
+                v["name"],
+                want.unwrap_or("ok"),
+                got
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}

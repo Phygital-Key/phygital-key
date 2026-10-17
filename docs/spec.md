@@ -96,12 +96,23 @@ Two clocks, so people are not rushed:
   ```
 
 - **Enrollment links** are made by the person in their own terminal (`phygital-key enroll`). The gate never prints a token in `mcp` mode, where its output goes to the AI app's logs. The token travels in the link's `#fragment`, which browsers never send to servers. It is used up when the person starts enrolling and the session lasts at most 10 minutes.
-- **First key** is trusted directly. **Every later key** creates an `add_key` request at level `high` that an already-trusted key must approve. A new key can never approve itself.
+- **Every key change is an approval.** Adding a key is a request `{"type": "add_key", "params": <key card>}`; removing one is `{"type": "remove_key", "params": {"credential_id", "name"}}`. Both are level `high`, with audience `phygital-key:keyring:<origin>`, so a change approved on one gate never counts on another.
+  - The **first key** signs its own `add_key` (it proves it works, and starts the history).
+  - Every **later change** must be signed by a key that is trusted at that point. A new key can never approve itself. The last key cannot be removed.
+- **Signed key history.** The keyring keeps every key-change approval, oldest first, in `history`, plus the `origin` they were signed on:
+
+  ```json
+  { "keys": [ ...key cards ], "origin": "https://approve.example.com", "history": [ "<approval>", "<approval>" ] }
+  ```
+
+  **Checking a keyring** (`verify_history(keyring, root_fingerprint)`): the first entry MUST be `add_key` of the key whose fingerprint (base64url SHA-256 of its SPKI) is pinned, signed by itself; each later entry MUST be a valid `add_key` or `remove_key` approval signed by a key trusted at that point (every verifier check except expiry, which is checked as of the entry's own `iat`); no entry may appear twice; and replaying the history MUST give exactly the listed keys. Anything else is refused (`UNSIGNED`, `WRONG_ROOT`, `BAD_ENTRY`, `KEYS_DO_NOT_MATCH`). Test vectors: `test-vectors/keyrings.json`.
+
+  So a keyring fetched from anywhere can be trusted with one short fingerprint, learned once (in person, on a call, on a business card). Whoever controls the website or the file cannot add a key without a signature from a key already trusted.
 - **Keyring:** a verifier keeps the key cards it trusts: `{"keys": [ ...key cards ]}`. The verifier only reads the keyring it is given. It never fetches anything.
 - **Sharing keys:**
   - Inside one team or system: copy the keyring file, or run `phygital-key keys`.
-  - Between parties: a party publishes its key cards at `https://<domain>/.well-known/phygital-key.json`. The receiving app (not the verifier) fetches it over HTTPS and stores it as a keyring. The domain is the proof of who owns the keys.
-- **Lost or retired key:** remove its card from the keyring. People SHOULD enroll two keys so one loss does not lock them out.
+  - Between parties: a party publishes its keyring (cards plus signed history) at `https://<domain>/.well-known/phygital-key.json`. The receiving app (not the verifier) fetches it over HTTPS, checks the history against the pinned root fingerprint, and only then stores it. Refetching picks up added and removed keys safely.
+- **Lost or retired key:** remove it with a `remove_key` approval from another trusted key. People SHOULD enroll two keys so one loss does not lock them out. If every key is lost, start a new keyring with a new root fingerprint.
 - **Synced passkeys:** `signCount` is not reliable, so it is never used. The single-use `id` stops replays.
 
 ## 6. Flow
@@ -132,6 +143,18 @@ The first failing check returns its code.
 **Error codes:** `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `BAD_SIGNATURE`, `UNTRUSTED_KEY`, `ASSURANCE_TOO_LOW`, `REPLAYED`, and `DENIED` (returned by relays when the person says no; never by `verify`).
 
 **API:** `verify(approval, expected{aud, request, level}, keyring, seen_store, config{origins, rp_ids}, now) -> ok | error(code)`. The verifier is pure: no network, no clock reads, no global state except `seen_store`.
+
+## 7b. Receipts
+
+After acting, a verifier MAY answer with a **receipt**: a compact JWS signed with the verifier's own ES256 key (a service is not a person, so a normal key is fine), header exactly `{"alg":"ES256","typ":"pka-receipt+jwt"}`, payload:
+
+```json
+{ "v": "pka.receipt.1", "iss": "<verifier aud>", "approval_id": "<claims.id>",
+  "reference": "<base64url SHA-256 of the exact approval string>",
+  "request_hash": "<claims.request_hash>", "status": "success", "iat": 1760700005 }
+```
+
+`status` is `success` or `error` (then `error` holds a short code). Unknown fields are refused. Checking a receipt (`receipt::verify`) needs the service's public key, its `iss`, and the approval it is about. Like AP2 receipts, it points at the approval by hash. A service publishes its receipt key at `/.well-known/phygital-key-service.json` (`{"iss", "receipt_public_key"}`). The gate can record a receipt the agent passes back (`record_receipt`), so the person sees "the service reported: done" on the approval page; the gate checks the receipt is about that approval, and anyone holding the service key can check the signature (`phygital-key receipt-check`).
 
 ## 8. Levels
 
@@ -166,7 +189,7 @@ A security key without a PIN can only approve `medium`.
 ## 11. Open questions
 
 1. Small schemas and human-readable templates for common types: `deploy`, `payment`, `delete`, `send_email`, `sign_document`, `login`. Unknown types show the raw canonical fields (as v0.1 does for all types).
-2. Whether the `.well-known` file itself should be signed, and how to rotate it.
+2. Whether to also publish the root fingerprint through DNS or `did:web`, so it can be learned without meeting.
 3. The approval is a bearer token for up to 60 s, bound to request and audience. Fine for v0.1; binding it to the requester's key (`cnf`) is v0.2.
 
 ## 12. AP2 alignment
@@ -181,13 +204,13 @@ A security key without a PIN can only approve `medium`.
 
 ## 13. Tests
 
-- **Shared vectors** (`test-vectors/`): 48 cases, every error code, every edge (exactly at `exp`, 30 s and 31 s clock drift, 300 s and 301 s life, NFD input, KELVIN SIGN payee, key order, floats, duplicate keys, deep nesting, lone surrogates, look-alike letters, flipped signature bit, wrong origin, wrong RP ID, wrong type, wrong challenge, cross-origin frame, signature over other claims, untrusted key, missing presence, missing verification, replay, prompt-injection text).
+- **Shared vectors** (`test-vectors/`): 54 approval cases and 19 key-history cases, every error code, every edge (exact size limits, exactly at `exp`, 30 s and 31 s clock drift, 300 s and 301 s life, NFD input, KELVIN SIGN payee, key order, floats, duplicate keys, deep nesting, lone surrogates, look-alike letters, flipped signature bit, wrong origin, wrong RP ID, wrong type, wrong challenge, cross-origin frame, signature over other claims, untrusted key, missing presence, missing verification, replay, prompt-injection text).
 - **Property tests:** random text and bytes never verify; changing any bit of a valid approval is refused; any other request is refused; canonical form is idempotent.
 - **End-to-end and red team** (`tests/e2e/`): real browser with a virtual passkey, real MCP client, demo service, and every attack an agent can try through the gate and the page.
 
 ## 14. Out of scope for v0.1
 
-Standing approvals, 2 of 3 approvers (format ready), delegation between agents, private mode, payment settlement, signed receipts from the verifier, adapters other than MCP.
+Standing approvals, 2 of 3 approvers (format ready), delegation between agents, private mode, payment settlement, adapters other than MCP.
 
 ## 15. v0.1 deliverables
 

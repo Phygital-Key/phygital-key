@@ -7,6 +7,7 @@
 mod audit;
 mod demo;
 mod mcp;
+mod seen;
 mod state;
 mod util;
 mod web;
@@ -15,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
-use phygital_key_verify::{Config, Expected, Keyring, Level, MemorySeenStore, verify};
+use phygital_key_verify::{Config, Expected, Keyring, Level, verify};
 use rmcp::ServiceExt;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
@@ -62,7 +63,14 @@ enum Command {
     /// Print a one-time link to add a passkey or hardware key (valid 10 minutes).
     Enroll,
     /// Print the trusted public key cards (give this to services that verify).
-    Keys,
+    Keys {
+        /// Check a keyring's signed history against the first key's fingerprint.
+        #[arg(long, value_name = "FINGERPRINT")]
+        check: Option<String>,
+        /// Keyring file to print or check [default: <home>/keyring.json].
+        #[arg(long)]
+        file: Option<PathBuf>,
+    },
     /// Check an approval from the command line (any language can call this).
     Verify {
         /// The approval string (or @file).
@@ -80,6 +88,24 @@ enum Command {
         /// Keyring file [default: <home>/keyring.json].
         #[arg(long)]
         keyring: Option<PathBuf>,
+        /// File that remembers used approvals, so each works once [default: <home>/seen-ids.jsonl].
+        #[arg(long)]
+        seen_file: Option<PathBuf>,
+    },
+    /// Check a service's signed receipt for an approval.
+    ReceiptCheck {
+        /// The receipt (or @file).
+        #[arg(long)]
+        receipt: String,
+        /// The service's receipt public key, SPKI DER base64url (or @file).
+        #[arg(long)]
+        key: String,
+        /// The service's audience id (who should have signed).
+        #[arg(long)]
+        iss: String,
+        /// The approval the receipt is about (or @file).
+        #[arg(long)]
+        approval: String,
     },
     /// Check that the audit log has not been changed.
     AuditCheck,
@@ -198,13 +224,69 @@ async fn run(cli: Cli) -> Result<(), String> {
             );
             Ok(())
         }
-        Command::Keys => {
-            let gate = Gate::open(s)?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&gate.keyring()?).map_err(|e| e.to_string())?
-            );
-            Ok(())
+        Command::Keys { check, file } => {
+            let ring = match file {
+                Some(path) => Keyring::from_json(
+                    &std::fs::read_to_string(&path)
+                        .map_err(|e| format!("{}: {e}", path.display()))?,
+                )?,
+                None => Gate::open(s)?.keyring()?,
+            };
+            match check {
+                Some(fp) => match phygital_key_verify::history::verify_history(&ring, &fp) {
+                    Ok(()) => {
+                        println!(
+                            "keyring ok: {} keys, every change signed, starting from {fp}",
+                            ring.keys.len()
+                        );
+                        Ok(())
+                    }
+                    Err(e) => {
+                        println!("keyring NOT ok: {e}");
+                        std::process::exit(1);
+                    }
+                },
+                None => {
+                    if let Some(fp) = phygital_key_verify::history::root_fingerprint(&ring) {
+                        eprintln!("first key fingerprint (share this so others can check): {fp}");
+                    }
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&ring).map_err(|e| e.to_string())?
+                    );
+                    Ok(())
+                }
+            }
+        }
+        Command::ReceiptCheck {
+            receipt,
+            key,
+            iss,
+            approval,
+        } => {
+            let key = phygital_key_verify::webauthn::parse_public_key(&read_arg(&key)?)
+                .ok_or("--key is not a P-256 public key (SPKI DER, base64url)")?;
+            match phygital_key_verify::receipt::verify(
+                &read_arg(&receipt)?,
+                &key,
+                &iss,
+                &read_arg(&approval)?,
+            ) {
+                Ok(r) => {
+                    println!(
+                        "{}",
+                        serde_json::json!({"ok": true, "status": r.status, "error": r.error, "iat": r.iat})
+                    );
+                    Ok(())
+                }
+                Err(e) => {
+                    println!(
+                        "{}",
+                        serde_json::json!({"ok": false, "error": e.to_string()})
+                    );
+                    std::process::exit(1);
+                }
+            }
         }
         Command::AuditCheck => {
             let (n, last) = audit::verify_file(&s.home.join("audit.log"))?;
@@ -217,6 +299,7 @@ async fn run(cli: Cli) -> Result<(), String> {
             aud,
             level,
             keyring,
+            seen_file,
         } => {
             let approval = read_arg(&approval)?;
             let request: serde_json::Value = serde_json::from_str(&read_arg(&request)?)
@@ -231,17 +314,11 @@ async fn run(cli: Cli) -> Result<(), String> {
                 request: &request,
                 level,
             };
-            eprintln!(
-                "note: the command line cannot remember used approvals. Record the id yourself to stop replays."
+            util::private_dir(&s.home)?;
+            let seen = seen::FileSeenStore::new(
+                seen_file.unwrap_or_else(|| s.home.join("seen-ids.jsonl")),
             );
-            match verify(
-                &approval,
-                &expected,
-                &ring,
-                &MemorySeenStore::new(),
-                &s.config(),
-                util::now(),
-            ) {
+            match verify(&approval, &expected, &ring, &seen, &s.config(), util::now()) {
                 Ok(ok) => {
                     println!(
                         "{}",
@@ -300,7 +377,7 @@ async fn run(cli: Cli) -> Result<(), String> {
                     origins: vec![s.origin.clone()],
                     rp_ids: vec![s.rp_id.clone()],
                 },
-            );
+            )?;
             let listener = tokio::net::TcpListener::bind(format!("{}:{demo_port}", s.bind))
                 .await
                 .map_err(|e| format!("demo service port {demo_port}: {e}"))?;

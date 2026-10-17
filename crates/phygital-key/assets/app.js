@@ -101,8 +101,11 @@ async function approvePage() {
     return;
   }
   const request = JSON.parse(view.request_jcs);
-  $("type").textContent = view.adds_key ? "Add a new key to your trusted keys" : request.type;
-  $("aud").textContent = view.adds_key ? "This approval gate (your list of trusted keys)" : view.aud;
+  $("type").textContent = view.first_key ? "Trust this key (your first key)"
+    : view.adds_key ? "Add a new key to your trusted keys"
+    : view.removes_key ? "Remove a key from your trusted keys"
+    : request.type;
+  $("aud").textContent = (view.adds_key || view.removes_key) ? "This approval gate (your list of trusted keys)" : view.aud;
   $("level").textContent = view.level === "high" ? "Fingerprint, face or PIN" : "A touch on your key";
   $("raw").textContent = view.request_jcs;
   $("hash").textContent = view.request_hash;
@@ -132,11 +135,23 @@ async function approvePage() {
     const [t, l] = done[view.status] || ["Closed", ""];
     $("title").textContent = t;
     $("lead").textContent = l;
+    if (view.service_reported) {
+      note(view.service_reported === "success"
+        ? "The service reported: done."
+        : "The service reported: it did not complete.", view.service_reported === "success" ? "good" : "bad");
+    }
     return;
   }
-  $("title").textContent = view.adds_key ? "Approve a new key?" : "Approve this request?";
-  $("lead").textContent = view.adds_key
+  $("title").textContent = view.first_key ? "Confirm your key"
+    : view.adds_key ? "Approve a new key?"
+    : view.removes_key ? "Remove this key?"
+    : "Approve this request?";
+  $("lead").textContent = view.first_key
+    ? "Sign once with the key you just made. This proves it works and starts your signed key list."
+    : view.adds_key
     ? "Someone is adding a new key. Approve only if you are adding it yourself, right now."
+    : view.removes_key
+    ? "This key will no longer be able to approve anything."
     : "Check every detail. Your key will sign exactly what is shown here.";
   countdown($("deadline"), view.deadline, () => { $("actions").hidden = true; note("Time is up. The answer is no.", "bad"); });
   if (!webauthnSupported()) {
@@ -239,12 +254,10 @@ async function enrollPage() {
         public_key: b64u(r.getPublicKey()),
         client_data_json: b64u(r.clientDataJSON),
       });
-      if (result.status === "added") {
-        note("Key added: " + result.card.name + ". You can close this page.", "good");
-      } else {
-        note("Almost done: approve this new key with a key you already trust.", "good");
-        location.href = result.approve_url;
-      }
+      note(result.first_key
+        ? "Almost done: confirm with the key you just made."
+        : "Almost done: approve this new key with a key you already trust.", "good");
+      location.href = result.approve_url;
     } catch (e) {
       note(friendly(e), "bad");
       $("enroll").disabled = false;
@@ -264,9 +277,31 @@ async function indexPage() {
     }
     s.keys.forEach((k) => {
       const li = document.createElement("li");
-      li.textContent = k.name + " · added " + k.created;
+      const label = document.createElement("span");
+      label.textContent = k.name + " · added " + k.created;
+      li.append(label);
+      if (s.keys.length > 1) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "link";
+        btn.textContent = "Remove";
+        btn.onclick = async () => {
+          try {
+            const r = await api("/api/keys/remove", { credential_id: k.credential_id });
+            location.href = r.approve_url;
+          } catch (e) { note(friendly(e), "bad"); }
+        };
+        li.append(" ", btn);
+      }
       list.append(li);
     });
+    if (s.root_fingerprint) {
+      $("root").textContent = s.root_fingerprint;
+      $("signed").textContent = s.history_ok
+        ? "Every key change is signed. Share this fingerprint so others can check your key list."
+        : "Warning: the key history does not check out.";
+      $("rootbox").hidden = false;
+    }
   } catch (e) { note(friendly(e), "bad"); }
 }
 

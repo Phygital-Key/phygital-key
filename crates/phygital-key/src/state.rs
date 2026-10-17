@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use phygital_key_verify::history;
+use phygital_key_verify::receipt;
 use phygital_key_verify::webauthn::{self, AssertionCheck};
 use phygital_key_verify::{
     Assertion, Config, Expected, KeyCard, Keyring, Level, MAX_REQUEST_BYTES, VERSION, b64,
@@ -29,8 +31,6 @@ pub const ENROLL_SECS: i64 = 600;
 const MAX_PENDING: usize = 50;
 /// Most new requests per minute.
 const MAX_PER_MINUTE: usize = 30;
-/// Audience the gate uses for its own requests (adding a key).
-pub const GATE_AUD: &str = "phygital-key:keyring";
 
 /// Where and how the gate runs.
 #[derive(Debug, Clone)]
@@ -66,6 +66,10 @@ impl Settings {
     fn audit_path(&self) -> PathBuf {
         self.home.join("audit.log")
     }
+    /// The audience of this gate's own key changes.
+    pub fn keyring_aud(&self) -> String {
+        history::keyring_aud(&self.origin)
+    }
     /// Link to one request's approval page.
     pub fn approve_url(&self, id: &str) -> String {
         format!("{}/r/{id}", self.origin)
@@ -77,8 +81,10 @@ impl Settings {
 enum Kind {
     /// An outside party will act on the yes.
     Action,
-    /// Adding a new key to the keyring, approved by an existing key.
+    /// Adding a key. The first key approves itself; later keys need a trusted key.
     AddKey(KeyCard),
+    /// Removing a key, approved by a trusted key.
+    RemoveKey(KeyCard),
 }
 
 /// Where a request stands.
@@ -106,6 +112,7 @@ struct Request {
     aud: String,
     level: Level,
     kind: Kind,
+    first_key: bool,
     created: i64,
     deadline: i64,
     status: Status,
@@ -113,6 +120,7 @@ struct Request {
     approval: Option<String>,
     approved_by: Option<String>,
     exp: Option<i64>,
+    receipt: Option<String>,
 }
 
 impl Request {
@@ -152,6 +160,14 @@ pub struct View {
     pub approved_by: Option<String>,
     /// True when this request adds a new key.
     pub adds_key: bool,
+    /// True when this is the very first key, approving itself.
+    pub first_key: bool,
+    /// True when this request removes a key.
+    pub removes_key: bool,
+    /// What the service reported after acting (`success` or `error`), if the
+    /// agent passed its receipt back. The gate checks the receipt is about this
+    /// approval; the signature is checked by whoever holds the service's key.
+    pub service_reported: Option<String>,
 }
 
 /// What the page needs to sign.
@@ -180,20 +196,14 @@ pub struct EnrollOptions {
     pub exclude: Vec<String>,
 }
 
-/// Result of finishing an enrollment.
+/// Result of creating a key: it is trusted only once it is approved.
+/// The first key approves itself; any later key needs a key already trusted.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-pub enum Enrolled {
-    /// First key: added right away.
-    Added {
-        /// The key card.
-        card: KeyCard,
-    },
-    /// Not the first key: an existing key must approve it.
-    NeedsApproval {
-        /// Where to approve.
-        approve_url: String,
-    },
+pub struct Enrolled {
+    /// Where to approve.
+    pub approve_url: String,
+    /// True for the very first key.
+    pub first_key: bool,
 }
 
 struct EnrollSession {
@@ -311,7 +321,7 @@ impl Gate {
                 "aud must be 1 to 256 visible ASCII characters naming who will act on the yes (a URL, domain or id)".into(),
             );
         }
-        if aud == GATE_AUD && !matches!(kind, Kind::AddKey(_)) {
+        if aud == self.settings.keyring_aud() && matches!(kind, Kind::Action) {
             return Err("this audience is reserved for the gate itself".into());
         }
         let request_hash =
@@ -319,7 +329,8 @@ impl Gate {
         let t = now();
         let id = util::new_id()?;
         let mut inner = self.lock()?;
-        if inner.keyring.keys.is_empty() {
+        let first_key = inner.keyring.keys.is_empty();
+        if first_key && matches!(kind, Kind::Action) {
             return Err("No key is enrolled yet. Ask the person to run `phygital-key enroll` and add their passkey first.".into());
         }
         inner.requests.retain(|_, r| t < r.deadline + 3600);
@@ -347,6 +358,7 @@ impl Gate {
             aud: aud.to_string(),
             level,
             kind,
+            first_key,
             created: t,
             deadline: t + PENDING_SECS,
             status: Status::Pending,
@@ -354,6 +366,7 @@ impl Gate {
             approval: None,
             approved_by: None,
             exp: None,
+            receipt: None,
         };
         inner.audit.append(
             "requested",
@@ -379,6 +392,13 @@ impl Gate {
             exp: r.exp,
             approved_by: r.approved_by.clone(),
             adds_key: matches!(r.kind, Kind::AddKey(_)),
+            first_key: matches!(r.kind, Kind::AddKey(_)) && r.first_key,
+            removes_key: matches!(r.kind, Kind::RemoveKey(_)),
+            service_reported: r
+                .receipt
+                .as_deref()
+                .and_then(receipt::peek)
+                .map(|x| x.status),
         }
     }
 
@@ -430,7 +450,7 @@ impl Gate {
     pub fn start(&self, id: &str) -> Result<Started, String> {
         let t = now();
         let mut inner = self.lock()?;
-        let allow: Vec<String> = inner
+        let mut allow: Vec<String> = inner
             .keyring
             .keys
             .iter()
@@ -439,6 +459,12 @@ impl Gate {
         let r = inner.requests.get_mut(id).ok_or("unknown request")?;
         if r.current_status(t) != Status::Pending {
             return Err("This request is no longer waiting.".into());
+        }
+        // The very first key signs its own addition: only it may sign.
+        if let Kind::AddKey(card) = &r.kind
+            && r.first_key
+        {
+            allow = vec![card.credential_id.clone()];
         }
         // Keep claims that are still valid, so nobody can swap them while the
         // person is signing. Only make new ones once the old ones ran out.
@@ -480,10 +506,23 @@ impl Gate {
     pub fn finish(&self, id: &str, assertion: Assertion) -> Result<View, String> {
         let t = now();
         let mut inner = self.lock()?;
-        let keyring = inner.keyring.clone();
+        let ring_len = inner.keyring.keys.len();
+        let mut keyring = inner.keyring.clone();
         let r = inner.requests.get_mut(id).ok_or("unknown request")?;
         if r.current_status(t) != Status::Pending {
             return Err("This request is no longer waiting.".into());
+        }
+        match &r.kind {
+            Kind::AddKey(card) if r.first_key => {
+                if ring_len != 0 {
+                    return Err("A first key was already added. Start again.".into());
+                }
+                keyring = Keyring::of(vec![card.clone()]);
+            }
+            Kind::RemoveKey(_) if ring_len <= 1 => {
+                return Err("You cannot remove your only key.".into());
+            }
+            _ => {}
         }
         let claims = r.claims.clone().ok_or("Press Approve first.")?;
         let obj = json!({"claims": claims, "signatures": [assertion]});
@@ -507,15 +546,65 @@ impl Gate {
         let kind = r.kind.clone();
         let entry = json!({"id": ok.id, "aud": r.aud, "level": ok.level.as_str(), "request_hash": ok.request_hash, "credential_id": ok.credential_id});
         let view = self.view_of(r, t);
+        let approval_text = r.approval.clone().unwrap_or_default();
+        let first_key = r.first_key;
         inner.audit.append("approved", entry, t)?;
-        if let Kind::AddKey(card) = kind
-            && inner.keyring.find(&card.credential_id).is_none()
-        {
-            inner.keyring.keys.push(card.clone());
-            let ring = inner.keyring.clone();
-            self.save_keyring(&ring)?;
-            inner.audit.append("key_added", json!({"credential_id": card.credential_id, "name": card.name, "approved_with": ok.credential_id}), t)?;
+        // Key changes are kept as a signed history, so anyone can check the keyring.
+        // Keyrings made before history existed (v0.1.0) stay unsigned.
+        let signed = first_key || !inner.keyring.history.is_empty();
+        match kind {
+            Kind::AddKey(card) if inner.keyring.find(&card.credential_id).is_none() => {
+                inner.keyring.keys.push(card.clone());
+                if signed {
+                    inner.keyring.origin = Some(self.settings.origin.clone());
+                    inner.keyring.history.push(approval_text);
+                }
+                let ring = inner.keyring.clone();
+                self.save_keyring(&ring)?;
+                inner.audit.append("key_added", json!({"credential_id": card.credential_id, "name": card.name, "approved_with": ok.credential_id}), t)?;
+            }
+            Kind::RemoveKey(card) => {
+                inner
+                    .keyring
+                    .keys
+                    .retain(|k| k.credential_id != card.credential_id);
+                if signed {
+                    inner.keyring.history.push(approval_text);
+                }
+                let ring = inner.keyring.clone();
+                self.save_keyring(&ring)?;
+                inner.audit.append("key_removed", json!({"credential_id": card.credential_id, "name": card.name, "approved_with": ok.credential_id}), t)?;
+            }
+            _ => {}
         }
+        drop(inner);
+        self.changed.notify_waiters();
+        Ok(view)
+    }
+
+    /// Keep the service's receipt for an approved request, if it is about it.
+    pub fn record_receipt(&self, id: &str, jws: &str) -> Result<View, String> {
+        let t = now();
+        let mut inner = self.lock()?;
+        let r = inner.requests.get_mut(id).ok_or("unknown request")?;
+        let approval = r
+            .approval
+            .clone()
+            .ok_or("This request was never approved.")?;
+        let rec = receipt::peek(jws).ok_or("not a receipt")?;
+        if rec.approval_id != r.id
+            || rec.reference != receipt::reference_of(&approval)
+            || rec.iss != r.aud
+        {
+            return Err("This receipt is about another approval or another service.".into());
+        }
+        if r.receipt.is_some() {
+            return Err("A receipt was already recorded.".into());
+        }
+        r.receipt = Some(jws.to_string());
+        let view = self.view_of(r, t);
+        let entry = json!({"id": rec.approval_id, "aud": rec.iss, "status": rec.status, "reference": rec.reference});
+        inner.audit.append("receipt", entry, t)?;
         drop(inner);
         self.changed.notify_waiters();
         Ok(view)
@@ -667,20 +756,40 @@ impl Gate {
             created: util::date(t),
         };
         inner.enroll = None;
-        if inner.keyring.keys.is_empty() {
-            inner.keyring.keys.push(card.clone());
-            let ring = inner.keyring.clone();
-            self.save_keyring(&ring)?;
-            inner.audit.append("key_added", json!({"credential_id": card.credential_id, "name": card.name, "approved_with": "first key"}), t)?;
-            return Ok(Enrolled::Added { card });
-        }
         drop(inner);
-        let pk_hash = b64::encode(Sha256::digest(b64::decode(public_key).unwrap_or_default()));
-        let request = json!({"type": "add_key", "params": {"name": card.name, "credential_id": card.credential_id, "public_key_sha256": pk_hash}});
-        let view = self.create_kind(request, GATE_AUD, Level::High, Kind::AddKey(card))?;
-        Ok(Enrolled::NeedsApproval {
+        let aud = self.settings.keyring_aud();
+        let view = self.create_kind(
+            history::add_key_request(&card),
+            &aud,
+            Level::High,
+            Kind::AddKey(card),
+        )?;
+        Ok(Enrolled {
             approve_url: view.approve_url,
+            first_key: view.first_key,
         })
+    }
+
+    /// Ask to remove a key. A trusted key must approve it (level high).
+    pub fn remove_key(&self, credential_id: &str) -> Result<View, String> {
+        let card = {
+            let inner = self.lock()?;
+            if inner.keyring.keys.len() <= 1 {
+                return Err("You cannot remove your only key. Add another key first.".into());
+            }
+            inner
+                .keyring
+                .find(credential_id)
+                .cloned()
+                .ok_or("unknown key")?
+        };
+        let aud = self.settings.keyring_aud();
+        self.create_kind(
+            history::remove_key_request(&card),
+            &aud,
+            Level::High,
+            Kind::RemoveKey(card),
+        )
     }
 }
 

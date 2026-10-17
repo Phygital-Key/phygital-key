@@ -32,7 +32,7 @@ jobs:
       - name: Test vectors are up to date and deterministic
         shell: bash
         run: |
-          cargo run -q -p phygital-key-testgen --locked -- test-vectors
+          cargo run -q --release -p phygital-key-testgen --locked -- test-vectors
           git diff --exit-code test-vectors
 
   e2e:
@@ -57,6 +57,24 @@ jobs:
         env:
           PKA_BIN: ${{ github.workspace }}/target/release/phygital-key
         run: node run.mjs
+
+  fuzz:
+    name: fuzz (60 s per target)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: nightly
+      - run: cargo install --locked cargo-fuzz
+      - name: Run
+        working-directory: fuzz
+        run: |
+          for t in verify strict_json keyring_history; do
+            cargo +nightly fuzz run "$t" -- -max_total_time=60
+          done
 
   supply-chain:
     name: licenses and advisories

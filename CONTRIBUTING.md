@@ -20,6 +20,12 @@ cargo run -p phygital-key-testgen -- test-vectors && git diff --exit-code test-v
 cargo deny check
 ```
 
+Fuzzing (needs nightly Rust and `cargo install cargo-fuzz`):
+
+```bash
+cd fuzz && cargo +nightly fuzz run verify -- -max_total_time=60
+```
+
 End-to-end tests (needs Node 20+):
 
 ```bash

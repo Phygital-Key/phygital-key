@@ -11,7 +11,12 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use phygital_key_verify::{Config, Expected, Keyring, Level, MemorySeenStore, verify};
+use p256::ecdsa::SigningKey;
+use p256::pkcs8::EncodePublicKey;
+use phygital_key_verify::receipt::{self, Receipt};
+use phygital_key_verify::{
+    Config, Expected, Keyring, Level, MemorySeenStore, b64, canonical, verify,
+};
 use serde_json::{Value, json};
 
 use crate::util::now;
@@ -25,17 +30,55 @@ pub struct Demo {
     /// Where approvals may come from.
     pub config: Config,
     seen: MemorySeenStore,
+    /// The service's own receipt key (a fresh one each run: it is a demo).
+    key: SigningKey,
 }
 
 impl Demo {
     /// A demo service for `aud`.
-    pub fn new(aud: String, keyring_path: PathBuf, config: Config) -> Arc<Demo> {
-        Arc::new(Demo {
+    pub fn new(aud: String, keyring_path: PathBuf, config: Config) -> Result<Arc<Demo>, String> {
+        let key =
+            SigningKey::from_slice(&crate::util::random::<32>()?).map_err(|e| e.to_string())?;
+        Ok(Arc::new(Demo {
             aud,
             keyring_path,
             config,
             seen: MemorySeenStore::new(),
-        })
+            key,
+        }))
+    }
+
+    /// The receipt key's public half (SPKI DER, base64url).
+    pub fn public_key(&self) -> String {
+        self.key
+            .verifying_key()
+            .to_public_key_der()
+            .map(|d| b64::encode(d.as_bytes()))
+            .unwrap_or_default()
+    }
+
+    fn receipt(
+        &self,
+        approval: &str,
+        request: &Value,
+        id: &str,
+        error: Option<&str>,
+    ) -> Option<String> {
+        let r = Receipt {
+            v: "pka.receipt.1".into(),
+            iss: self.aud.clone(),
+            approval_id: id.to_string(),
+            reference: receipt::reference_of(approval),
+            request_hash: canonical::hash_b64(request).unwrap_or_default(),
+            status: if error.is_some() {
+                "error".into()
+            } else {
+                "success".into()
+            },
+            error: error.map(String::from),
+            iat: now(),
+        };
+        receipt::sign(&r, &self.key).ok()
     }
 }
 
@@ -47,6 +90,10 @@ fn level_for(action: &str) -> Option<(Level, &'static str)> {
         "send_message" => Some((Level::Medium, "Sent")),
         _ => None,
     }
+}
+
+async fn service_key(State(d): State<Arc<Demo>>) -> Response {
+    Json(json!({"iss": d.aud, "receipt_public_key": d.public_key()})).into_response()
 }
 
 async fn info(State(d): State<Arc<Demo>>) -> Response {
@@ -96,6 +143,7 @@ async fn act(
             "request": request,
             "approval_id": ok.id,
             "approved_by": ok.approver,
+            "receipt": d.receipt(approval, &request, &ok.id, None),
         }))
         .into_response(),
         Err(code) => refuse(code.as_str(), StatusCode::FORBIDDEN),
@@ -106,6 +154,7 @@ async fn act(
 pub fn router(demo: Arc<Demo>) -> Router {
     Router::new()
         .route("/", get(info))
+        .route("/.well-known/phygital-key-service.json", get(service_key))
         .route("/{action}", post(act))
         .with_state(demo)
 }
