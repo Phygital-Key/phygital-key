@@ -2,15 +2,19 @@
 # CI check for the secure install (needs password-less sudo, as on CI runners).
 set -euo pipefail
 BUILT="$1"
-fail() { echo "FAIL: $*"; exit 1; }
+diag() {
+  sudo tail -n 40 /Library/Logs/PhygitalKey/gate.log 2>/dev/null || true
+  sudo journalctl -u phygital-key -n 40 --no-pager 2>/dev/null || true
+}
+fail() { echo "FAIL: $*"; diag; exit 1; }
 pass() { echo "PASS  $*"; }
 case "$(uname -s)" in
   Darwin) SVC=_phygitalkey; DATA="/Library/Application Support/PhygitalKey"; PREFIX=/Library/PhygitalKey ;;
-  Linux) SVC=phygitalkey; DATA=/var/lib/phygital-key; PREFIX=/opt/phygital-key ;;
+  Linux) SVC=phygitalkey; DATA=/var/lib/phygital-key; PREFIX=/usr/lib/phygital-key ;;
 esac
 # The release for this version does not exist yet in CI, so hand over a root-owned
 # copy, in a folder that is root-only on this machine.
-case "$(uname -s)" in Darwin) CI_DIR=/Library/pka-ci ;; *) CI_DIR=/opt/pka-ci ;; esac
+case "$(uname -s)" in Darwin) CI_DIR=/Library/pka-ci ;; *) CI_DIR=/usr/lib/pka-ci ;; esac
 sudo install -d -m 0755 -o root "$CI_DIR"
 sudo install -m 0755 -o root "$BUILT" "$CI_DIR/phygital-key"
 INSTALL=(sudo "$CI_DIR/phygital-key" install-service --binary "$CI_DIR/phygital-key")
@@ -36,7 +40,7 @@ if "${INSTALL[@]}" >/dev/null 2>&1; then fail "installed while another program h
 kill $HIJACK 2>/dev/null || true; wait $HIJACK 2>/dev/null || true
 sleep 1
 
-"${INSTALL[@]}"
+"${INSTALL[@]}" || fail "install did not succeed"
 curl -fsS http://localhost:7468/api/status >/dev/null && pass "gate answers"
 for p in $(sudo lsof -nP -iTCP:7468 -sTCP:LISTEN -t | sort -u); do
   [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] || fail "a listener is not the gate user"
@@ -50,9 +54,7 @@ ADMIN="$PREFIX/bin/phygital-key-admin"
 "$ADMIN" status | grep -q "only the gate" && pass "admin status confirms the listener"
 link=$("$ADMIN" enroll | grep -o 'http://localhost:7468/enroll#token=[A-Za-z0-9_-]*')
 [ -n "$link" ] && pass "admin helper makes an enrollment link"
-if sudo grep -q "token=" /Library/Logs/PhygitalKey/gate.log /var/log/phygital-key/gate.log 2>/dev/null; then fail "a secret is in the gate log"; else pass "no enrollment link or token in the gate log"; fi
-LOGDIR=$( [ "$(uname -s)" = Darwin ] && echo /Library/Logs/PhygitalKey || echo /var/log/phygital-key )
-[ "$(sudo stat -f %Su "$LOGDIR" 2>/dev/null || sudo stat -c %U "$LOGDIR")" = root ] && pass "log folder belongs to root"
+if "$ADMIN" logs 2>/dev/null | grep -q "token="; then fail "a secret is in the gate log"; else pass "no enrollment link or token in the gate log"; fi
 tok=$("$ADMIN" token | grep -o 'Bearer [A-Za-z0-9_-]*' | head -1 | cut -d' ' -f2)
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' http://localhost:7468/mcp -d '{}')
 [ "$code" = 401 ] && pass "MCP refuses calls without the token" || fail "MCP without token gave $code"

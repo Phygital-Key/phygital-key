@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
 # Later, use the locked copy it installs (add --release vX.Y.Z to update):
 #   sudo /Library/PhygitalKey/bin/phygital-key install-service [--release vX.Y.Z | --uninstall]   (macOS)
-#   sudo /opt/phygital-key/bin/phygital-key install-service [--release vX.Y.Z | --uninstall]      (Linux)
+#   sudo /usr/lib/phygital-key/bin/phygital-key install-service [--release vX.Y.Z | --uninstall]  (Linux)
 # Shortcut: `sudo phygital-key install-service` runs YOUR copy of the program as
 # administrator. Only use it if nothing else could have changed that file.
 #
@@ -50,9 +50,9 @@ case "$(uname -s)" in
     TRIPLE_OS=apple-darwin ;;
   Linux)
     OS=linux; SVC_USER=phygitalkey
-    PREFIX=/opt/phygital-key
+    PREFIX=/usr/lib/phygital-key
     DATA=/var/lib/phygital-key
-    LOGS=/var/log/phygital-key
+    LOGS=""
     UNIT=/etc/systemd/system/phygital-key.service
     TRIPLE_OS=unknown-linux-gnu ;;
   *) die "only macOS and Linux for now." ;;
@@ -100,7 +100,7 @@ if [ "$MODE" = uninstall ]; then
   rm -rf "$PREFIX"
   [ "$OS" = linux ] && systemctl daemon-reload || true
   if [ "$PURGE" = yes ]; then
-    rm -rf "$DATA" "$LOGS"
+    rm -rf "$DATA"; [ -n "$LOGS" ] && rm -rf "$LOGS"
     if [ "$OS" = mac ]; then
       dscl . -delete "/Users/$SVC_USER" 2>/dev/null || true
       dscl . -delete "/Groups/$SVC_USER" 2>/dev/null || true
@@ -162,9 +162,9 @@ fi
 install -d -m 0755 -o root "$PREFIX" "$PREFIX/bin"
 root_only "$PREFIX/bin" || die "$PREFIX/bin is not owned by root only. Refusing to continue."
 install -d -m 0700 -o "$SVC_USER" "$DATA"
-# The log folder belongs to root: launchd/systemd open the log as root, so the
-# gate user must not be able to swap it for a link to another file.
-install -d -m 0700 -o root "$LOGS"
+# macOS: launchd opens the log as the gate user, so the folder is the gate's own.
+# Linux: no log file at all; output goes to the system journal.
+[ -n "$LOGS" ] && install -d -m 0700 -o "$SVC_USER" "$LOGS"
 
 # 4. The program, swapped in at once (no moment without a gate binary).
 install -m 0755 -o root "$WORK/phygital-key" "$BIN.new"
@@ -194,7 +194,7 @@ case "\${1:-help}" in
   status)
     if listeners_ok; then echo "ok: only the gate ($SVC_USER) listens on port $PORT"; curl -fsS "http://localhost:$PORT/api/status"; echo
     else echo "WARNING: something other than the gate is listening on port $PORT, or the gate is not running. Do not approve anything until this is fixed."; exit 1; fi ;;
-  logs) sudo tail -n 50 "$LOGS/gate.log" ;;
+  logs) if [ -n "$LOGS" ]; then sudo tail -n 50 "$LOGS/gate.log"; else sudo journalctl -u phygital-key -n 50 --no-pager; fi ;;
   *) echo "usage: phygital-key-admin enroll | token | keys | audit-check | status | logs" ;;
 esac
 ADMINSCRIPT
@@ -273,9 +273,9 @@ SystemCallFilter=@system-service
 CapabilityBoundingSet=
 IPAddressDeny=any
 IPAddressAllow=localhost
-ReadWritePaths=$DATA $LOGS
-StandardOutput=append:$LOGS/gate.log
-StandardError=append:$LOGS/gate.log
+ReadWritePaths=$DATA
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -297,7 +297,7 @@ for _ in $(seq 1 150); do
   sleep 0.2
 done
 pids=$(listener_pids "$PORT" || true)
-[ -n "$pids" ] || refuse "the gate did not start. See: sudo tail $LOGS/gate.log"
+[ -n "$pids" ] || refuse "the gate did not start. See: $ADMIN logs"
 SVC_UID=$(id -u "$SVC_USER")
 for p in $pids; do
   u=$(ps -o uid= -p "$p" | tr -d ' ')

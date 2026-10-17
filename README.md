@@ -156,7 +156,7 @@ phygital-key-admin token       # the line to paste into your AI app
 phygital-key-admin status      # check it is the real gate answering
 ```
 
-From then on, **the AI, even acting as you, can't change the gate's program, read its data or write its keys.** Only your administrator password can. To update or remove it, use the locked copy: `sudo /Library/PhygitalKey/bin/phygital-key install-service [--uninstall [--purge]]` (on Linux: `/opt/phygital-key/bin/phygital-key`). If `phygital-key-admin` is not found, use its full path in that same folder. See [where to run it](docs/threat-model.md#where-to-run-it-important).
+From then on, **the AI, even acting as you, can't change the gate's program, read its data or write its keys.** Only your administrator password can. To update or remove it, use the locked copy: `sudo /Library/PhygitalKey/bin/phygital-key install-service [--uninstall [--purge]]` (on Linux: `/usr/lib/phygital-key/bin/phygital-key`). If `phygital-key-admin` is not found, use its full path in that same folder. See [where to run it](docs/threat-model.md#where-to-run-it-important).
 
 ## What is inside
 
