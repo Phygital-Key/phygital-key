@@ -45,9 +45,9 @@ h2 { font-size: 1rem; margin: 20px 0 8px; }
 .meta dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .params { width: 100%; border-collapse: collapse; }
 .params th, .params td { text-align: left; vertical-align: top; padding: 8px 6px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
-.params th { width: 38%; color: var(--muted); font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }
+.params th { width: 38%; color: var(--muted); font-weight: 500; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }
 .params td { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95rem; white-space: pre-wrap; }
-.params td.warn { background: var(--warn-bg); }
+.params tr.warn th, .params tr.warn td { background: var(--warn-bg); }
 details { margin-top: 16px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 10px; border-radius: 8px; font-size: 0.85rem; }
 code { overflow-wrap: anywhere; }

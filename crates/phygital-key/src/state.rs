@@ -197,6 +197,7 @@ pub enum Enrolled {
 }
 
 struct EnrollSession {
+    token_hash: [u8; 32],
     challenge: [u8; 32],
     user_id: [u8; 16],
     name: String,
@@ -217,6 +218,11 @@ pub struct Gate {
     pub settings: Settings,
     inner: Mutex<Inner>,
     changed: Notify,
+}
+
+/// Audiences are visible ASCII only: no spaces, no look-alikes, no invisible characters.
+pub fn aud_ok(aud: &str) -> bool {
+    !aud.is_empty() && aud.len() <= 256 && aud.bytes().all(|b| (0x21..=0x7e).contains(&b))
 }
 
 fn sanitize_name(name: &str) -> String {
@@ -283,18 +289,30 @@ impl Gate {
                 "request must be {\"type\": \"<lowercase name>\", \"params\": {...}}".into(),
             );
         }
-        let request = canonical::normalize(&request).map_err(|_| {
-            "request has no canonical form: use strings or integers, never floats".to_string()
+        canonical::validate(&request).map_err(|e| match e {
+            canonical::CanonError::NotNfc => {
+                "request text must be Unicode NFC (it is never rewritten, so look-alikes cannot sneak in)".to_string()
+            }
+            _ => "request has no canonical form: use strings or integers, never floats".to_string(),
         })?;
         let request_jcs = canonical::canonical_string(&request)
             .map_err(|_| "request: no canonical form".to_string())?;
         if request_jcs.len() > MAX_REQUEST_BYTES {
             return Err(format!("request is over {MAX_REQUEST_BYTES} bytes"));
         }
-        if aud.is_empty() || aud.len() > 256 || aud.chars().any(char::is_control) {
+        // Approval objects nest 3 levels above params; keep the whole object within the limit.
+        if phygital_key_verify::strict::depth(request_jcs.as_bytes())
+            > phygital_key_verify::strict::MAX_DEPTH - 3
+        {
+            return Err("request is nested too deeply".into());
+        }
+        if !aud_ok(aud) {
             return Err(
-                "aud must be 1 to 256 printable characters naming who will act on the yes".into(),
+                "aud must be 1 to 256 visible ASCII characters naming who will act on the yes (a URL, domain or id)".into(),
             );
+        }
+        if aud == GATE_AUD && !matches!(kind, Kind::AddKey(_)) {
+            return Err("this audience is reserved for the gate itself".into());
         }
         let request_hash =
             canonical::hash_b64(&request).map_err(|_| "request: no canonical form".to_string())?;
@@ -364,6 +382,17 @@ impl Gate {
         }
     }
 
+    /// Forget requests that ended more than an hour ago. Called on a timer.
+    pub fn prune(&self) {
+        let t = now();
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.requests.retain(|_, r| t < r.deadline + 3600);
+            if inner.enroll.as_ref().is_some_and(|e| t >= e.expires) {
+                inner.enroll = None;
+            }
+        }
+    }
+
     /// See a request.
     pub fn view(&self, id: &str) -> Result<View, String> {
         let inner = self.lock()?;
@@ -410,6 +439,22 @@ impl Gate {
         let r = inner.requests.get_mut(id).ok_or("unknown request")?;
         if r.current_status(t) != Status::Pending {
             return Err("This request is no longer waiting.".into());
+        }
+        // Keep claims that are still valid, so nobody can swap them while the
+        // person is signing. Only make new ones once the old ones ran out.
+        if let Some(old) = r.claims.as_ref()
+            && old
+                .get("exp")
+                .and_then(Value::as_i64)
+                .is_some_and(|e| e > t)
+        {
+            let claims_jcs = canonical::canonical_string(old)
+                .map_err(|_| "claims: no canonical form".to_string())?;
+            return Ok(Started {
+                claims_jcs,
+                rp_id: self.settings.rp_id.clone(),
+                allow,
+            });
         }
         let claims = json!({
             "v": VERSION,
@@ -526,18 +571,35 @@ impl Gate {
             && bool::from(saved.as_bytes().ct_eq(token.as_bytes()))
     }
 
-    /// Step 1 of adding a key.
+    fn session_ok(inner: &Inner, token: &str, t: i64) -> bool {
+        let h: [u8; 32] = Sha256::digest(token.as_bytes()).into();
+        inner
+            .enroll
+            .as_ref()
+            .is_some_and(|e| t < e.expires && bool::from(e.token_hash.ct_eq(&h)))
+    }
+
+    /// Step 1 of adding a key. The token file is used up here; the same link
+    /// can retry (for example after closing the key prompt) until it expires.
     pub fn enroll_begin(&self, token: &str, name: &str) -> Result<EnrollOptions, String> {
-        if !self.token_ok(token) {
+        let t = now();
+        let mut inner = self.lock()?;
+        let expires = if Self::session_ok(&inner, token, t) {
+            inner.enroll.as_ref().map_or(t, |e| e.expires)
+        } else if self.token_ok(token) {
+            std::fs::remove_file(self.settings.token_path())
+                .map_err(|e| format!("could not use up the enrollment token: {e}"))?;
+            t + ENROLL_SECS
+        } else {
             return Err("This enrollment link is not valid or has expired. Run `phygital-key enroll` for a new one.".into());
-        }
+        };
         let session = EnrollSession {
+            token_hash: Sha256::digest(token.as_bytes()).into(),
             challenge: util::random()?,
             user_id: util::random()?,
             name: sanitize_name(name),
-            expires: now() + ENROLL_SECS,
+            expires,
         };
-        let mut inner = self.lock()?;
         let opts = EnrollOptions {
             challenge: b64::encode(session.challenge),
             rp_id: self.settings.rp_id.clone(),
@@ -556,6 +618,9 @@ impl Gate {
 
     /// Step 2 of adding a key. The first key is added directly; any later key
     /// must be approved (level high) by a key that is already trusted.
+    ///
+    /// With attestation "none" the gate cannot prove the key lives in real
+    /// hardware, so the one-time link is what protects the first key.
     pub fn enroll_finish(
         &self,
         token: &str,
@@ -563,28 +628,27 @@ impl Gate {
         public_key: &str,
         client_data_json: &str,
     ) -> Result<Enrolled, String> {
-        if !self.token_ok(token) {
-            return Err("This enrollment link is not valid or has expired.".into());
-        }
         let t = now();
         let mut inner = self.lock()?;
-        let session = inner
-            .enroll
-            .take()
-            .ok_or("Start again: no enrollment in progress.")?;
-        if t >= session.expires {
-            return Err("Enrollment took too long. Start again.".into());
+        if !Self::session_ok(&inner, token, t) {
+            return Err("This enrollment link is not valid or has expired. Run `phygital-key enroll` for a new one.".into());
         }
+        let Some(session) = inner.enroll.as_ref() else {
+            return Err("Start again: no enrollment in progress.".into());
+        };
+        let (challenge, name) = (session.challenge, session.name.clone());
         let cd = b64::decode(client_data_json).ok_or("bad client data")?;
         let origins = vec![self.settings.origin.clone()];
         let want = AssertionCheck {
             kind: "webauthn.create",
-            challenge: &session.challenge,
+            challenge: &challenge,
             origins: &origins,
             rp_id: &self.settings.rp_id,
         };
         if !webauthn::check_client_data(&cd, &want) {
-            return Err("The passkey was not created for this page.".into());
+            return Err(
+                "The browser's response did not match this page. Start again from the link.".into(),
+            );
         }
         if webauthn::parse_public_key(public_key).is_none() {
             return Err("Only P-256 (ES256) keys are supported.".into());
@@ -595,15 +659,14 @@ impl Gate {
         if inner.keyring.find(credential_id).is_some() {
             return Err("This key is already enrolled.".into());
         }
-        let _ = session.user_id;
         let card = KeyCard {
             credential_id: credential_id.to_string(),
             public_key: public_key.to_string(),
             rp_id: self.settings.rp_id.clone(),
-            name: session.name.clone(),
+            name,
             created: util::date(t),
         };
-        let _ = std::fs::remove_file(self.settings.token_path());
+        inner.enroll = None;
         if inner.keyring.keys.is_empty() {
             inner.keyring.keys.push(card.clone());
             let ring = inner.keyring.clone();

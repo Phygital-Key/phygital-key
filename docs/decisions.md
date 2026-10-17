@@ -18,3 +18,8 @@ Each entry: what we chose, and why. Newest last.
 14. **One binary, three modes.** `mcp` (stdio, what most AI apps launch), `serve` (HTTP, many clients), `demo` (gate plus a fake service). Plus `verify` so any language can check an approval by calling a command.
 15. **Exactly one signature in v0.1, a list in the format.** 2-of-3 approvals later need no format change.
 16. **Signed, not encrypted, in v0.1.** End-to-end encrypted requests need the WebAuthn PRF extension, whose platform support must be checked first. Planned for v0.2.
+17. **Refuse text that is not NFC instead of normalizing it** (from the security review). Normalizing folds characters like KELVIN SIGN into `K`, so a service could act on bytes that differ from what the person saw. Refusing keeps "what was signed" and "what is run" byte for byte the same.
+18. **Audiences are visible ASCII.** URLs, domains and ids fit; invisible and look-alike characters do not.
+19. **No token in `mcp` mode output, token used up at the first step** (from the security review). AI apps keep the server's stderr in logs an agent may read.
+20. **Claims stay fixed while valid.** A second "start" returns the same claims, so another program cannot swap them while the person is signing.
+21. **Keep SHA-256 and ES256.** SHA-256 has no known practical attack (128-bit collision strength), and every passkey, phone and security key signs with ES256, which uses SHA-256 inside the authenticator. A "stronger" hash (SHA-512, SHA-3) would add no real safety and would break support on common devices. Revisit when post-quantum signatures reach WebAuthn authenticators.

@@ -69,7 +69,7 @@ impl<'de> Visitor<'de> for StrictVisitor {
 }
 
 /// Nesting depth of a JSON text, counted without parsing.
-fn depth(bytes: &[u8]) -> usize {
+pub fn depth(bytes: &[u8]) -> usize {
     let (mut depth, mut max, mut in_str, mut esc) = (0usize, 0usize, false, false);
     for &b in bytes {
         if in_str {

@@ -122,7 +122,12 @@ async fn status(State(gate): State<Shared>) -> Response {
 
 async fn well_known(State(gate): State<Shared>) -> Response {
     match gate.keyring() {
-        Ok(ring) => ([(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")], Json(ring)).into_response(),
+        // Public deployments share their key cards with any site. On localhost,
+        // no CORS header, so web pages cannot read local key names.
+        Ok(ring) if gate.settings.rp_id != "localhost" => {
+            ([(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")], Json(ring)).into_response()
+        }
+        Ok(ring) => Json(ring).into_response(),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }

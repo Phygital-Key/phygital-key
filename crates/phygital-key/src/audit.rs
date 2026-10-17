@@ -84,8 +84,8 @@ pub fn verify_file(path: &Path) -> Result<(u64, String), String> {
     let (mut seq, mut last) = (0u64, GENESIS.to_string());
     for (n, line) in text.lines().enumerate() {
         let bad = |why: &str| format!("audit log line {}: {why}", n + 1);
-        let mut entry = match serde_json::from_str::<Value>(line) {
-            Ok(Value::Object(m)) => m,
+        let mut entry = match phygital_key_verify::strict::parse(line.as_bytes()) {
+            Some(Value::Object(m)) => m,
             _ => return Err(bad("not a JSON object")),
         };
         let Some(Value::String(hash)) = entry.remove("hash") else {

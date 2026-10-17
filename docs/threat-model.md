@@ -17,10 +17,11 @@ Plain words first: Phygital Key makes sure **a real person said yes to this exac
 | An agent that reuses or stretches an approval | Replays it, uses it later, uses it at another service | Single-use `id` (`REPLAYED`), short `exp` (`EXPIRED`), `aud` (`WRONG_AUDIENCE`). |
 | An agent that asks for too little | Requests `medium` for a production deploy | The **verifier** sets the level it needs (`ASSURANCE_TOO_LOW`). |
 | An agent that forges | Sends a made-up signature to the gate or the service | Signatures are checked against trusted public keys (`BAD_SIGNATURE`, `UNTRUSTED_KEY`). The gate checks before it stores anything. |
-| An agent that adds its own key | Calls the enrollment API with a software key | Enrollment needs a one-time token printed only on the person's terminal. After the first key, every new key must be approved (`high`) by an existing key. |
+| An agent that adds its own key | Calls the enrollment API with a software key | Enrollment needs a one-time token from `phygital-key enroll` in the person's own terminal; `mcp` mode never prints one (its output reaches the AI app's logs). After the first key, every new key must be approved (`high`) by an existing key. Attestation is `none`, so the gate cannot tell hardware from software keys: whoever holds a valid link can enroll the first key. |
 | A phishing page | A copy of the approval page on another domain | WebAuthn binds keys to the real domain (RP ID). Wrong origin or RP ID is `BAD_SIGNATURE`. |
-| A web page in the person's browser | CSRF, DNS rebinding, framing the page | Origin check on every POST, Host check on every request, `frame-ancestors 'none'`, cross-origin assertions refused. |
-| Look-alike text | `аpi` with a Cyrillic a, invisible characters | The exact canonical text is signed; the page highlights mixed scripts and invisible characters; the verifier compares bytes, not looks. |
+| A web page in the person's browser | CSRF, DNS rebinding, framing the page, reading local key names | Origin check on every page POST, `/mcp` refuses any browser Origin, Host check on every request, `frame-ancestors 'none'`, cross-origin assertions refused, no CORS on localhost. |
+| Another program on the same machine | Calls the page API directly with a fake Origin | It can deny or cancel a waiting request (a nuisance, the answer becomes no). It cannot approve, and cannot swap the claims while the person signs. |
+| Look-alike text | `аpi` with a Cyrillic a, KELVIN SIGN instead of K, invisible characters | The exact bytes are signed and compared, never rewritten; text that is not NFC is refused; audiences are visible ASCII only; the page quotes odd keys and highlights common invisible and mixed-script characters (a help, not a guarantee). |
 | Approval fatigue | Hundreds of requests so the person clicks yes | 30 requests per minute, 50 waiting at most, every field always shown, fingerprint or PIN for `high`. |
 | Parser tricks | Duplicate keys, floats, huge or deeply nested JSON, lone surrogates, base64 padding | Strict parsing refuses all of these (`MALFORMED`), before any signature work. |
 
@@ -41,7 +42,7 @@ The safety holds only if **the agent cannot change the gate's code, the gate's d
 
 - **Signed, not encrypted.** Whoever holds an approval can read the request. Keep secrets out of requests. Encrypted requests are planned (spec section 9).
 - **Bearer for up to 60 s.** A stolen approval works once, only for that request and audience, until it expires. Binding to the requester's key is planned (v0.2).
-- **The audit log detects changes, not truncation of its end.** Anchor the last hash somewhere else (a backup, a ticket) if you need that.
+- **The audit log catches edits, not a full rewrite.** The hash chain has no secret key: someone who can write the file can rebuild every hash, or cut off the end. It shows tampering only if you keep the last hash somewhere else (a backup, a ticket).
 - **The command-line verifier cannot remember used ids.** Record ids yourself, or use the library with a shared seen store.
 - **Pending requests live in memory.** A restart drops them (the answer becomes no).
 - **No outside review yet.** Treat it as pre-audit.

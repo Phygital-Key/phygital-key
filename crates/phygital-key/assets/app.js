@@ -62,20 +62,32 @@ function countdown(el, until, done) {
   tick();
 }
 
-// Flatten params into rows: path -> value. Values are shown as exact JSON text.
+// Flatten params into rows: path -> value. Keys that are not plain words are
+// quoted, so {"a.b": 1} and {"a": {"b": 1}} never look the same.
+function seg(k) {
+  return /^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(k);
+}
 function rows(value, path, out) {
   if (value !== null && typeof value === "object") {
-    const keys = Array.isArray(value) ? value.map((_, i) => i) : Object.keys(value);
-    if (keys.length === 0) out.push([path || "(empty)", Array.isArray(value) ? "[]" : "{}"]);
-    keys.forEach((k) => rows(value[k], path ? path + (Array.isArray(value) ? "[" + k + "]" : "." + k) : String(k), out));
+    const arr = Array.isArray(value);
+    const keys = arr ? value.map((_, i) => i) : Object.keys(value);
+    if (keys.length === 0) out.push([path || "(empty)", arr ? "[]" : "{}"]);
+    keys.forEach((k) => {
+      const part = arr ? "[" + k + "]" : seg(String(k));
+      rows(value[k], path ? path + (arr ? part : " › " + part) : part, out);
+    });
   } else {
     out.push([path, typeof value === "string" ? value : JSON.stringify(value)]);
   }
   return out;
 }
+// Invisible, direction-changing and filler characters, and mixed scripts,
+// can make two different texts look the same. Highlight them.
+const INVISIBLE = /[­͏؜ᅟᅠ឴឵᠋-᠏​-‏‪-‮⁠-⁯ㅤ︀-️﻿ﾠ￹-￻]|\uDB40[\uDC00-\uDC7F]|[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/;
 function suspicious(text) {
-  // Mixed scripts and invisible characters can make two different texts look the same.
-  return /[​-‏‪-‮⁦-⁩﻿]/.test(text) || (/[A-Za-z]/.test(text) && /[Ѐ-ӿͰ-Ͽ]/.test(text));
+  const latin = /[A-Za-z]/.test(text);
+  const otherScript = /[Ͱ-ϿЀ-ԯ԰-֏Ꭰ-᏿＀-￯]/.test(text);
+  return INVISIBLE.test(text) || /^\s|\s$|\s\s/.test(text) || (latin && otherScript);
 }
 
 async function approvePage() {
@@ -90,7 +102,7 @@ async function approvePage() {
   }
   const request = JSON.parse(view.request_jcs);
   $("type").textContent = view.adds_key ? "Add a new key to your trusted keys" : request.type;
-  $("aud").textContent = view.aud;
+  $("aud").textContent = view.adds_key ? "This approval gate (your list of trusted keys)" : view.aud;
   $("level").textContent = view.level === "high" ? "Fingerprint, face or PIN" : "A touch on your key";
   $("raw").textContent = view.request_jcs;
   $("hash").textContent = view.request_hash;
@@ -101,9 +113,9 @@ async function approvePage() {
     const td = document.createElement("td");
     th.textContent = k;
     td.textContent = v;
-    if (suspicious(k + v)) {
-      td.classList.add("warn");
-      td.title = "Contains look-alike or invisible characters";
+    if (suspicious(k) || suspicious(v)) {
+      tr.classList.add("warn");
+      tr.title = "Look closely: contains look-alike, invisible or extra space characters";
     }
     tr.append(th, td);
     body.append(tr);

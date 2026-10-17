@@ -64,7 +64,7 @@ JSON, carried as base64url (no padding) in an `approval` field or a `Phygital-Ap
 }
 ```
 
-- **`aud`** names who will act on the yes. Any stable identifier: a URL, a domain, a business id or a person's key id. 1 to 256 printable characters.
+- **`aud`** names who will act on the yes. Any stable identifier: a URL, a domain, a business id or a person's key id. 1 to 256 visible ASCII characters (`!` to `~`), so look-alikes and invisible characters cannot hide in it.
 - **`level`** is `medium` or `high`. `low` means no approval is needed, so it is never signed.
 - **`signatures`** is a list. v0.1 requires exactly one. The list makes "2 of 3 approvers" possible later without changing the format.
 - Unknown fields anywhere in the approval object, the claims or a signature MUST be refused.
@@ -72,7 +72,7 @@ JSON, carried as base64url (no padding) in an `approval` field or a `Phygital-Ap
 
 ### Canonical form
 
-`canonical(x)` = every string and key normalized to Unicode NFC, then RFC 8785 (JCS). Floats and unsafe integers have no canonical form and MUST be refused. Keys that become equal after NFC MUST be refused. Lone surrogates MUST be refused.
+`canonical(x)` = RFC 8785 (JCS) of `x`, where every string and key MUST already be in Unicode NFC. Text that is not NFC MUST be refused, never rewritten: NFC folds some single characters into others (KELVIN SIGN U+212A becomes `K`, GREEK QUESTION MARK U+037E becomes `;`), so rewriting would let two different byte strings share one approval. Floats and unsafe integers have no canonical form and MUST be refused. Lone surrogates MUST be refused. A verifier acts on exactly the bytes it verified.
 
 ### Challenge
 
@@ -89,13 +89,13 @@ Two clocks, so people are not rushed:
 
 ## 5. Keys: enrolling and finding them
 
-- **Enroll:** the person registers a passkey or security key on the approval page. The page sends the credential id and the public key (SubjectPublicKeyInfo, from `getPublicKey()`), and the relay stores a public **key card**:
+- **Enroll:** the person registers a passkey or security key on the approval page. The page sends the credential id and the public key (SubjectPublicKeyInfo, from `getPublicKey()`), and the relay stores a public **key card**. Attestation is `none` (what phones and password managers give), so the relay cannot prove the key lives in hardware: the one-time link is what protects the first key.
 
   ```json
   { "credential_id": "...", "public_key": "<base64url SPKI DER>", "rp_id": "approve.example.com", "name": "My phone", "created": "2026-10-17" }
   ```
 
-- **Enrollment links** are made by the person at the machine (`phygital-key enroll`). The one-time token travels in the link's `#fragment`, which browsers never send to servers, and it works once, for 10 minutes.
+- **Enrollment links** are made by the person in their own terminal (`phygital-key enroll`). The gate never prints a token in `mcp` mode, where its output goes to the AI app's logs. The token travels in the link's `#fragment`, which browsers never send to servers. It is used up when the person starts enrolling and the session lasts at most 10 minutes.
 - **First key** is trusted directly. **Every later key** creates an `add_key` request at level `high` that an already-trusted key must approve. A new key can never approve itself.
 - **Keyring:** a verifier keeps the key cards it trusts: `{"keys": [ ...key cards ]}`. The verifier only reads the keyring it is given. It never fetches anything.
 - **Sharing keys:**
@@ -108,7 +108,7 @@ Two clocks, so people are not rushed:
 
 1. Requester asks the relay: `request_approval(request, aud, level)`.
 2. Relay canonicalizes and hashes the request, stores it as `pending`, and sends the approver to the approval page. In MCP, "Accept" only means the person opened the page. It is not a yes.
-3. The page shows the request as built by the relay from the canonical form, never text written by the requester. Every field is shown, nothing truncated, plus the audience, the level and the time left. Look-alike and invisible characters are highlighted.
+3. The page shows the request as built by the relay from the canonical form, never text written by the requester. Every field is shown, nothing truncated, plus the audience, the level and the time left. Keys that are not plain words are quoted. Common invisible, direction-changing and mixed-script characters, and odd spacing, are highlighted (a help, not a guarantee: the real protection is that the exact bytes are signed and checked).
 4. The person presses Approve or Deny. On Approve, the relay fixes the claims (`iat`, `exp`) and returns their canonical text. The page checks that these claims say exactly what it shows, computes the challenge itself from that text, and asks the authenticator to sign. On a desktop without a key, the browser offers a QR code to approve with a phone (built into passkeys).
 5. The relay runs every verifier check (except replay) on the signature before it keeps the approval. A Deny is recorded and returned as a refusal.
 6. Requester fetches the result with `get_approval(id)` and sends the approval with the request.
@@ -181,7 +181,7 @@ A security key without a PIN can only approve `medium`.
 
 ## 13. Tests
 
-- **Shared vectors** (`test-vectors/`): 45 cases, every error code, every edge (exactly at `exp`, 30 s and 31 s clock drift, 300 s and 301 s life, NFD input, key order, floats, duplicate keys, deep nesting, lone surrogates, look-alike letters, flipped signature bit, wrong origin, wrong RP ID, wrong type, wrong challenge, cross-origin frame, signature over other claims, untrusted key, missing presence, missing verification, replay, prompt-injection text).
+- **Shared vectors** (`test-vectors/`): 48 cases, every error code, every edge (exactly at `exp`, 30 s and 31 s clock drift, 300 s and 301 s life, NFD input, KELVIN SIGN payee, key order, floats, duplicate keys, deep nesting, lone surrogates, look-alike letters, flipped signature bit, wrong origin, wrong RP ID, wrong type, wrong challenge, cross-origin frame, signature over other claims, untrusted key, missing presence, missing verification, replay, prompt-injection text).
 - **Property tests:** random text and bytes never verify; changing any bit of a valid approval is refused; any other request is refused; canonical form is idempotent.
 - **End-to-end and red team** (`tests/e2e/`): real browser with a virtual passkey, real MCP client, demo service, and every attack an agent can try through the gate and the page.
 

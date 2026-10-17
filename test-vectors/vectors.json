@@ -167,9 +167,50 @@
       "name": "valid_key_order_differs"
     },
     {
-      "description": "The verifier normalizes the request it runs to NFC before hashing.",
+      "description": "Accented text in NFC is fine.",
       "expected": {
         "ok": true
+      },
+      "input": {
+        "approval": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjA3MDAwNjAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3IiwibGV2ZWwiOiJtZWRpdW0iLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJ0ZXh0IjoiQ2Fmw6kgYXQgOSIsInRvIjoiSm9zw6kifSwidHlwZSI6InNlbmRfbWVzc2FnZSJ9LCJyZXF1ZXN0X2hhc2giOiIzTl8weWlVR1dmMjVXUTNVU1hITGk1Vm9SaGtPSDYzd2hUbnNLTnVuTHY4IiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tCQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUpsZVZwTk1EaDBWbkYwTkRGalgxcFlUM2h0VW5KS2IyUjJhbGwzVDFGdE1FNUZlSGhHU2tNek5WSlJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNuSXRyakpyZzNlQWpUZnA4SVBvWkd5ZS0tU2daSWN3MHVuYnNURTQxRHdRSWdFbWstZjJTS19kc2s0c25PNXlnY0g4UEtsQkgySmJIRUF1YzhwOTdhNjc4In1dfQ",
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "medium",
+        "now": 1760700010,
+        "request": {
+          "params": {
+            "text": "Café at 9",
+            "to": "José"
+          },
+          "type": "send_message"
+        },
+        "seen_ids": []
+      },
+      "name": "valid_accented_nfc"
+    },
+    {
+      "description": "The request to run is not NFC. Text is never rewritten, so it is refused.",
+      "expected": {
+        "error": "MALFORMED",
+        "ok": false
       },
       "input": {
         "approval": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjA3MDAwNjAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3IiwibGV2ZWwiOiJtZWRpdW0iLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJ0ZXh0IjoiQ2Fmw6kgYXQgOSIsInRvIjoiSm9zw6kifSwidHlwZSI6InNlbmRfbWVzc2FnZSJ9LCJyZXF1ZXN0X2hhc2giOiIzTl8weWlVR1dmMjVXUTNVU1hITGk1Vm9SaGtPSDYzd2hUbnNLTnVuTHY4IiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tCQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUpsZVZwTk1EaDBWbkYwTkRGalgxcFlUM2h0VW5KS2IyUjJhbGwzVDFGdE1FNUZlSGhHU2tNek5WSlJJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FVUNJUUNuSXRyakpyZzNlQWpUZnA4SVBvWkd5ZS0tU2daSWN3MHVuYnNURTQxRHdRSWdFbWstZjJTS19kc2s0c25PNXlnY0g4UEtsQkgySmJIRUF1YzhwOTdhNjc4In1dfQ",
@@ -204,7 +245,89 @@
         },
         "seen_ids": []
       },
-      "name": "valid_nfd_request_normalized"
+      "name": "nfd_request_refused"
+    },
+    {
+      "description": "Approved a payment to Kirk; the service is about to pay Kirk (KELVIN SIGN). NFC would fold them together, so non-NFC text is refused.",
+      "expected": {
+        "error": "MALFORMED",
+        "ok": false
+      },
+      "input": {
+        "approval": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjA3MDAwNjAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3IiwibGV2ZWwiOiJtZWRpdW0iLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnQiOiI1MC4wMCIsInRvIjoiS2lyayJ9LCJ0eXBlIjoicGF5bWVudCJ9LCJyZXF1ZXN0X2hhc2giOiI1NGpKVEVCUWkzYTJhSjNWUmVHZWJERlduNWlCTzIwUDVvYTN0OE1KZmljIiwidiI6InBrYS4xIn0sInNpZ25hdHVyZXMiOlt7ImF1dGhlbnRpY2F0b3JfZGF0YSI6Il9wZ0x1SFFGUEplRnMtQS1IM3hDcV9SZlk4N0h3N2EzTDN4NExyN3JFS2tCQUFBQUFBIiwiY2xpZW50X2RhdGFfanNvbiI6ImV5SmphR0ZzYkdWdVoyVWlPaUpRVjJWSWFXOXpialo0TlcweE5reFVka3B2ZEdOcU1tWnJMVTloYVY5VlpYZHdaMWhyUldKSVFVUjNJaXdpWTNKdmMzTlBjbWxuYVc0aU9tWmhiSE5sTENKdmNtbG5hVzRpT2lKb2RIUndjem92TDJGd2NISnZkbVV1WlhoaGJYQnNaUzVqYjIwaUxDSjBlWEJsSWpvaWQyVmlZWFYwYUc0dVoyVjBJbjAiLCJjcmVkZW50aWFsX2lkIjoidlN6VUdTRDdBQkd6Z1JyazVGaWpBZyIsInNpZ25hdHVyZSI6Ik1FWUNJUURwbkRJWkdURmNtdmx5X2RGVzhPRThyZ0thVEx2aFVkVHVNUUpsZ0d6M0R3SWhBSkdESDJVZFNlYkl6aHIzT2Y0N0kyY3ZIdFRzZWVidllUbzJoQWFfcm5NRSJ9XX0",
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "medium",
+        "now": 1760700010,
+        "request": {
+          "params": {
+            "amount": "50.00",
+            "to": "Kirk"
+          },
+          "type": "payment"
+        },
+        "seen_ids": []
+      },
+      "name": "kelvin_sign_payee_refused"
+    },
+    {
+      "description": "Signed claims that are not NFC are refused.",
+      "expected": {
+        "error": "MALFORMED",
+        "ok": false
+      },
+      "input": {
+        "approval": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJleHAiOjE3NjA3MDAwNjAsImlhdCI6MTc2MDcwMDAwMCwiaWQiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3IiwibGV2ZWwiOiJtZWRpdW0iLCJyZXF1ZXN0Ijp7InBhcmFtcyI6eyJhbW91bnQiOiI1MC4wMCIsInRvIjoi4oSqaXJrIn0sInR5cGUiOiJwYXltZW50In0sInJlcXVlc3RfaGFzaCI6IllGdFU0aEF3ZVlsSnRLSl9LQXUtQkRZVlYxdFBqUUd6THlaSkZSdUdvbGciLCJ2IjoicGthLjEifSwic2lnbmF0dXJlcyI6W3siYXV0aGVudGljYXRvcl9kYXRhIjoiX3BnTHVIUUZQSmVGcy1BLUgzeENxX1JmWTg3SHc3YTNMM3g0THI3ckVLa0JBQUFBQUEiLCJjbGllbnRfZGF0YV9qc29uIjoiZXlKamFHRnNiR1Z1WjJVaU9pSlRNalpLUldSZmJXaE1ZakZ1YjFkRVJtTkdMVjkwWTNKS1ZXZFdhRnBIY25ocmNEQTBlWEZrZUhGbklpd2lZM0p2YzNOUGNtbG5hVzRpT21aaGJITmxMQ0p2Y21sbmFXNGlPaUpvZEhSd2N6b3ZMMkZ3Y0hKdmRtVXVaWGhoYlhCc1pTNWpiMjBpTENKMGVYQmxJam9pZDJWaVlYVjBhRzR1WjJWMEluMCIsImNyZWRlbnRpYWxfaWQiOiJ2U3pVR1NEN0FCR3pnUnJrNUZpakFnIiwic2lnbmF0dXJlIjoiTUVZQ0lRQ3ZLSkpPNl9Ec3I4MjRnTEZoT1FtcVYwR0xnVFBvM2VNNXVCLUdocFFfNXdJaEFPU1Y1Yk85d3dIdF9sVU4tOU1PRzBvV0Vob1dNVVZUTmZXT2tieGFHWWZEIn1dfQ",
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "medium",
+        "now": 1760700010,
+        "request": {
+          "params": {
+            "amount": "50.00",
+            "to": "Kirk"
+          },
+          "type": "payment"
+        },
+        "seen_ids": []
+      },
+      "name": "non_nfc_claims_refused"
     },
     {
       "description": "iat up to 30 s in the future is allowed (clock drift).",

@@ -195,6 +195,26 @@ try {
   const shapeless = await tool(mcp, "request_approval", { request: { do: "something" }, aud: DEMO, level: "high" });
   check("requests without {type, params} are refused", shapeless.isError);
 
+  // Fixes from the security review.
+  const kelvin = await tool(mcp, "request_approval", { request: { type: "payment", params: { to: "\u212Airk", amount: "50.00" } }, aud: DEMO, level: "high" });
+  check("look-alike KELVIN SIGN payee refused at the gate (not NFC)", kelvin.isError && /NFC/.test(kelvin.error));
+  const spaced = await tool(mcp, "request_approval", { request: { type: "deploy", params: deploy }, aud: "https://pay.example.com\u202E", level: "high" });
+  check("audience with invisible characters refused", spaced.isError);
+  const reserved = await tool(mcp, "request_approval", { request: { type: "add_key", params: { name: "x" } }, aud: "phygital-key:keyring", level: "high" });
+  check("agent cannot use the gate's own audience", reserved.isError && /reserved/.test(reserved.error));
+  const deepParams = { a: { b: { c: { d: { e: { f: { g: { h: { i: { j: { k: { l: { m: 1 } } } } } } } } } } } } };
+  const deep = await tool(mcp, "request_approval", { request: { type: "deploy", params: deepParams }, aud: DEMO, level: "high" });
+  check("too deeply nested request refused before the person sees it", deep.isError && /deep/.test(deep.error));
+  const sw = await tool(mcp, "request_approval", { request: { type: "send_message", params: { to: "a@b.c", text: "hi" } }, aud: DEMO, level: "medium" });
+  const st1 = await (await fetch(`${GATE}/api/r/${sw.id}/start`, { method: "POST", headers: { "Content-Type": "application/json", Origin: GATE }, body: "{}" })).json();
+  const st2 = await (await fetch(`${GATE}/api/r/${sw.id}/start`, { method: "POST", headers: { "Content-Type": "application/json", Origin: GATE }, body: "{}" })).json();
+  check("claims cannot be swapped while the person signs", st1.claims_jcs === st2.claims_jcs);
+  await tool(mcp, "cancel_approval", { id: sw.id });
+  const mcpFromBrowser = await fetch(GATE + "/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Origin: "https://evil.example" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+  check("MCP endpoint refuses calls from web pages", mcpFromBrowser.status >= 400 && mcpFromBrowser.status < 500, String(mcpFromBrowser.status));
+  const wkLocal = await fetch(GATE + "/.well-known/phygital-key.json");
+  check("local key list is not readable by other websites (no CORS on localhost)", !wkLocal.headers.get("access-control-allow-origin"));
+
   // Web hardening.
   check("wrong Host header (DNS rebinding) is refused", (await rawRequest("/api/status", { Host: "evil.example:" + PORT })) === 421);
   const xorigin = await fetch(`${GATE}/api/r/${c.id}/deny`, { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://evil.example" }, body: "{}" });
@@ -253,6 +273,16 @@ try {
   check("audit log chain is intact", auditOk);
 
   await mcp.close();
+
+  // --- stdio mode never prints an enrollment token (stderr goes to the AI app's logs).
+  const emptyHome = mkdtempSync(join(tmpdir(), "pka-e2e-empty-"));
+  const leak = spawn(BIN, ["--home", emptyHome, "--port", String(PORT + 20), "mcp"], { stdio: ["pipe", "ignore", "pipe"] });
+  let leakErr = "";
+  leak.stderr.on("data", (d) => { leakErr += d; });
+  await sleep(800);
+  leak.kill();
+  rmSync(emptyHome, { recursive: true, force: true });
+  check("stdio mode does not print an enrollment link", /phygital-key enroll/.test(leakErr) && !/token=/.test(leakErr), leakErr.trim());
 
   // --- stdio mode (what most AI apps launch).
   const stdio = new Client({ name: "e2e-stdio", version: "1.0.0" });

@@ -137,14 +137,32 @@ fn read_arg(v: &str) -> Result<String, String> {
     }
 }
 
-fn hint_enroll(gate: &Gate) -> Result<(), String> {
+fn hint_enroll(gate: &Gate, print_link: bool) -> Result<(), String> {
     if gate.keyring()?.keys.is_empty() {
-        let link = gate.issue_enroll_token()?;
-        eprintln!(
-            "phygital-key: no key enrolled yet. Open this link to add your passkey (valid 10 minutes):\n  {link}"
-        );
+        if print_link {
+            let link = gate.issue_enroll_token()?;
+            eprintln!(
+                "phygital-key: no key enrolled yet. Open this link to add your passkey (valid 10 minutes, works once):\n  {link}"
+            );
+        } else {
+            // In stdio mode stderr goes to the AI app's logs, so never print a token here.
+            eprintln!(
+                "phygital-key: no key enrolled yet. In your own terminal, run: phygital-key enroll"
+            );
+        }
     }
     Ok(())
+}
+
+fn prune_every_minute(gate: &Arc<Gate>) {
+    let g = gate.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            tick.tick().await;
+            g.prune();
+        }
+    });
 }
 
 fn mcp_http(gate: &Arc<Gate>) -> axum::Router {
@@ -159,7 +177,10 @@ fn mcp_http(gate: &Arc<Gate>) -> axum::Router {
         StreamableHttpService::new(
             move || Ok(mcp::GateMcp::new(g.clone())),
             Default::default(),
-            StreamableHttpServerConfig::default().with_allowed_hosts(hosts),
+            // MCP clients are not browsers: refuse any request that carries a browser Origin.
+            StreamableHttpServerConfig::default()
+                .with_allowed_hosts(hosts)
+                .enforce_origin_validation(),
         );
     axum::Router::new().nest_service("/mcp", service)
 }
@@ -239,7 +260,8 @@ async fn run(cli: Cli) -> Result<(), String> {
         }
         Command::Mcp => {
             let gate = Gate::open(s)?;
-            hint_enroll(&gate)?;
+            hint_enroll(&gate, false)?;
+            prune_every_minute(&gate);
             let app = web::router(gate.clone(), None);
             let web_gate = gate.clone();
             tokio::spawn(async move {
@@ -256,7 +278,8 @@ async fn run(cli: Cli) -> Result<(), String> {
         }
         Command::Serve => {
             let gate = Gate::open(s)?;
-            hint_enroll(&gate)?;
+            hint_enroll(&gate, true)?;
+            prune_every_minute(&gate);
             eprintln!(
                 "phygital-key: approval page {}  |  MCP endpoint {}/mcp",
                 gate.settings.origin, gate.settings.origin
@@ -266,7 +289,8 @@ async fn run(cli: Cli) -> Result<(), String> {
         }
         Command::Demo => {
             let gate = Gate::open(s.clone())?;
-            hint_enroll(&gate)?;
+            hint_enroll(&gate, true)?;
+            prune_every_minute(&gate);
             let demo_port = s.port.checked_add(1).ok_or("port too high")?;
             let demo_aud = format!("http://localhost:{demo_port}");
             let demo = demo::Demo::new(

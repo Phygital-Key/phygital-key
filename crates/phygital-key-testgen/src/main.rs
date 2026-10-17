@@ -273,14 +273,61 @@ fn run() -> Result<(), String> {
     let mut nfc = Build::new("medium");
     nfc.claims = claims_for(&nfc_req, "medium", IAT, IAT + 60);
     v.push_full(
-        "valid_nfd_request_normalized",
-        "The verifier normalizes the request it runs to NFC before hashing.",
+        "valid_accented_nfc",
+        "Accented text in NFC is fine.",
+        nfc.approval(&alice),
+        nfc_req,
+        "medium",
+        NOW,
+        &[],
+        None,
+    );
+    v.push_full(
+        "nfd_request_refused",
+        "The request to run is not NFC. Text is never rewritten, so it is refused.",
         nfc.approval(&alice),
         nfd_req,
         "medium",
         NOW,
         &[],
-        None,
+        Some("MALFORMED"),
+    );
+    let kirk = json!({"type": "payment", "params": {"to": "Kirk", "amount": "50.00"}});
+    let kelvin = json!({"type": "payment", "params": {"to": "\u{212a}irk", "amount": "50.00"}});
+    let mut k = Build::new("medium");
+    k.claims = claims_for(&kirk, "medium", IAT, IAT + 60);
+    v.push_full(
+        "kelvin_sign_payee_refused",
+        "Approved a payment to Kirk; the service is about to pay \u{212a}irk (KELVIN SIGN). NFC would fold them together, so non-NFC text is refused.",
+        k.approval(&alice),
+        kelvin.clone(),
+        "medium",
+        NOW,
+        &[],
+        Some("MALFORMED"),
+    );
+    let mut kc = Build::new("medium");
+    kc.claims = claims_for(
+        &json!({"type": "payment", "params": {}}),
+        "medium",
+        IAT,
+        IAT + 60,
+    );
+    set(&mut kc.claims, "request", kelvin.clone());
+    set(
+        &mut kc.claims,
+        "request_hash",
+        json!(b64::encode(Sha256::digest(kelvin.to_string()))),
+    );
+    v.push_full(
+        "non_nfc_claims_refused",
+        "Signed claims that are not NFC are refused.",
+        kc.approval(&alice),
+        kelvin,
+        "medium",
+        NOW,
+        &[],
+        Some("MALFORMED"),
     );
     v.push_full(
         "valid_iat_30s_ahead",
