@@ -15,7 +15,9 @@ export const MAX_CLIENT_DATA = 4096;
 export const STANDING_TYPE = "standing";
 export const REVOKE_TYPE = "revoke";
 
-const LEVELS = { medium: 1, high: 2 };
+// Own properties only: `"toString" in {}` is true in JavaScript.
+const LEVELS = Object.freeze(Object.assign(Object.create(null), { medium: 1, high: 2 }));
+const isLevel = (l) => l === "medium" || l === "high";
 
 /** A refusal: `code` is one of the spec's error codes. */
 export class Refused extends Error {
@@ -116,7 +118,7 @@ export async function checkKind(approval, expected, keyring, config, now, standi
   const sigs = obj.get("signatures");
   if (!keysAre(claims, ["v", "id", "aud", "request", "request_hash", "level", "iat", "exp"])) no("MALFORMED");
   const [v, id, aud, request, requestHash, level, iat, exp] = ["v", "id", "aud", "request", "request_hash", "level", "iat", "exp"].map((k) => claims.get(k));
-  if (!isStr(v) || !isStr(id) || !isStr(aud) || !isStr(requestHash) || !(level in LEVELS) || !isInt(iat) || !isInt(exp)) no("MALFORMED");
+  if (!isStr(v) || !isStr(id) || !isStr(aud) || !isStr(requestHash) || !isLevel(level) || !isInt(iat) || !isInt(exp)) no("MALFORMED");
   if (!Array.isArray(sigs) || !sigs.every((s) => keysAre(s, ["credential_id", "authenticator_data", "client_data_json", "signature"]) && [...s.values()].every(isStr))) no("MALFORMED");
   if (v !== VERSION || !idOk(id) || !requestShapeOk(request)) no("MALFORMED");
   const isStanding = request.get("type") === STANDING_TYPE;
@@ -149,7 +151,7 @@ export async function checkKind(approval, expected, keyring, config, now, standi
   if (oursHash !== requestHash || theirsHash !== requestHash) no("REQUEST_MISMATCH");
 
   // 5. Level, decided by the verifier.
-  if (LEVELS[level] < LEVELS[expected.level]) no("ASSURANCE_TOO_LOW");
+  if (!isLevel(expected.level) || LEVELS[level] < LEVELS[expected.level]) no("ASSURANCE_TOO_LOW");
 
   // 6. A trusted key.
   const card = keyring.keys.find((k) => k.credential_id === sig.get("credential_id")) ?? no("UNTRUSTED_KEY");
@@ -189,6 +191,8 @@ export class MemorySeenStore {
  */
 export async function verify(approval, expected, keyring, seen, config, now) {
   try {
+    // A revocation is never an action to carry out.
+    if (asModel(expected.request)?.get?.("type") === REVOKE_TYPE) no("MALFORMED");
     const verified = await checkKind(approval, expected, keyring, config, now, false);
     if (!seen.insertIfNew(verified.id, verified.exp, now)) no("REPLAYED");
     return { ok: true, verified };

@@ -7,7 +7,7 @@ Before an AI agent (or any app, business or person) does something that matters,
 - **Can't be faked:** only the person's own key can sign. The AI never holds a key.
 - **Can't be changed:** change one character of the request and the approval is refused.
 - **Can't be reused:** each approval works once, for one service, for 60 seconds.
-- **Out of the AI's reach:** with one command (`sudo phygital-key install-service`) the gate runs as its own locked-down user. The AI, even acting as you, can't change its program, read its data or write its keys. Only your administrator password can.
+- **Out of the AI's reach:** with one command (the [secure install](#run-it-for-real)) the gate runs as its own locked-down user. The AI, even acting as you, can't change its program, read its data or write its keys. Only your administrator password can.
 - **Works anywhere:** passkeys run on almost every phone, laptop and security key. One small program, no account, no cloud.
 
 > [!WARNING]
@@ -142,15 +142,21 @@ Passkeys need `https` (or `localhost`). Put the gate behind any TLS proxy and te
 phygital-key serve --origin https://approve.example.com
 ```
 
-Run the gate where the AI agent cannot change its files. On macOS and Linux one command does that for you, by running the gate as its own locked-down system user:
+Run the gate where the AI agent cannot change its files. On macOS and Linux one command does that for you, by running the gate as its own locked-down system user. From a fresh terminal:
 
 ```bash
-sudo phygital-key install-service
-phygital-key-admin enroll      # add your key
-phygital-key-admin token       # the line to paste into your AI app
+curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
 ```
 
-After that, the gate's program, keys and log can only be changed with your administrator password, so an AI acting as you can't touch them. `sudo phygital-key install-service --uninstall` removes it (add `--purge` to delete the keys too). See [where to run it](docs/threat-model.md#where-to-run-it-important).
+It downloads the official release itself, checks its SHA-256, installs it where only an administrator can change it, starts it as its own user, and checks that nothing else is listening on its address. Then:
+
+```bash
+phygital-key-admin enroll      # add your key
+phygital-key-admin token       # the line to paste into your AI app
+phygital-key-admin status      # check it is the real gate answering
+```
+
+From then on, **the AI, even acting as you, can't change the gate's program, read its data or write its keys.** Only your administrator password can. To update or remove it, use the locked copy: `sudo /Library/PhygitalKey/bin/phygital-key install-service [--uninstall [--purge]]` (on Linux: `/opt/phygital-key/bin/phygital-key`). If `phygital-key-admin` is not found, use its full path in that same folder. See [where to run it](docs/threat-model.md#where-to-run-it-important).
 
 ## What is inside
 

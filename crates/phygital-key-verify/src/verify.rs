@@ -303,6 +303,10 @@ pub fn verify(
     config: &Config,
     now: i64,
 ) -> Result<Verified, ErrorCode> {
+    // A revocation is never an action to carry out.
+    if expected.request.get("type").and_then(Value::as_str) == Some(REVOKE_TYPE) {
+        return Err(ErrorCode::Malformed);
+    }
     let ok = check(approval, expected, keyring, config, now)?;
     // 7. Never used before. Spent now, even if acting fails later.
     if !seen.insert_if_new(&ok.id, ok.exp, now) {

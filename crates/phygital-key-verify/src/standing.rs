@@ -45,6 +45,8 @@ pub const MAX_USES: u32 = 1000;
 pub const MAX_USE_SECS: i64 = 60;
 /// Most strings in a `one_of` list.
 pub const MAX_ONE_OF: usize = 20;
+/// Most entries read from one revocation list.
+pub const MAX_REVOCATIONS: usize = 1000;
 /// The `typ` of a use token's JWS header.
 pub const USE_TYP: &str = "pka-use+jwt";
 
@@ -197,10 +199,10 @@ fn read_use(jws: &str, use_key: &str) -> Result<Use, ErrorCode> {
     else {
         return Err(E::Malformed);
     };
-    let header = b64::decode(h)
-        .and_then(|b| strict::parse(&b))
-        .ok_or(E::Malformed)?;
-    if header != json!({"alg": "ES256", "typ": USE_TYP}) {
+    // The header must be exactly these bytes (as the spec says), not just equal JSON.
+    let want = canonical::canonical_bytes(&json!({"alg": "ES256", "typ": USE_TYP}))
+        .map_err(|_| E::Malformed)?;
+    if b64::decode(h).as_deref() != Some(want.as_slice()) {
         return Err(E::Malformed);
     }
     let sig = b64::decode(s)
@@ -394,8 +396,11 @@ pub fn revoke_request(standing_id: &str) -> Value {
 /// A gate publishes signed revocations at `/.well-known/phygital-key-revoked.json`
 /// (`{"revocations": ["<approval>", ...]}`). A service fetches that list now and
 /// then and builds this set: only revocations signed by a trusted key, for this
-/// service, count. Unsigned or foreign entries are ignored (they can only ever
-/// add a revocation, never remove one).
+/// service, count; unsigned or foreign entries are ignored. A service MUST keep
+/// every revocation it has accepted ([`Revocations::merge`]): whoever serves the
+/// list could leave entries out later, and removing the signing key from the
+/// keyring would make an old revocation stop checking. At most
+/// [`MAX_REVOCATIONS`] entries are read from one list.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Revocations {
     ids: HashSet<String>,
@@ -415,7 +420,7 @@ impl Revocations {
         config: &Config,
     ) -> Self {
         let mut ids = HashSet::new();
-        for a in approvals {
+        for a in approvals.iter().take(MAX_REVOCATIONS) {
             let Some(claims) = b64::decode(a)
                 .filter(|_| a.len() <= crate::MAX_APPROVAL_BYTES)
                 .and_then(|raw| strict::parse(&raw))
@@ -456,6 +461,11 @@ impl Revocations {
             .and_then(|v| serde_json::from_value(v).ok())
             .unwrap_or_default();
         Self::from_approvals(&list, aud, keyring, config)
+    }
+
+    /// Add revocations from a newer list, keeping everything accepted before.
+    pub fn merge(&mut self, other: Revocations) {
+        self.ids.extend(other.ids);
     }
 
     /// Was this standing approval revoked?

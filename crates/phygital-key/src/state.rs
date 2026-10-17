@@ -138,6 +138,8 @@ struct Request {
     usable: bool,
     /// Standing approvals: use tokens handed out, by use id.
     issued: HashMap<String, String>,
+    /// Standing approvals: the person's revocation is signed and published.
+    revocation_published: bool,
 }
 
 impl Request {
@@ -197,6 +199,8 @@ pub struct View {
     pub revokes: bool,
     /// Standing approval details, for standing requests.
     pub standing: Option<StandingView>,
+    /// For a revoked standing approval: whether the person's revocation is signed.
+    pub revocation_signed: Option<bool>,
     /// What the service reported after acting (`success` or `error`): set only
     /// from a receipt signed by the service's pinned key.
     pub service_reported: Option<String>,
@@ -454,19 +458,24 @@ impl Gate {
         while inner.recent.front().is_some_and(|&x| x <= t - 60) {
             inner.recent.pop_front();
         }
-        if inner.recent.len() >= MAX_PER_MINUTE || inner.requests.len() >= MAX_STORED {
-            return Err("Too many requests right now. Try again shortly.".into());
+        // A revocation is always let through: an agent filling the limits must
+        // never be able to stop the person from revoking.
+        let is_revoke = matches!(kind, Kind::Revoke(_));
+        if !is_revoke {
+            if inner.recent.len() >= MAX_PER_MINUTE || inner.requests.len() >= MAX_STORED {
+                return Err("Too many requests right now. Try again shortly.".into());
+            }
+            if inner
+                .requests
+                .values()
+                .filter(|r| r.current_status(t) == Status::Pending)
+                .count()
+                >= MAX_PENDING
+            {
+                return Err("Too many requests are waiting. Wait for the person to decide.".into());
+            }
+            inner.recent.push_back(t);
         }
-        if inner
-            .requests
-            .values()
-            .filter(|r| r.current_status(t) == Status::Pending)
-            .count()
-            >= MAX_PENDING
-        {
-            return Err("Too many requests are waiting. Wait for the person to decide.".into());
-        }
-        inner.recent.push_back(t);
         let r = Request {
             id: id.clone(),
             request,
@@ -488,6 +497,7 @@ impl Gate {
             uses: 0,
             usable: false,
             issued: HashMap::new(),
+            revocation_published: false,
         };
         if let Some((_, key)) = standing {
             inner.use_keys.insert(id.clone(), key);
@@ -519,6 +529,10 @@ impl Gate {
             first_key: matches!(r.kind, Kind::AddKey(_)) && r.first_key,
             removes_key: matches!(r.kind, Kind::RemoveKey(_)),
             revokes: matches!(r.kind, Kind::Revoke(_)),
+            revocation_signed: (matches!(r.kind, Kind::Standing(_))
+                && r.approval.is_some()
+                && !r.usable)
+                .then_some(r.revocation_published),
             standing: match &r.kind {
                 Kind::Standing(p) => Some(StandingView {
                     for_type: p.for_type.clone(),
@@ -726,7 +740,7 @@ impl Gate {
             _ => None,
         };
         if revoked_standing.is_some() {
-            let mut list = self.revocations();
+            let mut list = self.revocations()?;
             list.push(approval.clone());
             let doc = json!({"revocations": list});
             let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n";
@@ -754,6 +768,9 @@ impl Gate {
         let entry = json!({"id": ok.id, "aud": aud, "level": ok.level.as_str(), "request_hash": ok.request_hash, "credential_id": ok.credential_id});
         inner.audit.append("approved", entry, t)?;
         if let Some(sid) = revoked_standing {
+            if let Some(st) = inner.requests.get_mut(&sid) {
+                st.revocation_published = true;
+            }
             inner.audit.append(
                 "revocation_published",
                 json!({"standing_id": sid, "approved_with": ok.credential_id}),
@@ -838,32 +855,72 @@ impl Gate {
     ///
     /// Returns the closed standing view and the link to sign the revocation.
     pub fn revoke(&self, id: &str) -> Result<(View, String), String> {
+        let active = {
+            let inner = self.lock()?;
+            let r = inner.requests.get(id).ok_or("unknown request")?;
+            if !matches!(r.kind, Kind::Standing(_)) || r.approval.is_none() {
+                return Err("Only an approved standing approval can be revoked.".into());
+            }
+            r.current_status(now()) == Status::Approved
+        };
+        // Step 1, at once and for good: no new uses can be signed.
+        let view = if active {
+            self.close(id, Status::Cancelled, "cancelled")?
+        } else {
+            self.view(id)?
+        };
+        // Step 2: the person's signed revocation for the service. Can be retried.
+        let url = self.sign_revocation(id)?;
+        Ok((view, url))
+    }
+
+    /// The link to sign the revocation of a revoked standing approval. Reuses a
+    /// waiting one, or makes a new one (after a deny or a timeout).
+    pub fn sign_revocation(&self, id: &str) -> Result<String, String> {
+        let t = now();
         let (aud, sid) = {
             let inner = self.lock()?;
             let r = inner.requests.get(id).ok_or("unknown request")?;
-            if !matches!(r.kind, Kind::Standing(_)) || r.current_status(now()) != Status::Approved {
-                return Err("Only an active standing approval can be revoked.".into());
+            if !matches!(r.kind, Kind::Standing(_)) || r.approval.is_none() || r.usable {
+                return Err("Revoke the standing approval first.".into());
+            }
+            let waiting = inner.requests.values().find(|x| {
+                matches!(&x.kind, Kind::Revoke(s) if s == &r.id)
+                    && x.current_status(t) == Status::Pending
+            });
+            if let Some(w) = waiting {
+                return Ok(self.settings.approve_url(&w.id));
+            }
+            let done = inner
+                .requests
+                .values()
+                .any(|x| matches!(&x.kind, Kind::Revoke(s) if s == &r.id) && x.approval.is_some());
+            if done {
+                return Err("The revocation is already signed and published.".into());
             }
             (r.aud.clone(), r.id.clone())
         };
-        let view = self.close(id, Status::Cancelled, "cancelled")?;
         let sign = self.create_kind(
             standing::revoke_request(&sid),
             &aud,
             Level::Medium,
             Kind::Revoke(sid),
         )?;
-        Ok((view, sign.approve_url))
+        Ok(sign.approve_url)
     }
 
     /// Signed revocations made on this gate (approval strings).
-    pub fn revocations(&self) -> Vec<String> {
-        std::fs::read_to_string(self.settings.home.join("revocations.json"))
-            .ok()
-            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-            .and_then(|v| v.get("revocations").cloned())
-            .and_then(|v| serde_json::from_value(v).ok())
-            .unwrap_or_default()
+    pub fn revocations(&self) -> Result<Vec<String>, String> {
+        match std::fs::read_to_string(self.settings.home.join("revocations.json")) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(e) => Err(format!("revocations.json: {e}")),
+            // A damaged file is never quietly replaced: earlier revocations would be lost.
+            Ok(t) => serde_json::from_str::<Value>(&t)
+                .ok()
+                .and_then(|v| v.get("revocations").cloned())
+                .and_then(|v| serde_json::from_value(v).ok())
+                .ok_or_else(|| "revocations.json is damaged; fix or restore it".to_string()),
+        }
     }
 
     fn close(&self, id: &str, status: Status, event: &str) -> Result<View, String> {

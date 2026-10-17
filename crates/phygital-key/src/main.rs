@@ -72,6 +72,10 @@ enum Command {
         /// Remove the service (keeps keys and log unless --purge).
         #[arg(long)]
         uninstall: bool,
+        /// Install this binary instead of downloading the official release.
+        /// It and every folder above it must be owned by root only.
+        #[arg(long)]
+        binary: Option<PathBuf>,
         /// With --uninstall: also delete the service user, keys and log.
         #[arg(long)]
         purge: bool,
@@ -203,7 +207,7 @@ fn hint_enroll(gate: &Gate, print_link: bool) -> Result<(), String> {
         } else {
             // In stdio mode stderr goes to the AI app's logs, so never print a token here.
             eprintln!(
-                "phygital-key: no key enrolled yet. In your own terminal, run: phygital-key enroll"
+                "phygital-key: no key enrolled yet. In your own terminal, run: phygital-key enroll (or phygital-key-admin enroll for the secure install)"
             );
         }
     }
@@ -266,10 +270,12 @@ async fn run(cli: Cli) -> Result<(), String> {
         s.mcp_token = Some(state::mcp_token(&s)?);
     }
     match cli.command {
-        Command::InstallService { uninstall, purge } => {
+        Command::InstallService {
+            uninstall,
+            purge,
+            binary,
+        } => {
             const SCRIPT: &str = include_str!("../assets/install-service.sh");
-            let me =
-                std::env::current_exe().map_err(|e| format!("cannot find this program: {e}"))?;
             let mut args = vec!["-s".to_string(), "--".to_string()];
             if uninstall {
                 args.push("--uninstall".into());
@@ -279,7 +285,13 @@ async fn run(cli: Cli) -> Result<(), String> {
             }
             let mut child = std::process::Command::new("/bin/bash")
                 .args(&args)
-                .env("PKA_SELF", &me)
+                // The script downloads and checks the official release itself: this
+                // program file is yours, so it is never what gets installed as root.
+                .env("PKA_VERSION", concat!("v", env!("CARGO_PKG_VERSION")))
+                .env(
+                    "PKA_BINARY",
+                    binary.map(|b| b.display().to_string()).unwrap_or_default(),
+                )
                 .env("PKA_PORT", s.port.to_string())
                 .stdin(std::process::Stdio::piped())
                 .spawn()
@@ -484,12 +496,21 @@ async fn run(cli: Cli) -> Result<(), String> {
         }
         Command::Serve => {
             let gate = Gate::open(s)?;
-            hint_enroll(&gate, true)?;
+            // serve often runs as a service whose output goes to a log file:
+            // never print the enrollment link or the MCP token there.
+            hint_enroll(&gate, false)?;
             prune_every_minute(&gate);
-            eprintln!(
-                "phygital-key\n  approval page   {}\n{}",
-                gate.settings.origin,
+            let mcp_line = if gate.settings.mcp_token.is_some() {
+                format!(
+                    "  MCP endpoint    {}/mcp  (access token: run  phygital-key mcp-token)",
+                    gate.settings.origin
+                )
+            } else {
                 mcp_hint(&gate.settings)
+            };
+            eprintln!(
+                "phygital-key\n  approval page   {}\n{mcp_line}",
+                gate.settings.origin
             );
             let app = web::router(gate.clone(), Some(mcp_http(&gate)));
             web::serve(gate, app).await

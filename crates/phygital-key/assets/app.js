@@ -172,6 +172,21 @@ async function approvePage() {
     }
     return;
   }
+  if (view.standing && view.revocation_signed === false) {
+    // Revoked here, but the service has not been told yet: offer the signature again.
+    $("title").textContent = "Revoked here";
+    $("lead").textContent = "No new uses can be signed. Sign the revocation so the service refuses this permission too.";
+    $("actions").hidden = false;
+    $("deny").hidden = true;
+    $("approve").textContent = "Sign the revocation";
+    $("approve").onclick = async () => {
+      try {
+        const r = await api("/api/r/" + encodeURIComponent(id) + "/sign-revocation", {});
+        location.href = r.sign_url;
+      } catch (e) { note(friendly(e), "bad"); }
+    };
+    return;
+  }
   if (view.status !== "pending") {
     const [t, l] = done[view.status] || ["Closed", ""];
     $("title").textContent = t;
@@ -196,7 +211,7 @@ async function approvePage() {
     : view.removes_key
     ? "This key will no longer be able to approve anything."
     : view.revokes
-    ? "Revoked here already: no new uses can be signed. Sign once more so the service also refuses it, even uses handed out in the last minute."
+    ? "Revoked here already: no new uses can be signed. Sign once more so the service refuses it too, as soon as it checks the revocation list (uses handed out in the last minute included)."
     : view.standing
     ? "The AI may do this on its own, up to " + view.standing.max_uses + " times until " + until +
       ", only within the limits below. You can revoke it at any time."

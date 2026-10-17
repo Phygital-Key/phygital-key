@@ -4,7 +4,9 @@ Plain words first: Phygital Key makes sure **a real person said yes to this exac
 
 ## The headline guarantee
 
-With the secure install (`sudo phygital-key install-service`), **the AI, even acting as you, can't change the gate's program, read its data or write its keys.** The gate runs as its own system user, its program belongs to root, and its data folder is closed to everyone else. Only your administrator password opens it. CI installs it for real on macOS and Linux and checks exactly this, every time.
+With the [secure install](../README.md#run-it-for-real), **the AI, even acting as you, can't change the gate's program, read its data or write its keys.** The gate runs as its own system user. Its program is the official release, checked against its published SHA-256 and kept in folders that only an administrator can change. Its data folder is closed to everyone else. Only your administrator password opens it. CI installs it for real on macOS and Linux and checks exactly this, every time, including that a program grabbing the gate's address first makes the install refuse.
+
+What it needs from you: install from a terminal you trust (an agent that already controls your shell could change what you type), keep `sudo` behind your password, and run `phygital-key-admin status` if anything looks odd.
 
 ## What we protect
 
@@ -44,7 +46,7 @@ With the secure install (`sudo phygital-key install-service`), **the AI, even ac
 
 The safety holds only if **the agent cannot change the gate's code, the gate's data folder or the verifier's keyring**.
 
-- **Good:** `sudo phygital-key install-service` (macOS, Linux). The gate runs as its own system user; its program is owned by root and its data folder is readable only by that user; enrolling a key or reading the MCP token needs your administrator password (`phygital-key-admin`). An agent acting as you can then use the gate only through MCP. This holds as long as the agent cannot use `sudo` without your password (check that your account has no password-less sudo).
+- **Good:** the secure install (macOS, Linux). The gate runs as its own system user and holds both loopback addresses (IPv4 and IPv6), so no other program can serve a page with the same passkey origin while it runs; the install refuses if anything else holds them. Its program is owned by root in a root-only folder and its data folder is readable only by that user; enrolling a key needs your administrator password (`phygital-key-admin`). An agent acting as you can then use the gate only through MCP. This holds as long as the agent cannot use `sudo` without your password (check that your account has no password-less sudo). Note: the MCP token itself ends up in your AI app's settings, which the agent can read; it keeps out other programs, not the agent.
 - **Also good:** the gate on another machine, the verifier with its own read-only copy of the keyring.
 - **Demo and quick tries:** everything under your own user (`phygital-key demo`, `phygital-key mcp`). This shows the flow, but an agent with full shell access as you could edit the files.
 

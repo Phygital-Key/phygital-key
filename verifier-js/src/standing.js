@@ -93,9 +93,8 @@ async function readUse(jws, useKey) {
   const parts = jws.split(".");
   if (parts.length !== 3) no("MALFORMED");
   const [h, p, s] = parts;
-  const hb = b64decode(h);
-  const header = hb && parseBytes(hb);
-  if (!keysAre(header, ["alg", "typ"]) || header.get("alg") !== "ES256" || header.get("typ") !== USE_TYP) no("MALFORMED");
+  // The header must be exactly these bytes (canonical JSON), as the spec says.
+  if (h !== b64encode(utf8(`{"alg":"ES256","typ":"${USE_TYP}"}`))) no("MALFORMED");
   const sig = b64decode(s);
   if (!sig || sig.length !== 64 || !scalarOk(sig.slice(0, 32)) || !scalarOk(sig.slice(32))) no("MALFORMED");
   const key = (await importKey(useKey)) ?? no("MALFORMED");
@@ -129,7 +128,7 @@ export class MemoryUseStore {
 /** Revoked standing ids, each proven by a trusted signature (unsigned entries are ignored). */
 export async function revocationsFrom(approvals, aud, keyring, config) {
   const ids = new Set();
-  for (const a of approvals ?? []) {
+  for (const a of (approvals ?? []).slice(0, 1000)) {
     if (typeof a !== "string" || a.length > MAX_APPROVAL_BYTES) continue;
     const raw = b64decode(a);
     const claims = get(raw && parseBytes(raw), "claims");
@@ -138,7 +137,8 @@ export async function revocationsFrom(approvals, aud, keyring, config) {
     const sid = get(request, "params", "standing_id");
     if (!isInt(iat) || typeof sid !== "string") continue;
     const want = new Map([["type", REVOKE_TYPE], ["params", new Map([["standing_id", sid]])]]);
-    if (tryCanonical(request) !== canonical(want)) continue;
+    const wantText = tryCanonical(want);
+    if (wantText === null || tryCanonical(request) !== wantText) continue;
     try {
       await checkKind(a, { aud, request, level: "medium" }, keyring, config, iat, false);
       ids.add(sid);

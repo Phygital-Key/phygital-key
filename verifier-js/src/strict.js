@@ -196,7 +196,8 @@ export function parse(text) {
 export function parseBytes(bytes) {
   let text;
   try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    // ignoreBOM: keep a byte-order mark, so the parser refuses it (one approval, one encoding).
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
   } catch {
     return undefined;
   }

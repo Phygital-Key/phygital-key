@@ -76,7 +76,8 @@ async fn guard(State(gate): State<Shared>, req: Request, next: Next) -> Response
             .headers()
             .get(header::AUTHORIZATION)
             .and_then(|h| h.to_str().ok())
-            .and_then(|h| h.strip_prefix("Bearer "))
+            .and_then(|h| h.split_once(' '))
+            .and_then(|(scheme, t)| scheme.eq_ignore_ascii_case("bearer").then_some(t.trim()))
             .unwrap_or_default();
         if got.len() != want.len() || !bool::from(got.as_bytes().ct_eq(want.as_bytes())) {
             return err(
@@ -195,8 +196,19 @@ async fn revoke(State(gate): State<Shared>, Path(id): Path<String>) -> Response 
     }
 }
 
+async fn sign_revocation(State(gate): State<Shared>, Path(id): Path<String>) -> Response {
+    match gate.sign_revocation(&id) {
+        Ok(url) => ok(json!({"sign_url": url})),
+        Err(e) => err(StatusCode::CONFLICT, e),
+    }
+}
+
 async fn revoked_list(State(gate): State<Shared>) -> Response {
-    let doc = json!({"revocations": gate.revocations()});
+    let list = match gate.revocations() {
+        Ok(l) => l,
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e),
+    };
+    let doc = json!({"revocations": list});
     if gate.settings.rp_id != "localhost" {
         ([(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")], Json(doc)).into_response()
     } else {
@@ -284,6 +296,7 @@ pub fn router(gate: Shared, extra: Option<Router>) -> Router {
         .route("/api/r/{id}/finish", post(finish))
         .route("/api/r/{id}/deny", post(deny))
         .route("/api/r/{id}/revoke", post(revoke))
+        .route("/api/r/{id}/sign-revocation", post(sign_revocation))
         .route("/api/enroll/begin", post(enroll_begin))
         .route("/api/enroll/finish", post(enroll_finish))
         .route("/api/keys/remove", post(remove_key))
@@ -298,16 +311,45 @@ pub fn router(gate: Shared, extra: Option<Router>) -> Router {
 
 /// Serve `app` on the gate's address until shutdown.
 pub async fn serve(gate: Shared, app: Router) -> Result<(), String> {
-    let addr = format!("{}:{}", gate.settings.bind, gate.settings.port);
-    let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| {
-        format!(
-            "cannot listen on {addr}: {e}. Is another phygital-key already running? Use --port."
-        )
-    })?;
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await
-        .map_err(|e| e.to_string())
+    let port = gate.settings.port;
+    let bind = gate.settings.bind.clone();
+    // On loopback, hold BOTH 127.0.0.1 and [::1]. Browsers may try either for
+    // "localhost"; if the gate held only one, another program on this machine could
+    // open the other one and serve a fake page with the very same passkey origin.
+    let addrs: Vec<String> = if bind == "127.0.0.1" || bind == "localhost" {
+        vec![format!("127.0.0.1:{port}"), format!("[::1]:{port}")]
+    } else {
+        vec![format!("{bind}:{port}")]
+    };
+    let mut listeners = Vec::new();
+    for addr in &addrs {
+        match tokio::net::TcpListener::bind(addr).await {
+            Ok(l) => listeners.push(l),
+            // No IPv6 on this machine: nobody else can listen there either.
+            Err(e) if addr.starts_with('[') && e.kind() == std::io::ErrorKind::AddrNotAvailable => {
+            }
+            Err(e) => {
+                return Err(format!(
+                    "cannot listen on {addr}: {e}. Another program is using this address \
+                     (another phygital-key, or something pretending to be one). Refusing to start."
+                ));
+            }
+        }
+    }
+    let mut tasks = Vec::new();
+    for l in listeners {
+        let app = app.clone();
+        tasks.push(tokio::spawn(async move {
+            axum::serve(l, app.into_make_service())
+                .with_graceful_shutdown(async {
+                    let _ = tokio::signal::ctrl_c().await;
+                })
+                .await
+                .map_err(|e| e.to_string())
+        }));
+    }
+    for t in tasks {
+        t.await.map_err(|e| e.to_string())??;
+    }
+    Ok(())
 }

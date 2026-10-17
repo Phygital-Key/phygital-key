@@ -288,6 +288,23 @@ impl GateMcp {
         description = "Withdraw a request that is still waiting, or revoke an approved standing approval."
     )]
     async fn cancel_approval(&self, Parameters(args): Parameters<IdArgs>) -> CallToolResult {
+        // An approved standing approval is revoked; the person still signs the
+        // revocation for the service, so hand back the link to show them.
+        if let Ok(v) = self.gate.view(&args.id)
+            && v.standing.as_ref().is_some_and(|s| s.usable)
+        {
+            return match self.gate.revoke(&args.id) {
+                Ok((v, sign_url)) => {
+                    let mut out = summary(&v, None);
+                    if let Some(o) = out.as_object_mut() {
+                        o.insert("sign_url".into(), Value::from(sign_url));
+                        o.insert("next".into(), Value::from("Revoked: no new uses can be signed. Ask the person to open sign_url and sign, so the service refuses it too."));
+                    }
+                    text(out)
+                }
+                Err(e) => fail(e),
+            };
+        }
         match self.gate.cancel(&args.id) {
             Ok(v) => text(summary(&v, None)),
             Err(e) => fail(e),

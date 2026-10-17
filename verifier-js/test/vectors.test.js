@@ -63,3 +63,28 @@ test("an approval works once", async () => {
   assert.equal((await verify(i.approval, e, keyringFrom(i.keyring), seen, i.config, i.now)).ok, true);
   assert.equal((await verify(i.approval, e, keyringFrom(i.keyring), seen, i.config, i.now)).error, "REPLAYED");
 });
+
+// Differences found by the security review (Rust refuses all of these).
+import { b64decode as dec } from "../src/strict.js";
+test("a level that is a JavaScript built-in name is refused", async () => {
+  const v = load("vectors.json").vectors[0];
+  const raw = new TextDecoder().decode(dec(v.input.approval)).replace('"level":"medium"', '"level":"toString"');
+  const tampered = b64encode(new TextEncoder().encode(raw));
+  const i = v.input;
+  const got = await verify(tampered, { aud: i.aud, request: i.request, level: "high" }, keyringFrom(i.keyring), new MemorySeenStore(), i.config, i.now);
+  assert.equal(got.error, "MALFORMED");
+});
+test("a byte-order mark before the approval JSON is refused", async () => {
+  const v = load("vectors.json").vectors[0];
+  const bytes = dec(v.input.approval);
+  const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...bytes]);
+  const i = v.input;
+  const got = await verify(b64encode(withBom), { aud: i.aud, request: i.request, level: "medium" }, keyringFrom(i.keyring), new MemorySeenStore(), i.config, i.now);
+  assert.equal(got.error, "MALFORMED");
+});
+test("junk in a revocation list is ignored, never thrown", async () => {
+  const s = load("standing.json").vectors[0].input;
+  const junk = b64encode(new TextEncoder().encode(JSON.stringify({ claims: { iat: 1, request: { type: "revoke", params: { standing_id: "Kirk" } } } })));
+  const ids = await revocationsFrom([junk, "!!", 5], s.aud, keyringFrom(s.keyring), s.config);
+  assert.equal(ids.size, 0);
+});
