@@ -12,7 +12,7 @@ set -euo pipefail
 
 version="${1:?usage: package-manifests.sh vX.Y.Z [out-dir]}"
 out="${2:-dist}"
-repo="s17sh70x2jfl031ag/phygital-key-mcp"
+repo="Phygital-Key/phygital-key-mcp"
 plain="${version#v}"
 base="https://github.com/$repo/releases/download/$version"
 tmp="$(mktemp -d)"

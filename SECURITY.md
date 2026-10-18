@@ -26,17 +26,17 @@ Automatic updates and `phygital-key update` arrived in 0.3.0, so the first relea
 
 ### How a release is signed
 
-1. A pushed tag `vX.Y.Z` makes CI build every archive, publish a build record for each (a build provenance attestation: which workflow built which file from which commit), and create a draft release that no installer or updater can see.
-2. The maintainer runs `scripts/sign-release.sh vX.Y.Z` in their own terminal, never from an AI agent's session (the script refuses to run without a terminal). With `gh attestation verify` it checks that each file was built by `.github/workflows/release.yml` from that tag at the commit the maintainer's own clone has for it, so `gh` is needed. It computes every SHA-256 itself and asks for the key passphrase.
-3. It signs `release.txt`, checks the signature against the pinned keys, uploads it and publishes the release.
+1. The repository owner pushes a tag `vX.Y.Z`. CI runs the tests, builds every archive and publishes a build record for each (a build provenance attestation: which workflow built which file from which commit). Anyone can check one with `gh attestation verify <file> --repo Phygital-Key/phygital-key-mcp`.
+2. The `publish` job waits until the owner opens the run on GitHub, presses "Review deployments" and approves. Only then does GitHub give it the release key, the secret `RELEASE_SIGNING_KEY` of the environment `release`, which only runs from `v*` tags can use.
+3. The job computes every SHA-256 itself, signs `release.txt`, checks the signature against the key pinned in that commit's installer, and publishes the release with `release.txt` and `release.txt.sig`.
 
-The release keys are files encrypted with passphrases the maintainer types and keeps in a password manager. Neither the keys nor the passphrases are ever in the macOS Keychain or on GitHub, so a copy of the key files without the passphrase is useless. See [docs/updates.md](docs/updates.md), and [the update channel](docs/threat-model.md#the-update-channel) for what the signature protects and what it does not.
+The release key exists only as that GitHub secret: no copy on any computer, no passphrase. So a swapped file, a mirror, a stolen workflow token or a pull request cannot make an update that installs. Someone who takes over the owner's GitHub account can: the owner's GitHub sign-in (two-factor) is what stands in the way, and you can turn automatic updates off. See [docs/updates.md](docs/updates.md), and [the update channel](docs/threat-model.md#the-update-channel) for what the signature protects and what it does not.
 
 ## Reporting a problem
 
 Please do not open a public issue, discussion or pull request for a security problem.
 
-1. Open [private vulnerability reporting](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/security/advisories/new) (the **Security** tab, then **Report a vulnerability**). Only the maintainer sees it.
+1. Open [private vulnerability reporting](https://github.com/Phygital-Key/phygital-key-mcp/security/advisories/new) (the **Security** tab, then **Report a vulnerability**). Only the maintainer sees it.
 2. Include what is listed below.
 
 There is no email contact. Use private reporting.
@@ -54,7 +54,7 @@ A failing [test vector](test-vectors/README.md) is the most helpful report: an i
 ## What not to send
 
 - Your MCP access token (`phygital-key mcp-token`), an enrollment link, or anything from `enroll-token.json`.
-- A real release key or its passphrase. To show an update problem, sign a made-up `release.txt` with a fresh test key.
+- A real release key. To show an update problem, sign a made-up `release.txt` with a fresh test key.
 - Private keys of any kind. Use the public test keys in `test-vectors/keys/test-keys.json`, or a fresh test data folder (`phygital-key --home /tmp/pk-test demo`).
 - Requests that carry real secrets or personal data. Approvals are signed, not encrypted: anyone who sees one can read its request.
 
@@ -76,12 +76,13 @@ In scope:
 - Any way for the approval page to show one request while the key signs another, outside the limits in the threat model.
 - Any way around the [secure install](docs/secure-install.md) guarantee: the AI, acting as you, changing the gate's program, reading its data or writing its keys, without the administrator password.
 - Any way to make the secure install, `install.sh` or `phygital-key update` install a release that is not signed by a pinned release key, or make the daily update job install an older version.
+- Any way to read `RELEASE_SIGNING_KEY` or get a release signed without the owner's approval of the run on GitHub.
 - Secrets (MCP token, enrollment token) leaking into logs, pages or tool answers.
 - Receipts or revocations accepted when they should not be.
 
 Out of scope:
 
-- What the [threat model](docs/threat-model.md) lists as trusted or as a known limit: a compromised device, authenticator or gate machine; the 60-second window after a revoke; signed-not-encrypted requests; no hardware attestation; an audit log rewritten in full; updates held back (a freeze); a bad release that was signed with a release key and starts.
+- What the [threat model](docs/threat-model.md) lists as trusted or as a known limit: a compromised device, authenticator or gate machine; the 60-second window after a revoke; signed-not-encrypted requests; no hardware attestation; an audit log rewritten in full; updates held back (a freeze); a bad release that was signed with a release key and starts; a release made by someone in control of the owner's GitHub account.
 - A service that does not call the verifier, or calls it with the agent's idea of the audience, request or level.
 - A person approving a harmful request after reading it.
 - An AI model following instructions hidden in data. Phygital Key's answer is that text never counts as a yes; better page warnings are welcome as normal issues.

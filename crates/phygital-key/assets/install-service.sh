@@ -2,7 +2,7 @@
 # Phygital Key: run the gate as its own locked-down system user (macOS, Linux).
 #
 # Recommended (from a fresh terminal you trust):
-#   curl -q -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
+#   curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
 # It then updates itself once a day to the latest SIGNED release (see below).
 # Later, use the locked copy it installs:
 #   sudo /Library/PhygitalKey/bin/phygital-key install-service [--release vX.Y.Z | --no-auto-update | --uninstall]   (macOS)
@@ -19,8 +19,8 @@
 # Why: an AI agent runs as you. If the gate also ran as you, the agent could edit
 # the gate's program, keys and log. Here the gate runs as a separate user. Its
 # program is the official release, whose file list and SHA-256 sums are signed with
-# a release key kept offline (not on GitHub), and it is kept in folders only an
-# administrator can change. Its data folder is closed to everyone else. Nothing that you (or an agent acting as you) could have edited is
+# the project's release key (used only in release runs the owner approved), and it
+# is kept in folders only an administrator can change. Its data folder is closed to everyone else. Nothing that you (or an agent acting as you) could have edited is
 # ever run as root or installed.
 set -euo pipefail
 # Root must not take anything from the caller's environment: a ~/.curlrc in HOME
@@ -31,7 +31,7 @@ HOME=$(cd ~root && pwd); export HOME
 unset CURL_HOME XDG_CONFIG_HOME SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE OPENSSL_CONF OPENSSL_MODULES BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH
 umask 022
 
-REPO="s17sh70x2jfl031ag/phygital-key-mcp"
+REPO="Phygital-Key/phygital-key-mcp"
 VERSION="${PKA_VERSION:-v0.3.0}"
 PORT="${PKA_PORT:-7468}"
 BINARY="${PKA_BINARY:-}"   # optional: an already root-owned binary (used by CI)
@@ -56,6 +56,10 @@ done
 # same block, so the shell installer and `phygital-key update` trust the same keys.
 # BEGIN RELEASE KEYS
 RELEASE_KEYS='
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE20rJyJxya04dIg9glW3+S/9A8eCS
+qxHS4ARIaSSaF5lWATAX8cDl2JleS2qtDcKNsJB0wCWDqExQfgyIrIfc5w==
+-----END PUBLIC KEY-----
 '
 # END RELEASE KEYS
 

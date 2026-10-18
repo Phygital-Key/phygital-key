@@ -308,14 +308,14 @@ A crash leaves either the old file or the new one, never half of one. If the sav
 
 ## Signed releases and updates
 
-The secure install updates itself once a day, on by default ([decision 36](decisions.md)). An update runs new code as root, so a SHA-256 published next to the file is not enough: whoever controlled the GitHub account could replace both. Each release therefore carries a file list signed with a release key that never touches GitHub, and every installer and updater checks that signature against public keys pinned in its own source. Before the key signs, the build record of every file is checked against the maintainer's own copy of the tag. The code is `src/update.rs`, `assets/install-service.sh`, `install.sh`, `scripts/release-key.sh`, `scripts/sign-release.sh` and `.github/workflows/release.yml`.
+The secure install updates itself once a day, on by default ([decision 36](decisions.md)). An update runs new code as root, so a SHA-256 published next to the file is not enough: whoever can change the release files could replace both. Each release therefore carries a file list signed with a release key, and every installer and updater checks that signature against public keys pinned in its own source. The key is a secret of the GitHub environment `release`, which GitHub hands only to a release run from a `v*` tag that the repository owner approved. So a swapped file, a mirror or a stolen workflow token cannot make an update that installs, but whoever controls the owner's GitHub account can ([the update channel](threat-model.md#the-update-channel)). The code is `src/update.rs`, `assets/install-service.sh`, `install.sh`, `scripts/release-key.sh` and `.github/workflows/release.yml`.
 
 ```mermaid
 flowchart TD
     T["Tag vX.Y.Z pushed"] --> B["CI: tests, builds 5 targets, writes .sha256 files and build records"]
-    B --> D["Draft release: invisible to installers and updaters"]
-    D --> S["sign-release.sh on the maintainer's Mac: checks build records, hashes, writes and signs release.txt"]
-    S --> P["release.txt and release.txt.sig uploaded, release published"]
+    B --> A["publish job waits: the owner approves the run on GitHub"]
+    A --> S["publish job: hashes every archive, writes and signs release.txt, checks it against the pinned key"]
+    S --> P["Release published with release.txt and release.txt.sig"]
     P --> F["Daily job fetches the latest release.txt and its signature"]
     F --> K{"Signed by a pinned release key?"}
     K -- no --> R1["Refused: nothing changes"]
@@ -362,16 +362,17 @@ The shell installers check the signature with `openssl dgst -sha256 -verify`. Th
 
 Both installers hold the public keys between `# BEGIN RELEASE KEYS` and `# END RELEASE KEYS`, as PEM `PUBLIC KEY` blocks. The program compiles `install-service.sh` into itself and reads the same block, so the shell installer, `phygital-key update` and the hidden `phygital-key release-check` command trust the same keys. The test `both_installers_pin_the_same_keys` fails if the block in `install.sh` differs.
 
-`scripts/release-key.sh` (run once, on the maintainer's Mac) makes two P-256 keys in `~/.phygital-key-release`: a signing key and a backup key to be moved off that computer. Each key file is encrypted (AES-256) with a passphrase the maintainer types (and keeps in a password manager); the script refuses to run without a terminal. Nothing goes into the macOS Keychain, so a program running as the maintainer, an agent included, can copy the encrypted files but cannot use them. The script then writes both public keys into the two installers. Private release keys and passphrases are never stored in GitHub or its secrets. A hardware key (for example a YubiKey with touch) would be a stronger home for the signing key later.
+`scripts/release-key.sh` is run once, by the repository owner, in a terminal (it refuses without one), with `gh` signed in as the owner and `openssl` installed. It makes one P-256 key in a temporary folder, creates the GitHub environment `release` (the owner as required reviewer, deployments only from tags `v*`), stores the private key as that environment's secret `RELEASE_SIGNING_KEY`, deletes the local copy, and writes the public key into both installers (the owner commits that change). It refuses if a key is already pinned. The private key is then only in GitHub: there is no copy on any computer, no passphrase and no backup key. If the key has to change, a release signed with the old key pins both the old and the new public key, and a later release removes the old one.
 
 > [!IMPORTANT]
-> The release keys are not made yet: in this source tree the key block is empty. Until the maintainer runs `scripts/release-key.sh` and commits the block, every installer refuses with "no release key is pinned in this installer", and the test `installer_pins_at_least_one_release_key` fails.
+> The release key is not made yet: in this source tree the key block is empty. Until the owner runs `scripts/release-key.sh` and commits the block, every install and update is refused (the secure installer says "no release key is pinned in this installer"; `install.sh` and `phygital-key update` say the release list is not signed by a pinned release key), and the test `installer_pins_at_least_one_release_key` fails.
 
-### Draft until signed
+### Signed only after approval
 
-1. Pushing a `v*` tag runs `release.yml`: `cargo test --workspace --locked` and a release build for 5 targets (Linux x86_64 and arm64, macOS Apple silicon and Intel, Windows x86_64), each packed as `.tar.gz` (`.zip` on Windows) with a `.sha256` file.
-2. Each build job publishes a build provenance attestation for its archive (`actions/attest-build-provenance`, signed through Sigstore): GitHub's record of which workflow built which file from which commit. The workflow then creates a draft release. Drafts are not served by `releases/latest/download` or by version URLs, so no installer and no updater can see it.
-3. On the maintainer's Mac, in their own terminal (the script refuses without one), `scripts/sign-release.sh vX.Y.Z` reads the commit of the tag from the maintainer's own clone, downloads the draft's files, computes each SHA-256 itself and requires it to match the workflow's `.sha256` file. It then runs `gh attestation verify` for each file: built by `.github/workflows/release.yml`, from `refs/tags/vX.Y.Z`, at that commit. A file swapped on GitHub after the build has no such record, and the script stops with `no build record from the release workflow at <commit>. Not signing.` Only then does it write `release.txt`, sign it with the signing key (the maintainer types the passphrase), check the signature against the keys pinned in `install-service.sh`, upload `release.txt` and `release.txt.sig` and publish the release as the latest.
+1. Pushing a `v*` tag runs `release.yml`. Its build job runs `cargo test --workspace --locked` and a release build for 5 targets (Linux x86_64 and arm64, macOS Apple silicon and Intel, Windows x86_64), each packed as `.tar.gz` (`.zip` on Windows) with a `.sha256` file.
+2. Each build job publishes a build provenance attestation for its archive (`actions/attest-build-provenance`, signed through Sigstore): GitHub's record of which workflow built which file from which commit. Anyone can check it with `gh attestation verify <file> --repo Phygital-Key/phygital-key-mcp`.
+3. The `publish` job runs in the environment `release`, so it waits until the owner opens the run, presses "Review deployments" and approves. Only an approved run gets `RELEASE_SIGNING_KEY`. Nothing is published before that.
+4. After approval the job checks that the tag is exactly `vX.Y.Z`, computes the SHA-256 of every archive itself, writes `release.txt`, signs it with `openssl dgst -sha256 -sign`, and checks the signature against every key pinned in that commit's `install-service.sh`. If none matches it stops with `the signature does not match a key pinned in install-service.sh`. Then it publishes the release (not a draft) with every archive, its `.sha256`, `release.txt` and `release.txt.sig`.
 
 ### The daily job
 
@@ -383,7 +384,7 @@ Both installers hold the public keys between `# BEGIN RELEASE KEYS` and `# END R
 
 `<prefix>` is `/Library/PhygitalKey` on macOS and `/usr/lib/phygital-key` on Linux. The installed program runs the installer script compiled into it, with bash started from an empty environment (only `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, root's `HOME`, `LANG=C` and the `PKA_*` values). The script sets that `PATH` and `HOME` again, clears variables such as `CURL_HOME`, `SSL_CERT_FILE`, `OPENSSL_CONF`, `BASH_ENV`, `LD_PRELOAD` and `DYLD_INSERT_LIBRARIES`, sets `umask 022`, and then:
 
-1. fetches `https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases/latest/download/release.txt` and `release.txt.sig` (`curl -q --proto '=https' --tlsv1.2`; `-q` means no `.curlrc` is read);
+1. fetches `https://github.com/Phygital-Key/phygital-key-mcp/releases/latest/download/release.txt` and `release.txt.sig` (`curl -q --proto '=https' --tlsv1.2`; `-q` means no `.curlrc` is read);
 2. checks the signature with `openssl` and the pinned keys, or, if `openssl` is missing, with the installed root-owned program's `release-check`;
 3. stops if the signed version is not strictly newer than the installed one;
 4. asks the gate's `/api/status` for `standing_active`; if it is above zero, records `waiting to install ...` and stops, unless run with `--now`. The first wait on the installed version writes `<unix time> <installed version>` to `<prefix>/update-postponed`; a newer release does not restart that clock, and after 7 days the job installs anyway. Waiting requests (`waiting`) do not count, because an agent can make one at any time;

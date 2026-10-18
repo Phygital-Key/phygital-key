@@ -4,9 +4,9 @@ PackageLocale: en-US
 Publisher: Phygital Key contributors
 PackageName: Phygital Key
 License: Apache-2.0
-LicenseUrl: https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/blob/main/LICENSE
+LicenseUrl: https://github.com/Phygital-Key/phygital-key-mcp/blob/main/LICENSE
 ShortDescription: Approve exact AI actions with a passkey or hardware key (MCP gate + verifier)
-PackageUrl: https://github.com/s17sh70x2jfl031ag/phygital-key-mcp
+PackageUrl: https://github.com/Phygital-Key/phygital-key-mcp
 Tags:
   - mcp
   - passkey

@@ -6,7 +6,7 @@ How Phygital Key gets new versions for each way of installing it: the secure ins
 
 ## How often
 
-There is no fixed release schedule. New versions appear on the [Releases](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases) page, and what changed is in [CHANGELOG.md](../CHANGELOG.md). While the project is at 0.x, only the latest release gets fixes ([SECURITY.md](../SECURITY.md)).
+There is no fixed release schedule. New versions appear on the [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) page, and what changed is in [CHANGELOG.md](../CHANGELOG.md). While the project is at 0.x, only the latest release gets fixes ([SECURITY.md](../SECURITY.md)).
 
 See what you have:
 
@@ -24,7 +24,7 @@ phygital-key 0.3.0
 |---|---|---|
 | The [secure install](secure-install.md) | By itself, once a day, signed releases only ([below](#automatic-updates-secure-install)) | `phygital-key-admin update` |
 | The install script (`install.sh`) | When you run the command | `phygital-key update` (or `phygital-key update --check` to only look) |
-| cargo | When you run the command | `phygital-key update`, or build again: `cargo install --locked --force --git https://github.com/s17sh70x2jfl031ag/phygital-key-mcp phygital-key` |
+| cargo | When you run the command | `phygital-key update`, or build again: `cargo install --locked --force --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key` |
 | Homebrew | With Homebrew | `brew update` then `brew upgrade phygital-key` |
 | Scoop (Windows) | With Scoop | `scoop update` then `scoop update phygital-key` |
 | By hand | When you download it | Download the new archive, [check it](#check-a-download-yourself), replace the program file |
@@ -69,7 +69,7 @@ flowchart TD
 
 In words:
 
-1. It downloads `release.txt` and `release.txt.sig` from `https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases/latest/download/` over https (TLS 1.2 or newer). Every `curl` starts with `-q`, so it never reads a `.curlrc` file.
+1. It downloads `release.txt` and `release.txt.sig` from `https://github.com/Phygital-Key/phygital-key-mcp/releases/latest/download/` over https (TLS 1.2 or newer). Every `curl` starts with `-q`, so it never reads a `.curlrc` file.
 2. It checks the signature against the release keys pinned in the installed program's own installer script ([the signed release list](#the-signed-release-list)). Any doubt is a refusal.
 3. It compares the signed version with the installed one, number by number (`v0.10.0` is newer than `v0.9.9`). Only a strictly newer version goes on. An automatic update never installs an older version.
 4. If any standing approval is active, it waits ([waiting while you are busy](#waiting-while-you-are-busy)).
@@ -132,7 +132,7 @@ sudo /Library/PhygitalKey/bin/phygital-key install-service --release v0.4.0     
 sudo /usr/lib/phygital-key/bin/phygital-key install-service --release v0.4.0     # Linux
 ```
 
-(`v0.4.0` is an example: use a version from the [Releases](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases) page.) The same signed-list check applies. With automatic updates on, the next daily run moves an older version up to the latest signed release again.
+(`v0.4.0` is an example: use a version from the [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) page.) The same signed-list check applies. With automatic updates on, the next daily run moves an older version up to the latest signed release again.
 
 ### Turn automatic updates off or on
 
@@ -144,7 +144,7 @@ sudo /Library/PhygitalKey/bin/phygital-key install-service --auto-update      # 
 (On Linux: `/usr/lib/phygital-key/bin/phygital-key`.) To install with updates off from the start:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash -s -- --no-auto-update
+curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash -s -- --no-auto-update
 ```
 
 The choice is saved as `on` or `off` in `<prefix>/auto-update` and kept on later installs until you pass the other option. `--no-auto-update` removes the job; `phygital-key-admin update` still works when you want it. Both options run the whole install again for the installed version, so the gate restarts.
@@ -185,13 +185,13 @@ It refuses where another updater is in charge:
 |---|---|
 | Secure install | `phygital-key: this is the secure install: it updates itself every day. To update now: phygital-key-admin update` |
 | Homebrew | `phygital-key: installed with Homebrew: run  brew upgrade phygital-key` |
-| Windows | `phygital-key: on Windows, update with your package manager: scoop update phygital-key, or winget upgrade` |
+| Windows | `phygital-key: on Windows, update with Scoop (scoop update phygital-key), or download the new .zip from the Releases page` |
 
 The install script itself also checks the signed release list (it needs `openssl` for that) and ends with `Update later with: phygital-key update`. To pin a version with the script, put `PHYGITAL_KEY_VERSION=v0.3.0` before `sh`.
 
 ## Package managers
 
-- **Homebrew:** `brew update`, then `brew upgrade phygital-key`. Homebrew checks the archive against the SHA-256 in the formula of the tap `s17sh70x2jfl031ag/homebrew-tap`.
+- **Homebrew:** `brew update`, then `brew upgrade phygital-key`. Homebrew checks the archive against the SHA-256 in the formula of the tap `Phygital-Key/homebrew-tap`.
 - **Scoop:** `scoop update`, then `scoop update phygital-key`. Scoop installs the version and SHA-256 listed in the project's bucket file ([`bucket/phygital-key.json`](../bucket/phygital-key.json)), which is updated separately from each release.
 - **winget:** manifests are generated in [`packaging/winget`](../packaging/winget) but are not submitted to Microsoft, so `winget upgrade` does not find Phygital Key yet.
 
@@ -214,23 +214,26 @@ Every release carries two extra files:
 
   $$\text{release.txt.sig} = \mathrm{ECDSA\text{-}P256}_{\text{release key}}\big(\mathrm{SHA256}(\texttt{release.txt})\big)$$
 
-The private release key is kept on the maintainer's computer, encrypted (AES-256) with a passphrase the maintainer types at each signing and keeps in a password manager. Neither the key nor the passphrase is in the macOS Keychain or on GitHub, so a program running as the maintainer can copy the key file but cannot use it. A second backup key is kept offline. Both public keys are pinned in a `# BEGIN RELEASE KEYS` block in the secure installer (`crates/phygital-key/assets/install-service.sh`) and in `install.sh`, and a test checks that the two blocks match. `phygital-key update` reads the same block, built into the program.
+The private release key is a secret of the GitHub environment `release` (named `RELEASE_SIGNING_KEY`). GitHub hands that secret only to a release run started by a `v*` tag, and only after the repository owner approved that run on its page ("Review deployments", then Approve). No copy is kept anywhere else: `scripts/release-key.sh` makes the key in a temporary folder, stores it in GitHub and deletes the local copy. The public key is pinned in a `# BEGIN RELEASE KEYS` block in the secure installer (`crates/phygital-key/assets/install-service.sh`) and in `install.sh`, and a test checks that the two blocks match. `phygital-key update` reads the same block, built into the program.
 
 ```mermaid
 flowchart LR
-    CI["Release workflow on GitHub: builds the archives and a build record for each"] --> Draft["Draft release (invisible to installers)"]
-    Draft --> Sign["Maintainer's computer: sign-release.sh checks the build records, computes every SHA-256, writes and signs release.txt"]
+    Tag["Owner pushes tag vX.Y.Z"] --> Build["build job: tests, 5 archives, a build record for each"]
+    Build --> Wait["publish job waits for the owner's approval"]
+    Wait --> Sign["After approval: computes every SHA-256, writes and signs release.txt, checks it against the pinned key"]
     Sign --> Pub["Published release with release.txt and release.txt.sig"]
     Pub --> Check["Installer, update job or phygital-key update: checks the signature with the pinned keys, then the SHA-256"]
 ```
 
-1. The release workflow builds the archives and their `.sha256` files, publishes a build provenance attestation for each archive (`actions/attest-build-provenance`: a record signed through Sigstore of which workflow built which file from which commit), and creates a **draft** release. Drafts are invisible to installers and updaters.
-2. On the maintainer's computer, in their own terminal, `scripts/sign-release.sh vX.Y.Z` downloads the files, computes each SHA-256 itself, checks it against the workflow's `.sha256` file, and runs `gh attestation verify` on each archive: it must have been built by `.github/workflows/release.yml` from `refs/tags/vX.Y.Z` at the commit the maintainer's own clone has for that tag. Only then does it ask for the passphrase, sign `release.txt`, check the signature against the keys pinned in the repo, upload both files and publish the release.
+1. A pushed tag `vX.Y.Z` starts `.github/workflows/release.yml`. Its build job runs `cargo test --workspace --locked` and builds the archives (and their `.sha256` files) for the 5 targets, and publishes a build provenance attestation for each archive (`actions/attest-build-provenance`: a record signed through Sigstore of which workflow built which file from which commit).
+2. The `publish` job uses the environment `release`, so it waits until the owner presses "Review deployments" and approves. Only then does it get the key. It computes the SHA-256 of every archive itself, writes `release.txt`, signs it, checks the signature against the keys pinned in that commit's `install-service.sh` (it stops if none matches), and publishes the release with every file plus `release.txt` and `release.txt.sig`.
 3. Every installer and updater checks the signature first and takes the SHA-256 only from the signed list.
 
 The parser in `crates/phygital-key/src/update.rs` refuses anything that is not exactly this form: another header, a version line without `v` or with leading zeros, uppercase hex, one space instead of two, CRLF line ends, a file name for another version, a path, a duplicate file, or a list with no files.
 
-What this protects: someone who takes over the release files or a download mirror cannot make an update that installs, because they do not have the release key. Someone who takes over the GitHub account cannot get a swapped draft file signed either, because it has no build record from the release workflow at the maintainer's tag commit. They are not stopped if they can also change what the workflow builds at that same commit (for example through a poisoned action; the actions are pinned by commit SHA). What it does not protect: your first install trusts the installer script you download (pinned to the `v0.3.0` tag over https), and the keys in it are the root of trust from then on. A stolen release key, or the maintainer's computer taken over, would defeat it.
+What this protects: someone who swaps a release file on GitHub, runs a download mirror or sits between you and GitHub cannot make an update that installs, because they cannot sign. A stolen workflow token or a pull request cannot read the key either: GitHub gives the environment secret only to approved runs from `v*` tags.
+
+What it does not protect: whoever controls the owner's GitHub account (or is a repository admin) can push a tag, approve the run and get a signed release, and the secure install with automatic updates installs it within about a day. What still limits that: the owner's GitHub sign-in (two-factor, ideally a passkey), the build record that shows afterwards which workflow built each file from which commit, the version check (no older version installs), and your choice to turn automatic updates off. Your first install also trusts the installer script you download (pinned to the `v0.3.0` tag over https), and the keys in it are the root of trust from then on. See [the update channel](threat-model.md#the-update-channel).
 
 ## After updating
 
@@ -264,7 +267,7 @@ Each archive holds one folder with the program, `README.md`, `LICENSE` and `NOTI
 **Check the signed list (who published it).** Download `release.txt` and `release.txt.sig` from the release, take the pinned public keys from the installer of the same tag, and check the signature:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh \
+curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh \
   | awk '/-----BEGIN PUBLIC KEY-----/{n++; f="release-key-" n ".pem"} f{print > f} /-----END PUBLIC KEY-----/{close(f); f=""}'
 openssl dgst -sha256 -verify release-key-1.pem -signature release.txt.sig release.txt
 ```
@@ -291,14 +294,21 @@ On Windows (PowerShell), compare the hash it prints with the first word of the `
 (Get-FileHash .\phygital-key-v0.3.0-x86_64-pc-windows-msvc.zip -Algorithm SHA256).Hash.ToLower()
 ```
 
-A matching `.sha256` shows only that the file is the one published next to it on GitHub. The signed `release.txt` also shows that the holder of a release key published it.
+A matching `.sha256` shows only that the file is the one published next to it on GitHub. The signed `release.txt` also shows that a release run the owner approved signed it.
+
+**Check the build record (who built it).** With the GitHub CLI (`gh`), check that the release workflow built the archive, and from which commit:
+
+```bash
+gh attestation verify phygital-key-v0.3.0-aarch64-apple-darwin.tar.gz --repo Phygital-Key/phygital-key-mcp
+```
 
 ## Limits
 
 - **Not tested against GitHub yet.** Signed release lists start with v0.3.0, so the first real automatic update (download, check, swap and restart against a newer signed release on GitHub) happens with the release after v0.3.0. CI tests the parts on their own, on macOS and Linux, on every push to `main` and every pull request (`tests/secure-install.sh`): the update job is installed and root-owned, it is on by default, a release list signed by an unknown key is refused, the job leaves the gate running unless a newer signed release exists and records its result, a new program that does not start is switched back to the previous one, `--no-auto-update` removes the job, the off choice is kept on later installs, `--auto-update` turns it back on, uninstall removes the job, and root ignores a planted `~/.curlrc` and a fake `curl` early in the user's `PATH`. The unit tests in `update.rs` cover the signature check, the strict format, version order, reading the pinned keys, and that both installers pin the same keys.
-- **One trust root.** Everything rests on the pinned release keys and on the first installer you ran.
+- **The owner's GitHub account can ship an update.** The release key lives in GitHub, so whoever controls the owner's account can approve a release run and get a signed update ([what this protects](#the-signed-release-list)). Turn automatic updates off if you want to install each release yourself.
+- **One trust root.** Everything rests on the pinned release keys, the owner's GitHub account, and the first installer you ran.
 - **A moment with a free port.** During an update restart the gate's port is free for a moment. A program that takes it is stopped and the gate started again, but a fast program could win that moment again (and is stopped again). Handing the open port from launchd or systemd to the gate, so it is never free, is not built: the gate forbids unsafe code.
-- **No expiry on the signed list.** Someone who controls the GitHub account or a download mirror could keep serving an old, validly signed `release.txt`. The job then reports `up to date` and never sees the newer release (a freeze). Compare the version in `status` with the [Releases](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases) page now and then.
+- **No expiry on the signed list.** Someone who controls the GitHub account or a download mirror could keep serving an old, validly signed `release.txt`. The job then reports `up to date` and never sees the newer release (a freeze). Compare the version in `status` with the [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) page now and then.
 - **Daily network use.** With automatic updates on, the secure install contacts `github.com` once a day ([privacy](privacy.md#what-leaves-your-machine)). The gate itself still makes no network calls.
 - **Restarts.** An installed update restarts the gate at the job's time, with the effects [above](#what-automatic-updates-need).
 

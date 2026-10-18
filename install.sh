@@ -1,14 +1,14 @@
 #!/bin/sh
 # Install phygital-key on macOS or Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh | sh
 #
 # Downloads the latest release for this machine from GitHub, checks that its
 # release list is signed by a pinned release key and that the SHA-256 matches, and puts `phygital-key` in ~/.local/bin (or $PHYGITAL_KEY_BIN_DIR).
 # Set PHYGITAL_KEY_VERSION=v0.3.0 (or later: earlier releases have no signed list) to pin a version. Nothing else is touched.
 set -eu
 
-REPO="s17sh70x2jfl031ag/phygital-key-mcp"
+REPO="Phygital-Key/phygital-key-mcp"
 BIN_DIR="${PHYGITAL_KEY_BIN_DIR:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*" >&2; }
@@ -33,6 +33,10 @@ target="$arch-$os"
 # Pinned release keys (P-256), the same block as in the secure installer.
 # BEGIN RELEASE KEYS
 RELEASE_KEYS='
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE20rJyJxya04dIg9glW3+S/9A8eCS
+qxHS4ARIaSSaF5lWATAX8cDl2JleS2qtDcKNsJB0wCWDqExQfgyIrIfc5w==
+-----END PUBLIC KEY-----
 '
 # END RELEASE KEYS
 

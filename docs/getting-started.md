@@ -17,11 +17,11 @@ Install the program (pick one):
 
 | Where | Command |
 |---|---|
-| macOS, Linux (Homebrew) | `brew install s17sh70x2jfl031ag/tap/phygital-key` |
-| macOS, Linux (script) | `curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/main/install.sh \| sh` |
-| Windows (Scoop) | `scoop bucket add phygital-key https://github.com/s17sh70x2jfl031ag/phygital-key-mcp` then `scoop install phygital-key` |
-| Anywhere with Rust | `cargo install --locked --git https://github.com/s17sh70x2jfl031ag/phygital-key-mcp phygital-key` |
-| By hand | Download from [Releases](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases). Each release has a signed list of SHA-256 sums, `release.txt` ([how to check it](updates.md#check-a-download-yourself)). |
+| macOS, Linux (Homebrew) | `brew install phygital-key/tap/phygital-key` |
+| macOS, Linux (script) | `curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh \| sh` |
+| Windows (Scoop) | `scoop bucket add phygital-key https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key` |
+| Anywhere with Rust | `cargo install --locked --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key` |
+| By hand | Download from [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases). Each release has a signed list of SHA-256 sums, `release.txt` ([how to check it](updates.md#check-a-download-yourself)). |
 
 The script downloads the latest release list (`release.txt`), checks that it is signed by a release key pinned in the script, downloads the archive for your machine, compares its SHA-256 with the signed list and writes one file, `~/.local/bin/phygital-key`. Nothing else is touched. It needs `curl`, `tar` and `openssl`. Later, `phygital-key update` installs newer signed releases ([updates](updates.md)).
 
@@ -117,7 +117,7 @@ There are two ways to run the gate for real use. Both give the AI the same six t
 From a fresh terminal that no AI controls (macOS or Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
 ```
 
 It downloads the official v0.3.0 release, checks that its file list is signed by a pinned release key and that the archive matches the signed SHA-256, installs it where only an administrator can change it, and starts it as its own user. From then on it updates itself once a day to newer signed releases ([updates](updates.md#automatic-updates-secure-install); add `-s -- --no-auto-update` after `sudo bash` to turn that off). Then:

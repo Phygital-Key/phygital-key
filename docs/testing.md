@@ -75,7 +75,7 @@ cargo test --workspace
 ```
 
 > [!NOTE]
-> `installer_pins_at_least_one_release_key` fails until the maintainer has made the release keys with `scripts/release-key.sh` and pinned them in the installers. No key is pinned in this repository yet, so this one test fails on a fresh checkout. It stops a release from being built without a pinned key.
+> `installer_pins_at_least_one_release_key` fails until the repository owner has made the release key with `scripts/release-key.sh` and pinned it in the installers. No key is pinned in this repository yet, so this one test fails on a fresh checkout. It stops a release from being built without a pinned key.
 
 ## Property tests
 
@@ -394,9 +394,9 @@ flowchart TD
   T --> J6["licenses and advisories: cargo-deny"]
   J1 --> S1["fmt, clippy -D warnings, cargo test, vectors up to date"]
   Tag["Tag v*"] --> RB["release build: 5 targets, cargo test first"]
-  RB --> RD["draft release, each file with .sha256 and a build record"]
-  RD --> SG["maintainer runs scripts/sign-release.sh"]
-  SG --> RP["release.txt and .sig uploaded, release published"]
+  RB --> RD["each file with .sha256 and a build record"]
+  RD --> SG["publish job waits for the owner's approval"]
+  SG --> RP["release.txt signed and checked, release published"]
 ```
 
 | Job | Runs on | Steps |
@@ -409,7 +409,7 @@ flowchart TD
 | fuzz | `ubuntu-latest`, nightly Rust | `cargo install --locked cargo-fuzz`, then each of the 4 targets for 60 s |
 | licenses and advisories | `ubuntu-latest` | cargo-deny |
 
-`.github/workflows/release.yml` runs on a `v*` tag. It builds for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, runs `cargo test --workspace --locked` on each runner first, packages the program with `README.md`, `LICENSE` and `NOTICE`, writes a `.sha256` for each archive, publishes a build provenance attestation for each archive (`actions/attest-build-provenance`), and creates a draft release. Drafts are invisible to installers and to the daily update job. The maintainer then runs `scripts/sign-release.sh vX.Y.Z` on their own Mac, in their own terminal: it downloads the files, computes each SHA-256 itself and compares it with the workflow's `.sha256`, checks with `gh attestation verify` that each file was built by `release.yml` from the tag at the commit their own clone has for it, asks for the passphrase, writes and signs `release.txt`, checks the signature against the keys pinned in `install-service.sh`, uploads `release.txt` and `release.txt.sig`, and only then publishes. The release key never goes to GitHub. See [contributing](../CONTRIBUTING.md#releasing).
+`.github/workflows/release.yml` runs on a `v*` tag. It builds for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, runs `cargo test --workspace --locked` on each runner first, packages the program with `README.md`, `LICENSE` and `NOTICE`, writes a `.sha256` for each archive, publishes a build provenance attestation for each archive (`actions/attest-build-provenance`), Its `publish` job uses the environment `release` and waits until the repository owner approves the run on GitHub. Then it computes each SHA-256 itself, writes and signs `release.txt` with the environment secret `RELEASE_SIGNING_KEY`, checks the signature against the keys pinned in that commit's `install-service.sh`, and publishes the release with `release.txt` and `release.txt.sig`. The signing step runs only at a real release, not in CI on push. See [contributing](../CONTRIBUTING.md#releasing).
 
 ## The owner's hand test
 

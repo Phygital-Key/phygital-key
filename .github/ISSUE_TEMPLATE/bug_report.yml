@@ -7,7 +7,7 @@ body:
       value: |
         Issues are public. Never paste your MCP access token (`phygital-key mcp-token`), an enrollment link, a private key, or a request that holds a real secret.
         Approvals and receipts are signed, not secret, but they show the request they cover: remove anything private from them first.
-        If someone could make a service act without a real yes, don't open an issue: [report it privately](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/security/advisories/new).
+        If someone could make a service act without a real yes, don't open an issue: [report it privately](https://github.com/Phygital-Key/phygital-key-mcp/security/advisories/new).
   - type: input
     id: version
     attributes:

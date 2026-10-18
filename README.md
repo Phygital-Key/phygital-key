@@ -7,8 +7,8 @@
 <p align="center">
 <a href="#open-source-and-credit"><img src="https://img.shields.io/badge/-open%20source-26D0F2" alt="Open source"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-<a href="https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/actions/workflows/ci.yml"><img src="https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-<a href="https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases/latest"><img src="https://img.shields.io/github/v/release/s17sh70x2jfl031ag/phygital-key-mcp" alt="Latest release"></a>
+<a href="https://github.com/Phygital-Key/phygital-key-mcp/actions/workflows/ci.yml"><img src="https://github.com/Phygital-Key/phygital-key-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://github.com/Phygital-Key/phygital-key-mcp/releases/latest"><img src="https://img.shields.io/github/v/release/Phygital-Key/phygital-key-mcp" alt="Latest release"></a>
 <a href="Cargo.toml"><img src="https://img.shields.io/badge/rust-1.89%2B-orange" alt="Rust 1.89+"></a>
 <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-server-black" alt="MCP server"></a>
 </p>
@@ -88,11 +88,11 @@ Install (pick one):
 
 | Where | Command |
 |---|---|
-| macOS, Linux (Homebrew) | `brew install s17sh70x2jfl031ag/tap/phygital-key` |
-| macOS, Linux (script) | `curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/main/install.sh \| sh` |
-| Windows (Scoop) | `scoop bucket add phygital-key https://github.com/s17sh70x2jfl031ag/phygital-key-mcp` then `scoop install phygital-key` |
-| Anywhere with Rust | `cargo install --locked --git https://github.com/s17sh70x2jfl031ag/phygital-key-mcp phygital-key` |
-| Manual | Download from [Releases](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases) (each file has a `.sha256`) |
+| macOS, Linux (Homebrew) | `brew install phygital-key/tap/phygital-key` |
+| macOS, Linux (script) | `curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh \| sh` |
+| Windows (Scoop) | `scoop bucket add phygital-key https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key` |
+| Anywhere with Rust | `cargo install --locked --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key` |
+| Manual | Download from [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) (each file has a `.sha256`) |
 
 The script checks that the release's file list is signed by a pinned release key and that the download matches its SHA-256, then writes only `~/.local/bin/phygital-key` (it needs `openssl`). Update it later with `phygital-key update`.
 
@@ -241,7 +241,7 @@ phygital-key keys --check <fingerprint> --file new.json --signed-on https://appr
 An AI agent on your computer runs as you, so it could edit files you own. The secure install moves the gate out of that reach (macOS and Linux). From a fresh terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
 ```
 
 It downloads the official release itself, checks its SHA-256, installs it into root-owned folders, starts it as its own system user (`_phygitalkey` on macOS, `phygitalkey` on Linux), and refuses to run if any other program listens on the gate's port. Then:
@@ -258,7 +258,7 @@ Each `phygital-key-admin` command asks for your administrator password. Details,
 
 The secure install updates itself once a day, and installs a release only if all of this holds:
 
-- [x] Its file list and SHA-256 sums (`release.txt`) are signed (ECDSA P-256) by a release key pinned in the installer. That key lives encrypted on the maintainer's computer under a passphrase they type, never in the macOS Keychain or on GitHub, so taking over the GitHub account is not enough to push an update. Before signing, the maintainer's script checks GitHub's build record of every file against the maintainer's own copy of the release tag.
+- [x] Its file list and SHA-256 sums (`release.txt`) are signed (ECDSA P-256) by a release key pinned in the installer. That key is a GitHub environment secret that only a release run the repository owner approved can use, so a swapped file, a mirror or a stolen workflow token cannot push an update. Someone who takes over the owner's GitHub account could ([the update channel](docs/threat-model.md#the-update-channel)); turn automatic updates off if you would rather install each release yourself.
 - [x] It is newer than the installed version. Older or unsigned releases are never installed.
 - [x] No standing approval is active (a restart would end them). It waits up to 7 days for that, counted from the first wait on the installed version, then installs anyway. Requests still waiting for you do not hold an update back.
 - [x] The new gate starts and passes its checks. Otherwise the previous program comes back. A program that takes the gate's port during the restart is stopped and the gate started again.

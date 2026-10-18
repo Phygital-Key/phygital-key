@@ -53,7 +53,7 @@ jobs:
       # It refuses a release without a signed list, so pin v0.3.0 or later.
       - name: Install phygital-key (signed release list and SHA-256 checked)
         run: |
-          curl -fsSL "https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/$PHYGITAL_KEY_VERSION/install.sh" | sh
+          curl -fsSL "https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/$PHYGITAL_KEY_VERSION/install.sh" | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       # The keyring comes from this workflow's own branch, reviewed like code.

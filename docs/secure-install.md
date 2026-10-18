@@ -14,7 +14,7 @@ With the secure install:
 
 It does this with ordinary operating-system rules, no new mechanism:
 
-- the program is the official release, whose file list and SHA-256 sums are signed with a release key kept off GitHub ([the signed release list](updates.md#the-signed-release-list)), owned by root, in folders only root can change;
+- the program is the official release, whose file list and SHA-256 sums are signed with the project's release key, used only in release runs the repository owner approved ([the signed release list](updates.md#the-signed-release-list)), owned by root, in folders only root can change;
 - the gate runs as a separate user with no login and no shell;
 - its data folder (keyring, audit log, MCP token) is mode 0700 and owned by that user, so your account cannot even list it;
 - every admin action goes through `sudo`, so it needs your administrator password.
@@ -70,7 +70,7 @@ The update job runs as root (it must replace the root-owned program), with only 
 Open a **fresh terminal** that no AI agent controls, and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
 ```
 
 The URL is pinned to the `v0.3.0` tag, so you get the install script of that release, and it installs that release. You do not need `phygital-key` installed first. It needs `curl` and `openssl` (to check the release signature).
@@ -127,7 +127,7 @@ If you already used the quick install, remove the stdio entry (`phygital-key mcp
 With the `curl` command, pass options after `-s --`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/s17sh70x2jfl031ag/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash -s -- --no-auto-update
+curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash -s -- --no-auto-update
 ```
 
 The script itself takes only `--uninstall`, `--purge`, `--auto-update` and `--no-auto-update`, plus the hidden `--auto-update-run` and `--now` of the update job (anything else prints `unknown option: <option>`); the program passes `--release`, `--binary` and `--port` to it. Of the program's general options, only `--port` reaches the service: it always uses the data folder above and serves `http://localhost:<port>`, so `--home`, `--origin`, `--bind`, `--lifetime` and `--open-mcp` have no effect on it.
@@ -221,7 +221,7 @@ sudo /Library/PhygitalKey/bin/phygital-key install-service --release v0.4.0     
 sudo /usr/lib/phygital-key/bin/phygital-key install-service --release v0.4.0     # Linux
 ```
 
-(`v0.4.0` is an example: use a version listed on the [Releases](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases) page.) It checks the signed list for that version, the archive's SHA-256, swaps the program in one step, and restarts the service with every check above. Without `--release` it reinstalls its own version.
+(`v0.4.0` is an example: use a version listed on the [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) page.) It checks the signed list for that version, the archive's SHA-256, swaps the program in one step, and restarts the service with every check above. Without `--release` it reinstalls its own version.
 
 **Going back.** The previous program is kept only while an install runs, to switch back when the new gate fails. To go back to an older version later, install it with `--release`, and turn automatic updates off with `--no-auto-update` if it should stay there (otherwise the next daily run moves it up again).
 
@@ -258,7 +258,7 @@ sudo /Library/PhygitalKey/bin/phygital-key install-service --uninstall --purge  
 - **This machine only.** The service serves `http://localhost:<port>` and, on Linux, may only talk to this machine. To approve from other devices over https, see [own server](own-server.md) (without the secure install's protections for now).
 - **The token is readable by the AI.** The MCP token ends up in your AI app's settings. It keeps other programs out, not the agent; the agent can only ask anyway.
 - **Root and the machine are trusted.** Whoever is root (or controls the machine) controls the gate and the page it serves. So does malware running as root.
-- **The release keys are trusted.** Updates install whatever a pinned release key signed. The keys come from the installer you first ran.
+- **The release keys are trusted.** Updates install whatever a pinned release key signed. The keys come from the installer you first ran. The release key is held by GitHub, so whoever controls the repository owner's GitHub account can approve a release run and ship a signed update ([the update channel](threat-model.md#the-update-channel)).
 - **It contacts GitHub daily** while automatic updates are on ([privacy](privacy.md#what-leaves-your-machine)). The gate itself makes no network calls.
 - **Automatic updates are new.** The first real automatic update against GitHub happens with the release after v0.3.0. Until then, CI tests the parts on their own (below).
 - **Restarts end standing approvals** and drop waiting requests (fail closed). An automatic update restarts the gate at the job's time.

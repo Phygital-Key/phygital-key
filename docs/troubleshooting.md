@@ -231,7 +231,7 @@ The demo prints the token from its data folder. If you started it with another `
 | `only macOS and Linux for now.` | Windows is not supported yet |
 | `another program (uid <u>, pid <p>) is listening on port 7468. Stop it, then run this again.` | Find it with `sudo lsof -nP -iTCP:7468 -sTCP:LISTEN`, stop it (often a quick-install gate an AI app started), run the install again |
 | `needs openssl to check the release signature. Install openssl, then run this again.` | Install openssl with your system's package manager, then run the install again |
-| `could not download the signed release list for <version>.` | Check the network, and that the version exists on the [Releases](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases) page |
+| `could not download the signed release list for <version>.` | Check the network, and that the version exists on the [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) page |
 | `the release list for <version> is not signed by a pinned release key. Nothing was installed.` | Do not work around it. Check that you used the pinned `curl` command, then report it ([SECURITY.md](../SECURITY.md)) |
 | `the signed release list is for <got>, not <version>. Nothing was installed.` | The release files do not belong together. Report it ([SECURITY.md](../SECURITY.md)) |
 | `the download does not match its signed SHA-256. Nothing was installed.` | Try again later; if it repeats, report it ([SECURITY.md](../SECURITY.md)) |
@@ -270,7 +270,7 @@ Other messages in the update log. Those that start with `phygital-key install-se
 
 | Message | What to do |
 |---|---|
-| `phygital-key: download of https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases/latest/download/release.txt failed` | No network, or the latest release has no signed list. Nothing was changed |
+| `phygital-key: download of https://github.com/Phygital-Key/phygital-key-mcp/releases/latest/download/release.txt failed` | No network, or the latest release has no signed list. Nothing was changed |
 | `phygital-key: release list is not signed by a pinned release key` | Nothing was changed. Do not install that release. Report it ([SECURITY.md](../SECURITY.md)) |
 | `phygital-key: release list refused: <reason>` | The list is not in the exact format. Nothing was changed |
 | `phygital-key: the download does not match the signed SHA-256. Nothing was changed.` | Try again later; if it repeats, report it |

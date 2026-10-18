@@ -13,7 +13,7 @@ Pre-audit, like the rest of the project.
 Not published to npm yet. Install from a clone:
 
 ```bash
-git clone https://github.com/s17sh70x2jfl031ag/phygital-key-mcp
+git clone https://github.com/Phygital-Key/phygital-key-mcp
 npm install ./phygital-key-mcp/verifier-js
 ```
 

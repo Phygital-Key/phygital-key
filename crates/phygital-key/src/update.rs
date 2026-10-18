@@ -2,11 +2,12 @@
 //!
 //! Every release carries `release.txt`, a short list of the release's files and
 //! their SHA-256, and `release.txt.sig`, an ECDSA P-256 (SHA-256) signature over
-//! it, made with a release key that lives encrypted on the maintainer's computer
-//! (never on GitHub), with a second backup key kept offline. The public release
-//! keys are pinned in `assets/install-service.sh` (one source for the shell
-//! installer and this program), so someone who takes over the GitHub account or
-//! a download mirror still cannot make an update that installs.
+//! it. The release key is a secret of the GitHub environment "release": the
+//! release workflow can use it only on a tag, and only after the repository owner
+//! approves that run. The public release keys are pinned in
+//! `assets/install-service.sh` (one source for the shell installer and this
+//! program), so a download mirror, a swapped file or anyone without the owner's
+//! approval cannot make an update that installs.
 //!
 //! `release.txt` is exact, line by line (LF, final LF):
 //!
@@ -26,7 +27,7 @@ use sha2::{Digest, Sha256};
 /// The secure installer. Its pinned release keys are the ones this program trusts.
 pub const INSTALL_SCRIPT: &str = include_str!("../assets/install-service.sh");
 
-const REPO: &str = "s17sh70x2jfl031ag/phygital-key-mcp";
+const REPO: &str = "Phygital-Key/phygital-key-mcp";
 const HEADER: &str = "phygital-key release manifest v1";
 const MAX_MANIFEST: usize = 8192;
 

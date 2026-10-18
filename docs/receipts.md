@@ -87,7 +87,7 @@ A receipt is at most 4096 characters; longer input is refused before parsing.
 
 ```toml
 [dependencies]
-phygital-key-verify = { git = "https://github.com/s17sh70x2jfl031ag/phygital-key-mcp", tag = "v0.3.0" }
+phygital-key-verify = { git = "https://github.com/Phygital-Key/phygital-key-mcp", tag = "v0.3.0" }
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 ```
 

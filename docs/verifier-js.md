@@ -19,7 +19,7 @@ On this page:
 The package is not published to npm yet. Install it from a clone of the repository:
 
 ```bash
-git clone https://github.com/s17sh70x2jfl031ag/phygital-key-mcp
+git clone https://github.com/Phygital-Key/phygital-key-mcp
 cd your-service
 npm install ../phygital-key-mcp/verifier-js
 ```

@@ -1,32 +1,48 @@
 #!/bin/bash
-# Make the Phygital Key release keys (run once, on the maintainer's own Mac).
+# Set up release signing (run once, by the repository owner, in a terminal).
 #
 #   scripts/release-key.sh
 #
-# Creates two P-256 keys in ~/.phygital-key-release (only you can open it):
-#   signing-key.pem  signs every release (scripts/sign-release.sh)
-#   backup-key.pem   kept off this Mac, used only if the signing key is lost
-# Each key file is encrypted (AES-256) with a passphrase YOU type. Keep both
-# passphrases in your password manager, not on this Mac: then a program running as
-# you (an AI agent included) can copy the files but cannot use them.
-# Then it pins both public keys in the two installers of this repo. Commit that
-# change: from then on only releases signed with one of these keys install or update.
+# What it does:
+#   1. Makes a P-256 release signing key in a temporary folder.
+#   2. Creates the GitHub environment "release", which only tags v* can use and
+#      which waits for YOUR approval on every run ("Review deployments").
+#   3. Stores the private key as the environment secret RELEASE_SIGNING_KEY. Only a
+#      release run you approved can read it. Then it deletes the local copy.
+#   4. Pins the public key in both installers of this repo (commit that change).
+# From then on, only releases signed by that key install or update.
+#
+# Protect your GitHub account well (two-factor sign-in, ideally a passkey): whoever
+# controls it can approve a release.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-D="$HOME/.phygital-key-release"
-[ -t 0 ] && [ -t 1 ] || { echo "Run this yourself, in a terminal (it asks for passphrases)."; exit 1; }
+REPO=Phygital-Key/phygital-key-mcp
+[ -t 0 ] && [ -t 1 ] || { echo "Run this yourself, in a terminal."; exit 1; }
 command -v openssl >/dev/null || { echo "needs openssl"; exit 1; }
-[ ! -e "$D/signing-key.pem" ] || { echo "$D/signing-key.pem already exists. Not touching it."; exit 1; }
+command -v gh >/dev/null || { echo "needs the GitHub CLI (gh), signed in as the repository owner"; exit 1; }
+gh auth status >/dev/null 2>&1 || { echo "sign in first: gh auth login"; exit 1; }
+if grep -q -- "-----BEGIN PUBLIC KEY-----" <(sed -n '/^# BEGIN RELEASE KEYS/,/^# END RELEASE KEYS/p' crates/phygital-key/assets/install-service.sh); then
+  echo "A release key is already pinned. Not making another one."; exit 1
+fi
+
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 umask 077
-mkdir -p "$D"; chmod 700 "$D"
-for k in signing backup; do
-  echo
-  echo "Choose the passphrase for the $k key (at least 16 characters; save it in your password manager now)."
-  openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -aes-256-cbc -out "$D/$k-key.pem"
-  echo "Type the $k key passphrase once more to check it:"
-  openssl pkey -in "$D/$k-key.pem" -pubout -out "$D/$k-pub.pem"
-done
-block=$(cat "$D/signing-pub.pem" "$D/backup-pub.pem")
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$T/key.pem" 2>/dev/null
+openssl pkey -in "$T/key.pem" -pubout -out "$T/pub.pem"
+
+me=$(gh api user --jq .id)
+echo "Creating the GitHub environment \"release\" (waits for your approval, tags v* only)"
+gh api -X PUT "repos/$REPO/environments/release" --input - >/dev/null <<JSON
+{"reviewers": [{"type": "User", "id": $me}], "prevent_self_review": false,
+ "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+JSON
+gh api -X POST "repos/$REPO/environments/release/deployment-branch-policies" \
+  -f name='v*' -f type=tag >/dev/null 2>&1 || true   # already there on a second run
+
+echo "Storing the private key as the secret RELEASE_SIGNING_KEY of that environment"
+gh secret set RELEASE_SIGNING_KEY --env release --repo "$REPO" < "$T/key.pem"
+
+block=$(cat "$T/pub.pem")
 for f in crates/phygital-key/assets/install-service.sh install.sh; do
   BLOCK="$block" python3 - "$f" <<'PY'
 import os, re, sys
@@ -38,12 +54,11 @@ open(p, "w").write(s2)
 PY
 done
 cat <<DONE
-Done. Keys in $D:
-  signing-key.pem   stays here; scripts/sign-release.sh uses it
-  backup-key.pem    MOVE IT OFF THIS MAC now: put the file in your password manager
-                    (as an attachment) or on a USB stick, then delete $D/backup-key.pem
-Both public keys are now pinned in:
-  crates/phygital-key/assets/install-service.sh
-  install.sh
-Commit them before the next release.
+Done.
+  - The private key is only in GitHub now (environment "release", secret RELEASE_SIGNING_KEY).
+    The local copy is deleted.
+  - The public key is pinned in crates/phygital-key/assets/install-service.sh and install.sh.
+    Commit them.
+  - Each release: push a tag vX.Y.Z, open the run on GitHub (Actions), press
+    "Review deployments", then Approve. CI signs and publishes it.
 DONE

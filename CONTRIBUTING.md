@@ -32,7 +32,7 @@ Read [AGENTS.md](AGENTS.md) for how the code is laid out.
 You need Rust (stable, at least 1.89; the workspace uses edition 2024) and Node 20 or newer for the JavaScript checker and the end-to-end tests. Fuzzing needs nightly Rust.
 
 ```bash
-git clone https://github.com/s17sh70x2jfl031ag/phygital-key-mcp
+git clone https://github.com/Phygital-Key/phygital-key-mcp
 cd phygital-key-mcp
 cargo build --workspace
 ```
@@ -49,7 +49,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-`cargo test` includes `installer_pins_at_least_one_release_key`, which fails until release keys are pinned in the installers (see [releasing](#releasing)). Every other test must pass.
+`cargo test` includes `installer_pins_at_least_one_release_key`, which fails until a release key is pinned in the installers (see [releasing](#releasing)). Every other test must pass.
 
 Test vectors are up to date and deterministic:
 
@@ -106,31 +106,34 @@ cargo build --manifest-path examples/rust-service/Cargo.toml
 
 ## Releasing
 
-Only the maintainer can make a release that installs, because only the maintainer holds the release key. Installers and the secure install's daily update job accept a release only if its file list (`release.txt`) is signed by a key pinned in `crates/phygital-key/assets/install-service.sh` and `install.sh` (decision 36 in [decisions](docs/decisions.md)).
+Only the repository owner can make a release that installs, because only a release run the owner approved can use the release key. Installers and the secure install's daily update job accept a release only if its file list (`release.txt`) is signed by a key pinned in `crates/phygital-key/assets/install-service.sh` and `install.sh` (decision 36 in [decisions](docs/decisions.md)). The private key is the secret `RELEASE_SIGNING_KEY` of the GitHub environment `release`, and nowhere else.
 
 ```mermaid
 flowchart LR
-  T["Push tag vX.Y.Z"] --> CI["release.yml: test, build 5 targets, build records"]
-  CI --> D["Draft release with .sha256 files"]
-  D --> S["Maintainer's own terminal: scripts/sign-release.sh vX.Y.Z, passphrase typed"]
-  S --> P["release.txt and .sig uploaded, release published"]
+  T["Push tag vX.Y.Z"] --> CI["build job: test, build 5 targets, build records"]
+  CI --> W["publish job waits"]
+  W --> A["Owner: Review deployments, Approve"]
+  A --> P["CI hashes, signs release.txt, checks it, publishes the release"]
 ```
 
-Once, before the first signed release, on the maintainer's own Mac:
+Once, before the first signed release, the owner:
 
-- [ ] Run `scripts/release-key.sh` yourself, in a terminal (it refuses to run without one). It makes two P-256 keys in `~/.phygital-key-release` (a signing key and a backup key), each encrypted with AES-256 under a passphrase you type (at least 16 characters), and pins both public keys in the two installers. Keep both passphrases in your password manager, never in the macOS Keychain, on the Mac in plain text or on GitHub. A program running as you, an AI agent included, can then copy the key files but cannot use them.
-- [ ] Move `backup-key.pem` off the Mac (into your password manager as an attachment, or onto a USB stick), as the script says.
-- [ ] Commit the two changed installers.
+- [ ] Runs `scripts/release-key.sh` in a terminal (it refuses to run without one), with the GitHub CLI `gh` signed in as the owner and `openssl` installed. It makes one P-256 key in a temporary folder, creates the GitHub environment `release` (the owner as required reviewer, deployments only from tags `v*`), stores the private key as the environment secret `RELEASE_SIGNING_KEY`, deletes the local copy, and pins the public key in the two installers. It refuses if a key is already pinned.
+- [ ] Commits the two changed installers.
+- [ ] Protects the GitHub account with two-factor sign-in, ideally a passkey: whoever controls it can approve a release.
 
 For each release:
 
 1. Update the version (`Cargo.toml`, `verifier-js/package.json`, `CITATION.cff`, the default `VERSION` in `crates/phygital-key/assets/install-service.sh`) and add a `CHANGELOG.md` entry. CI must be green on `main`.
-2. Push the tag `vX.Y.Z`. `.github/workflows/release.yml` runs `cargo test` on each runner, builds the five targets, writes a `.sha256` for each archive, publishes a build provenance attestation (build record) for each archive with `actions/attest-build-provenance`, and creates a draft release. Drafts are invisible to installers and to the daily update job.
-3. On the maintainer's Mac, in your own terminal, run `scripts/sign-release.sh vX.Y.Z` from a clone that has the tag (needs `gh`, which also checks the build records, `openssl` and the release key). It reads the tag's commit from your clone, downloads the draft's files, computes each SHA-256 itself and compares it with the workflow's `.sha256`, and runs `gh attestation verify` on each file: it must have been built by `.github/workflows/release.yml` from `refs/tags/vX.Y.Z` at that commit. Then it asks for the signing key passphrase, signs `release.txt`, checks the signature against the keys pinned in `install-service.sh`, uploads `release.txt` and `release.txt.sig`, and only then publishes the release as the latest. If any step fails, the release stays a draft. Never run it from an AI agent's session or let an agent type the passphrase: the script refuses to run without a terminal for that reason.
-4. Write the package manifests with `scripts/package-manifests.sh vX.Y.Z` (Homebrew formula, Scoop manifest, winget manifests).
+2. Push the tag `vX.Y.Z`. In `.github/workflows/release.yml`, the build job runs `cargo test` on each runner, builds the five targets, writes a `.sha256` for each archive and publishes a build provenance attestation (build record) for each archive with `actions/attest-build-provenance`.
+3. Open the run in GitHub Actions. The `publish` job waits for the environment `release`. Press "Review deployments", then Approve.
+4. The approved job computes the SHA-256 of every archive, writes and signs `release.txt`, checks the signature against the keys pinned in that commit's `install-service.sh` (it stops if none matches), and publishes the release with all files, `release.txt` and `release.txt.sig`. Nothing is published before the approval.
+5. Write the package manifests with `scripts/package-manifests.sh vX.Y.Z` (Homebrew formula, Scoop manifest, winget manifests).
+
+To replace the key, pin the new public key next to the old one in a release signed with the old key, then remove the old key in a later release.
 
 > [!CAUTION]
-> Never put a release key or its passphrase in GitHub (not in secrets, not in a workflow, not in the repository) or in the macOS Keychain. The signature is what stops someone who takes over the GitHub account from shipping an update that installs as root. A key in GitHub would give them that power, and a passphrase in the Keychain would let any program running as you sign.
+> Never put the release key in the repository, a workflow file or anywhere else: it lives only in the environment secret. Approve a run only for a tag you pushed yourself. AI agents never run `scripts/release-key.sh` and never approve a release run.
 
 ## Docs style
 

@@ -5,7 +5,7 @@ abstract: "A person's signed yes, for one exact request, that anyone can check. 
 type: software
 authors:
   - alias: "s17sh70x2jfl031ag"
-repository-code: "https://github.com/s17sh70x2jfl031ag/phygital-key-mcp"
+repository-code: "https://github.com/Phygital-Key/phygital-key-mcp"
 license: Apache-2.0
 version: 0.3.0
 keywords: [mcp, passkey, webauthn, approval, ai-agents, human-in-the-loop, fido2, security]

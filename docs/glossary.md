@@ -102,7 +102,7 @@ The service's signed answer after acting: `success` or `error`, pointing at the 
 
 ### Release key
 
-The ECDSA P-256 key that signs each release's release list. It is kept encrypted on the maintainer's computer, never on GitHub, with a second backup key kept offline; both public keys are pinned in `install-service.sh` and `install.sh`. See [architecture](architecture.md#pinned-release-keys).
+The ECDSA P-256 key that signs each release's release list. It is the secret `RELEASE_SIGNING_KEY` of the GitHub environment `release`, made once by the repository owner with `scripts/release-key.sh` (which keeps no local copy), and GitHub gives it only to a release run from a `v*` tag that the owner approved. Its public key is pinned in `install-service.sh` and `install.sh`. See [architecture](architecture.md#pinned-release-keys).
 
 ### Release list
 

@@ -195,7 +195,7 @@ Files are written to a `.tmp` file first, flushed and renamed into place. Waitin
 | Daily update job | `/Library/LaunchDaemons/io.phygitalkey.update.plist` (root, mode 0600, a random time of day chosen at install) | `/etc/systemd/system/phygital-key-update.timer` (`OnCalendar=daily`, `RandomizedDelaySec=6h`, `Persistent=true`) and `phygital-key-update.service` (oneshot, `PrivateTmp`, `ProtectHome`) |
 | Update log | `/Library/Logs/PhygitalKeyUpdate/update.log` (root-only folder) | `journalctl -u phygital-key-update` |
 
-The daily job fetches `https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/releases/latest/download/release.txt` and its `.sig`, so the secure install contacts github.com once a day (and downloads the release file when it updates). The gate itself makes no network calls. Details: [secure install](secure-install.md).
+The daily job fetches `https://github.com/Phygital-Key/phygital-key-mcp/releases/latest/download/release.txt` and its `.sig`, so the secure install contacts github.com once a day (and downloads the release file when it updates). The gate itself makes no network calls. Details: [secure install](secure-install.md).
 
 ## Limits
 
@@ -234,7 +234,7 @@ The daily job fetches `https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/rel
 | Use tokens | ES256 JWS signed by a per-standing-approval P-256 key the gate makes and holds only in memory |
 | Receipts | ES256 JWS signed by the service's own P-256 key |
 | Audit log | SHA-256 hash chain |
-| Release list | ECDSA P-256 / SHA-256 signature (DER) by a release key kept off GitHub |
+| Release list | ECDSA P-256 / SHA-256 signature (DER) by the release key, a GitHub environment secret used only in release runs the repository owner approved |
 
 Approvals are signed and verified, not encrypted: anyone who holds one can read the request in it. Use HTTPS for any origin other than localhost. Formats and checks in detail: [spec](spec.md).
 

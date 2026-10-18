@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Some things are left out on purpose. Please read [docs/decisions.md](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/blob/main/docs/decisions.md) and [docs/roadmap.md](https://github.com/s17sh70x2jfl031ag/phygital-key-mcp/blob/main/docs/roadmap.md) first.
+        Some things are left out on purpose. Please read [docs/decisions.md](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/decisions.md) and [docs/roadmap.md](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/roadmap.md) first.
         A change to what a verifier accepts or refuses needs new test vectors and must land in both verifiers.
   - type: textarea
     id: problem

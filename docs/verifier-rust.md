@@ -24,7 +24,7 @@ Add the crate from the repository as a git dependency. Pin a tag so a later chan
 
 ```toml
 [dependencies]
-phygital-key-verify = { git = "https://github.com/s17sh70x2jfl031ag/phygital-key-mcp", tag = "v0.3.0" }
+phygital-key-verify = { git = "https://github.com/Phygital-Key/phygital-key-mcp", tag = "v0.3.0" }
 serde_json = "1"
 ```
 

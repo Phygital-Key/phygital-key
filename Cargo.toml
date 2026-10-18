@@ -11,7 +11,7 @@ version = "0.3.0"
 edition = "2024"
 rust-version = "1.89"
 license = "Apache-2.0"
-repository = "https://github.com/s17sh70x2jfl031ag/phygital-key-mcp"
+repository = "https://github.com/Phygital-Key/phygital-key-mcp"
 authors = ["s17sh70x2jfl031ag and the Phygital Key contributors"]
 
 [workspace.dependencies]
