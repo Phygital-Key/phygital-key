@@ -562,12 +562,16 @@ UNITFILE
 Description=$P_NAME approval gate
 After=network.target $P_BIN.socket
 Requires=$P_BIN.socket
+# Never give up restarting: if systemd stopped trying, it would also close the
+# socket, and with it the port. A gate that keeps failing is retried once a second.
+StartLimitIntervalSec=0
 
 [Service]
 User=$SVC_USER
 Group=$SVC_USER
 ExecStart=$BIN --home $DATA --port $PORT serve
 Restart=on-failure
+RestartSec=1
 UMask=0077
 LimitNOFILE=8192
 NoNewPrivileges=yes
@@ -604,6 +608,7 @@ UNITFILE
   install -m 0644 -o root "$WORK/unit" "$UNIT"
   systemctl daemon-reload
   systemctl enable "$P_BIN.socket" "$P_BIN.service" >/dev/null 2>&1
+  systemctl reset-failed "$P_BIN.service" "$P_BIN.socket" 2>/dev/null || true
   if systemctl is-active --quiet "$P_BIN.socket"; then
     # The port stays open the whole time: only the gate restarts.
     systemctl restart "$P_BIN.service" || true

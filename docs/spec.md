@@ -67,6 +67,7 @@ JSON, carried as base64url (no padding) in an `approval` field or a `Phygital-Ap
 
 - **`aud`** names who will act on the yes. Any stable identifier: a URL, a domain, a business id or a person's key id. 1 to 256 visible ASCII characters (`!` to `~`), so look-alikes and invisible characters cannot hide in it.
 - **`level`** is `medium` or `high`. `low` means no approval is needed, so it is never signed.
+- **`v`** is `pka.1`, or `pka.2` for an approval bound to the asking agent's key: `pka.2` adds exactly one claim, `"cnf": {"key": "<base64url SPKI DER of the agent's P-256 key>"}` ([section 7d](#7d-agent-bound-approvals)). `pka.1` MUST NOT carry `cnf`; `pka.2` MUST.
 - **`signatures`** is a list. Format `pka.1` requires exactly one. The list makes "2 of 3 approvers" possible later without changing the format.
 - Unknown fields anywhere in the approval object, the claims or a signature MUST be refused.
 - Duplicate JSON keys MUST be refused. Nesting deeper than 16 MUST be refused. The encoded approval MUST be at most 16384 bytes.
@@ -134,7 +135,7 @@ Two clocks, so people are not rushed:
 
 The first failing check returns its code.
 
-1. **Present and well formed** (`APPROVAL_REQUIRED` if empty, else `MALFORMED`): size, base64url, strict JSON, no unknown fields, `v` is `pka.1`, `id` is 128-bit base64url, request shape, canonical form exists, exactly one signature, all fields decode.
+1. **Present and well formed** (`APPROVAL_REQUIRED` if empty, else `MALFORMED`): size, base64url, strict JSON, no unknown fields, `v` is `pka.1` (no `cnf`) or `pka.2` (with a `cnf.key` that parses as a P-256 key), `id` is 128-bit base64url, request shape, canonical form exists, exactly one signature, all fields decode.
 2. **Audience** (`WRONG_AUDIENCE`): `aud` equals the verifier's own id.
 3. **Time** (`EXPIRED`): `iat` at most 30 s in the future, `now < exp`, `iat < exp`, `exp - iat <= 300`.
 4. **Request** (`REQUEST_MISMATCH`): SHA-256 of canonical(the request being acted on) equals `request_hash`, and `request_hash` matches `claims.request`.
@@ -142,12 +143,13 @@ The first failing check returns its code.
 6. **Key** (`UNTRUSTED_KEY`): `credential_id` is in the keyring, its `rp_id` is allowed, its public key parses.
 7. **Assertion** (`BAD_SIGNATURE`): client data `type` is `webauthn.get`, `challenge` equals the computed challenge, `origin` is allowed, not cross-origin (`crossOrigin` not true, no `topOrigin`); authenticator data RP ID hash equals SHA-256 of the key's `rp_id`; the ES256 signature over `authenticator_data || SHA-256(client_data_json)` is valid.
 8. **Presence** (`ASSURANCE_TOO_LOW`): user present flag set; user verified flag set when the level is `high`.
-9. **Replay** (`REPLAYED`): atomically record `id` until `exp`; refuse if already seen. Several verifier instances MUST share one store.
-10. Only then act. Log `id`, `request_hash`, time, the approver's credential and the result.
+9. **Binding** (`PROOF_REQUIRED`, `BAD_PROOF`): a `pka.2` approval needs the agent's proof ([section 7d](#7d-agent-bound-approvals)); a verifier that requires binding refuses a `pka.1` approval with `PROOF_REQUIRED`.
+10. **Replay** (`REPLAYED`): atomically record `id` until `exp`; refuse if already seen. Several verifier instances MUST share one store.
+11. Only then act. Log `id`, `request_hash`, time, the approver's credential and the result.
 
-**Error codes:** `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `BAD_SIGNATURE`, `UNTRUSTED_KEY`, `ASSURANCE_TOO_LOW`, `REPLAYED`, `NOT_ALLOWED`, `USED_UP` and `REVOKED` (standing approvals, section 7c), and `DENIED` (returned by relays when the person says no; never by `verify`).
+**Error codes:** `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `BAD_SIGNATURE`, `UNTRUSTED_KEY`, `ASSURANCE_TOO_LOW`, `REPLAYED`, `NOT_ALLOWED`, `USED_UP` and `REVOKED` (standing approvals, section 7c), `PROOF_REQUIRED` and `BAD_PROOF` (agent-bound approvals, section 7d), and `DENIED` (returned by relays when the person says no; never by `verify`).
 
-**API:** `verify(approval, expected{aud, request, level}, keyring, seen_store, config{origins, rp_ids}, now) -> ok | error(code)`. The verifier is pure: no network, no clock reads, no global state except `seen_store`.
+**API:** `verify(approval, expected{aud, request, level}, keyring, seen_store, config{origins, rp_ids}, now) -> ok | error(code)`, and `verify_bound(approval, binding{proof, required}, expected, keyring, seen_store, config, now)` for services that take agent-bound approvals (`verify` is `verify_bound` with no proof and binding not required). The verifier is pure: no network, no clock reads, no global state except `seen_store`.
 
 ## 7b. Receipts
 
@@ -193,6 +195,29 @@ Until the service picks up the signed revocation, use tokens already handed out 
 
 Test vectors: `test-vectors/standing.json`.
 
+## 7d. Agent-bound approvals
+
+A `pka.1` approval works once for whoever holds it, so a copy taken on its way (from a log, a chat transcript, an agent's tool output) could be used first by someone else. A `pka.2` approval is bound to the key of the agent that asked:
+
+1. **Asking.** The agent holds a P-256 key pair of its own and sends the public key with the request (`agent_key`: base64url SubjectPublicKeyInfo DER). The relay refuses a key that does not parse.
+2. **Signing.** The relay puts it in the claims as `"cnf": {"key": "<agent_key>"}` with `"v": "pka.2"`. The person's passkey signs those claims like any other, so the key is part of what the person approved. The approval page shows that only the program that asked can use the approval, and checks that the key in the claims is the one whose fingerprint it shows.
+3. **Using.** When it acts, the agent sends a **proof** with the approval (header `Phygital-Proof`): a compact JWS signed with its own key.
+
+   ```text
+   header   exactly the bytes {"alg":"ES256","typ":"pka-proof+jwt"}
+   payload  canonical({"v": "pka.proof.1", "approval_id": claims.id, "aud": claims.aud,
+                       "request_hash": claims.request_hash, "iat": <now>})
+   signature ES256, raw r||s (64 bytes), over base64url(header) "." base64url(payload)
+   ```
+
+4. **Checking** (step 9 of section 7, after every other check except replay):
+   - no proof: `PROOF_REQUIRED`;
+   - at most 4096 bytes, three parts, the exact header, a 64-byte signature by `cnf.key`, a strict-JSON payload with exactly these five fields, `v` is `pka.proof.1`, `approval_id`, `aud` and `request_hash` equal the approval's, and `iat` within 30 s of `now`, not more than 30 s before the approval's `iat`, and before its `exp`; anything else: `BAD_PROOF`.
+
+   Only then is the id recorded as used.
+
+The proof is made when the agent acts and names one approval and one service, so it is worth nothing on its own. Someone who intercepts both the approval and its proof on the way to that same service gains nothing over the agent: the id still works once, for that request, at that service. Standing approvals (section 7c) are not bound this way: each use is already signed by a key the relay holds. Test vectors: the `bound_*`, `valid_bound*`, `unbound_when_binding_required`, `v1_with_agent_key` and `v2_without_agent_key` cases in `test-vectors/vectors.json`.
+
 ## 8. Levels
 
 | Level | Examples | Requirement |
@@ -228,7 +253,7 @@ A security key without a PIN can only approve `medium`.
 
 1. Small schemas and human-readable templates for common types: `deploy`, `payment`, `delete`, `send_email`, `sign_document`, `login`. Unknown types show the raw canonical fields (as the page does today for all types).
 2. Whether to also publish the root fingerprint through DNS or `did:web`, so it can be learned without meeting.
-3. The approval is a bearer token for 60 s by default (300 s at most), bound to request and audience. Binding it to the requester's key (`cnf`) is not built; standing approvals already bind each use to a key the gate holds (`use_key`).
+3. A `pka.1` approval is a bearer token for 60 s by default (300 s at most), bound to request and audience. `pka.2` (section 7d) binds it to the asking agent's key too. Whether services should require binding by default is open.
 
 ## 12. AP2 alignment
 
