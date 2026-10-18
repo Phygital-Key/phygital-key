@@ -57,13 +57,42 @@ sleep 1
 
 "${INSTALL[@]}" || fail "install did not succeed"
 curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "gate answers" || fail "gate answers"
+GPID=""
 for p in $(sudo lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t | sort -u); do
+  # Linux: systemd (pid 1) holds the port for the gate (socket activation).
+  [ "$p" = 1 ] && [ "$(uname -s)" = Linux ] && continue
   [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] || fail "a listener is not the gate user"
+  GPID=$p
 done
+[ -n "$GPID" ] || fail "the gate itself is not listening"
 pass "only the gate user listens (IPv4 and IPv6)"
+if [ "$(uname -s)" = Linux ]; then
+  # The port is never free while the gate restarts: a program running as this
+  # user tries to take it, over and over, while systemd restarts the gate.
+  python3 - "$PORT" > /tmp/pka-grab 2>&1 <<'PY' &
+import socket, sys, time
+port, got, end = int(sys.argv[1]), [], time.time() + 8
+while time.time() < end:
+    for fam, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        s = socket.socket(fam)
+        try:
+            s.bind((host, port)); s.listen(); got.append(host)
+        except OSError:
+            pass
+        finally:
+            s.close()
+print("taken" if got else "never")
+PY
+  GRAB=$!
+  sleep 1
+  sudo systemctl restart "$P_BIN.service"; sleep 1; sudo systemctl restart "$P_BIN.service"
+  wait $GRAB || true
+  grep -qx never /tmp/pka-grab && pass "the port is never free while the gate restarts (systemd holds it)" || fail "another program took the port during a restart: $(cat /tmp/pka-grab)"
+  curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "the gate answers on the sockets systemd hands it" || fail "the gate did not come back after a restart"
+  GPID=$(systemctl show -p MainPID --value "$P_BIN.service")
+fi
 # Room for many connections: idle ones are dropped after 10 s, and the limit is
 # high enough that a program cannot fill it with idle connections in that time.
-GPID=$(sudo lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t | head -1)
 if [ "$(uname -s)" = Linux ]; then nofile=$(sudo cat "/proc/$GPID/limits" | awk '/Max open files/ {print $4}')
 else nofile=$(sudo plutil -extract SoftResourceLimits.NumberOfFiles raw "/Library/LaunchDaemons/io.phygitalkey.$P_ID.gate.plist" 2>/dev/null); fi
 echo "      open file limit: ${nofile:-unknown}"

@@ -418,6 +418,11 @@ pub async fn serve(gate: Shared, app: Router) -> Result<(), String> {
     } else {
         vec![format!("{bind}:{port}")]
     };
+    // Linux secure install: systemd opened both addresses and holds them across
+    // restarts; take those and open nothing ourselves.
+    if let Some(inherited) = inherited_listeners(port)? {
+        return serve_on(inherited, app).await;
+    }
     let mut listeners = Vec::new();
     for addr in &addrs {
         match tokio::net::TcpListener::bind(addr).await {
@@ -433,8 +438,12 @@ pub async fn serve(gate: Shared, app: Router) -> Result<(), String> {
             }
         }
     }
-    // If any listener stops, stop everything (a service manager restarts the gate),
-    // so one address is never left free while the other keeps serving.
+    serve_on(listeners, app).await
+}
+
+/// Serve on these listeners. If any stops, stop everything (a service manager
+/// restarts the gate), so one address is never left free while the other serves.
+async fn serve_on(listeners: Vec<tokio::net::TcpListener>, app: Router) -> Result<(), String> {
     let mut tasks = tokio::task::JoinSet::new();
     for l in listeners {
         tasks.spawn(accept_loop(l, app.clone()));
@@ -446,6 +455,38 @@ pub async fn serve(gate: Shared, app: Router) -> Result<(), String> {
         Some(Err(e)) => Err(e.to_string()),
         None => Ok(()),
     }
+}
+
+/// Sockets handed over by systemd (`LISTEN_FDS`), when there are any. Each must
+/// be a TCP listener on a loopback address and this gate's port; anything else
+/// is refused rather than served.
+#[cfg(target_os = "linux")]
+fn inherited_listeners(port: u16) -> Result<Option<Vec<tokio::net::TcpListener>>, String> {
+    let mut fds = listenfd::ListenFd::from_env();
+    if fds.len() == 0 {
+        return Ok(None);
+    }
+    let mut out = Vec::new();
+    for i in 0..fds.len() {
+        let l = fds
+            .take_tcp_listener(i)
+            .map_err(|e| format!("socket {i} from systemd: {e}"))?
+            .ok_or_else(|| format!("socket {i} from systemd is not a TCP listener"))?;
+        let addr = l.local_addr().map_err(|e| e.to_string())?;
+        if !addr.ip().is_loopback() || addr.port() != port {
+            return Err(format!(
+                "systemd handed over {addr}, not a loopback address on port {port}. Refusing to start."
+            ));
+        }
+        l.set_nonblocking(true).map_err(|e| e.to_string())?;
+        out.push(tokio::net::TcpListener::from_std(l).map_err(|e| e.to_string())?);
+    }
+    Ok(Some(out))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn inherited_listeners(_port: u16) -> Result<Option<Vec<tokio::net::TcpListener>>, String> {
+    Ok(None)
 }
 
 /// How long a connection may take to send a request's headers, and how long

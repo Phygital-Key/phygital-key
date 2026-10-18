@@ -101,6 +101,8 @@ case "$(uname -s)" in
     DATA="/var/lib/$P_BIN"
     LOGS=""
     UNIT="/etc/systemd/system/$P_BIN.service"
+    # systemd itself holds the gate's port (socket activation), across restarts.
+    SOCK_UNIT="/etc/systemd/system/$P_BIN.socket"
     UPD_UNIT="/etc/systemd/system/$P_BIN-update.service"
     UPD_TIMER="/etc/systemd/system/$P_BIN-update.timer"
     UPD_LOGS=""
@@ -286,13 +288,16 @@ stop_updates() {
 
 stop_service() {
   if [ "$OS" = mac ]; then launchctl bootout "system/$LABEL.gate" 2>/dev/null || true
-  else systemctl disable --now "$P_BIN.service" 2>/dev/null || true; fi
+  else
+    systemctl disable --now "$P_BIN.service" 2>/dev/null || true
+    systemctl disable --now "$P_BIN.socket" 2>/dev/null || true
+  fi
 }
 
 if [ "$MODE" = uninstall ]; then
   stop_updates
   stop_service
-  rm -f "$UNIT"
+  rm -f "$UNIT"; [ -n "${SOCK_UNIT:-}" ] && rm -f "$SOCK_UNIT"
   [ -L "$LINK" ] && [ "$(readlink "$LINK")" = "$ADMIN" ] && rm -f "$LINK"
   rm -rf "$PREFIX"
   [ "$OS" = linux ] && systemctl daemon-reload || true
@@ -442,8 +447,14 @@ listeners_ok() {
   if command -v lsof >/dev/null 2>&1; then pids=\$(sudo lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null | sort -u)
   else pids=\$(sudo ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); fi
   [ -n "\$pids" ] || return 1
-  local want; want=\$(id -u "$SVC_USER")
-  for p in \$pids; do [ "\$(ps -o uid= -p "\$p" | tr -d ' ')" = "\$want" ] || return 1; done
+  local want gate=0; want=\$(id -u "$SVC_USER")
+  for p in \$pids; do
+    # Linux: systemd (pid 1) holds the port for the gate between restarts.
+    [ "\$p" = 1 ] && [ "$OS" = linux ] && continue
+    [ "\$(ps -o uid= -p "\$p" | tr -d ' ')" = "\$want" ] || return 1
+    gate=1
+  done
+  [ "\$gate" = 1 ]
 }
 case "\${1:-help}" in
   enroll) run enroll ;;
@@ -474,6 +485,8 @@ SVC_UID=$(id -u "$SVC_USER")
 foreign_listener() {
   local p u
   for p in $(listener_pids "$PORT" || true); do
+    # Linux: systemd (pid 1) holds the port for the gate (socket activation).
+    [ "$p" = 1 ] && [ "$OS" = linux ] && continue
     u=$(ps -o uid= -p "$p" | tr -d ' ')
     [ "$u" = "$SVC_UID" ] || { echo "uid $u, pid $p"; return 0; }
   done
@@ -482,6 +495,7 @@ foreign_listener() {
 foreign_pids() {
   local p u
   for p in $(listener_pids "$PORT" || true); do
+    [ "$p" = 1 ] && [ "$OS" = linux ] && continue
     u=$(ps -o uid= -p "$p" | tr -d ' ')
     [ "$u" = "$SVC_UID" ] || echo "$p"
   done
@@ -528,10 +542,26 @@ PLIST
   done
   [ "$ok" = yes ] || say "could not start the service (launchctl bootstrap)."
 else
+  # The port belongs to systemd, which hands it to the gate and keeps it open
+  # while the gate restarts (an update), so no other program can take it.
+  cat > "$WORK/socket" <<UNITFILE
+[Unit]
+Description=$P_NAME approval gate (its port, held across restarts)
+
+[Socket]
+ListenStream=127.0.0.1:$PORT
+ListenStream=[::1]:$PORT
+BindIPv6Only=ipv6-only
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target
+UNITFILE
   cat > "$WORK/unit" <<UNITFILE
 [Unit]
 Description=$P_NAME approval gate
-After=network.target
+After=network.target $P_BIN.socket
+Requires=$P_BIN.socket
 
 [Service]
 User=$SVC_USER
@@ -570,12 +600,20 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 UNITFILE
+  install -m 0644 -o root "$WORK/socket" "$SOCK_UNIT"
   install -m 0644 -o root "$WORK/unit" "$UNIT"
   systemctl daemon-reload
-  systemctl enable "$P_BIN.service" >/dev/null 2>&1
-  systemctl stop "$P_BIN.service" 2>/dev/null || true
-  for _ in $(seq 1 50); do [ -z "$(listener_pids "$PORT")" ] && break; sleep 0.2; done
-  systemctl start "$P_BIN.service" || true
+  systemctl enable "$P_BIN.socket" "$P_BIN.service" >/dev/null 2>&1
+  if systemctl is-active --quiet "$P_BIN.socket"; then
+    # The port stays open the whole time: only the gate restarts.
+    systemctl restart "$P_BIN.service" || true
+  else
+    # First time with a socket unit (also from an install without one).
+    systemctl stop "$P_BIN.service" 2>/dev/null || true
+    for _ in $(seq 1 50); do [ -z "$(listener_pids "$PORT")" ] && break; sleep 0.2; done
+    systemctl start "$P_BIN.socket" || true
+    systemctl start "$P_BIN.service" || true
+  fi
 fi
 }
 
