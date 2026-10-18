@@ -29,7 +29,7 @@ Every name comes from the product's program name (`bin`) and short id (`id`) in 
 |---|---|---|
 | Repository | [Phygital-Key/phygital-key-mcp](https://github.com/Phygital-Key/phygital-key-mcp) | [Phygital-Key/phygital-key-a2a](https://github.com/Phygital-Key/phygital-key-a2a) (new) |
 | Program | `phygital-key-mcp` | `phygital-key-a2a` |
-| Version | 0.5.0 | 0.2.0 |
+| Version | 0.6.0 | 0.3.0 |
 | Default port | `7468` (demo service `7469`) | `7478` (demo service `7479`) |
 | Agent endpoint | `/mcp` (MCP Streamable HTTP), plus `stdio` | `/a2a` (A2A 1.0 JSON-RPC), agent card at `/.well-known/agent-card.json`, no stdio mode |
 | Data folder | `~/.phygital-key-mcp` | `~/.phygital-key-a2a` |
@@ -220,7 +220,7 @@ For Phygital Key MCP. Each product publishes the same set from its own repositor
 
 | Method | Command | Runs as | Updates |
 |---|---|---|---|
-| Secure install (macOS, Linux) | `curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.5.0/install-service.sh \| sudo bash` | Its own system user | Daily, signed releases only (`--no-auto-update` turns it off) |
+| Secure install (macOS, Linux) | `curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.6.0/install-service.sh \| sudo bash` | Its own system user | Daily, signed releases only (`--no-auto-update` turns it off) |
 | Install script (macOS, Linux) | `curl -fsSL https://github.com/Phygital-Key/phygital-key-mcp/releases/latest/download/install.sh \| sh` | You | `phygital-key-mcp update` |
 | Homebrew (macOS, Linux) | `brew install phygital-key/tap/phygital-key-mcp` | You | `brew upgrade phygital-key-mcp` |
 | Scoop (Windows) | `scoop bucket add phygital-key-mcp https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key-mcp` | You | `scoop update phygital-key-mcp` |

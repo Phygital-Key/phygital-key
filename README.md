@@ -260,7 +260,7 @@ phygital-key-mcp keys --check <fingerprint> --file new.json --signed-on https://
 An AI agent on your computer runs as you, so it could edit files you own. The secure install moves the gate out of that reach (macOS and Linux). Each product publishes its own installer; for Phygital Key MCP, from a fresh terminal:
 
 ```bash
-curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.5.0/install-service.sh | sudo bash
+curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.6.0/install-service.sh | sudo bash
 ```
 
 It downloads the official release itself, checks it against the signed release list, installs it into root-owned folders, starts it as its own system user (`_phygitalkeymcp` on macOS, `phygitalkey-mcp` on Linux), and refuses to run if any other program listens on the gate's port. Then:

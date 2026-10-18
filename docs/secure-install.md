@@ -89,7 +89,7 @@ The update job runs as root, because it must replace the root-owned program, wri
 Open a **fresh terminal** that no AI agent controls, and run the product's installer, pinned to a release tag. For Phygital Key MCP:
 
 ```bash
-curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.5.0/install-service.sh | sudo bash
+curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.6.0/install-service.sh | sudo bash
 ```
 
 The URL is pinned to the `v0.4.0` tag, so you get the install script of that release, and it installs that release. Phygital Key A2A has its own `install-service.sh` at the root of [its repository](https://github.com/Phygital-Key/phygital-key-a2a). You do not need the program installed first. It needs `curl` and `openssl` (to check the release signature).
@@ -146,7 +146,7 @@ If you already used the quick install, remove the stdio entry (`phygital-key-mcp
 With the `curl` command, pass options after `-s --`:
 
 ```bash
-curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.5.0/install-service.sh | sudo bash -s -- --no-auto-update
+curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.6.0/install-service.sh | sudo bash -s -- --no-auto-update
 ```
 
 The script itself takes only `--uninstall`, `--purge`, `--auto-update` and `--no-auto-update`, plus the hidden `--auto-update-run` and `--now` of the update job (anything else prints `unknown option: <option>`); the program passes `--release`, `--binary` and `--port` to it. Of the program's general options, only `--port` reaches the service: it always uses the data folder above and serves `http://localhost:<port>`, so `--home`, `--origin`, `--bind`, `--lifetime` and `--no-token` have no effect on it.

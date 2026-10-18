@@ -2,7 +2,9 @@
 
 Changes to the base. Each product keeps its own changelog for its releases. Entries up to 0.3.0 describe the single program `phygital-key`, from before the split, and keep the names it had then.
 
-## Unreleased
+## 0.6.0 (2026-10-18)
+
+Released in Phygital Key MCP 0.6.0 and Phygital Key A2A 0.3.0.
 
 - **Agent-bound approvals (`pka.2`).** An agent that holds its own P-256 key can ask with it (`agent_key`). The approval then names that key (`cnf`), the person's passkey signs it with the request, and the page shows "Usable only by: whoever holds key ...". To use it, the agent sends a short proof signed with its key (`Phygital-Proof` header) naming the approval, the service and the request. A copy of the approval alone is refused (`PROOF_REQUIRED`), a wrong proof too (`BAD_PROOF`). `pka.1` approvals work as before; a service can require binding. In both verifiers (`verify_bound` in Rust, `verify(..., {proof, required})` and `signProof` in JavaScript), the gate, the demo service, the command line (`verify --proof`, `--require-binding`), MCP (`request_approval` with `agent_key`) and A2A (`agent_key` in the request). Spec section 7d. 18 new shared vectors (141 in all), a proof fuzz target.
 - **Linux: the port is never free during a restart.** systemd now opens the gate's two loopback addresses (a `.socket` unit) and keeps them open while the gate restarts for an update; the gate takes them over. A program trying to take the port through two restarts never gets it (new secure-install check). macOS keeps the earlier defence: a program that takes the port during an update is stopped, 5 times at most, then the gate stops.
