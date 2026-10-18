@@ -10,7 +10,8 @@ use subtle::ConstantTimeEq;
 use crate::canonical;
 use crate::model::{
     ApprovalObject, Claims, Config, Expected, Keyring, Level, MAX_APPROVAL_BYTES,
-    MAX_CLOCK_SKEW_SECS, MAX_LIFETIME_SECS, MAX_REQUEST_BYTES, VERSION, id_ok, request_shape_ok,
+    MAX_CLOCK_SKEW_SECS, MAX_LIFETIME_SECS, MAX_REQUEST_BYTES, VERSION, VERSION_BOUND, id_ok,
+    request_shape_ok,
 };
 use crate::webauthn::{self, AssertionCheck, AssertionError, FLAG_UP, FLAG_UV};
 use crate::{b64, strict};
@@ -44,6 +45,11 @@ pub enum ErrorCode {
     UsedUp,
     /// The person revoked this standing approval.
     Revoked,
+    /// An agent-bound approval (`pka.2`) came without the agent's proof, or the
+    /// service requires binding and the approval is not bound.
+    ProofRequired,
+    /// The agent's proof does not check out.
+    BadProof,
 }
 
 impl ErrorCode {
@@ -63,11 +69,13 @@ impl ErrorCode {
             ErrorCode::NotAllowed => "NOT_ALLOWED",
             ErrorCode::UsedUp => "USED_UP",
             ErrorCode::Revoked => "REVOKED",
+            ErrorCode::ProofRequired => "PROOF_REQUIRED",
+            ErrorCode::BadProof => "BAD_PROOF",
         }
     }
 
     /// Every code, for tests and docs.
-    pub const ALL: [ErrorCode; 13] = [
+    pub const ALL: [ErrorCode; 15] = [
         ErrorCode::ApprovalRequired,
         ErrorCode::Malformed,
         ErrorCode::WrongAudience,
@@ -81,6 +89,8 @@ impl ErrorCode {
         ErrorCode::NotAllowed,
         ErrorCode::UsedUp,
         ErrorCode::Revoked,
+        ErrorCode::ProofRequired,
+        ErrorCode::BadProof,
     ];
 }
 
@@ -109,6 +119,10 @@ pub struct Verified {
     pub iat: i64,
     /// Expires at.
     pub exp: i64,
+    /// The audience it was made for.
+    pub aud: String,
+    /// `pka.2`: the agent key it is bound to (base64url SPKI). `None` for `pka.1`.
+    pub agent_key: Option<String>,
 }
 
 /// Remembers used approval ids until they expire.
@@ -189,11 +203,19 @@ pub(crate) fn check_kind(
     let obj: ApprovalObject = serde_json::from_value(value).map_err(|_| E::Malformed)?;
     let claims_value = obj.claims;
     let claims: Claims = serde_json::from_value(claims_value.clone()).map_err(|_| E::Malformed)?;
-    if claims.v != VERSION || !id_ok(&claims.id) || !request_shape_ok(&claims.request) {
+    if !id_ok(&claims.id) || !request_shape_ok(&claims.request) {
         return Err(E::Malformed);
     }
+    // pka.1 has no agent key; pka.2 has exactly one valid P-256 agent key.
+    let agent_key = match (claims.v.as_str(), &claims.cnf) {
+        (VERSION, None) => None,
+        (VERSION_BOUND, Some(cnf)) if webauthn::parse_public_key(&cnf.key).is_some() => {
+            Some(cnf.key.clone())
+        }
+        _ => return Err(E::Malformed),
+    };
     let is_standing = claims.request.get("type").and_then(Value::as_str) == Some(STANDING_TYPE);
-    if is_standing != standing {
+    if is_standing != standing || (standing && agent_key.is_some()) {
         return Err(E::Malformed);
     }
     // Standing approvals always need fingerprint, face or PIN, whatever the service asks.
@@ -288,6 +310,8 @@ pub(crate) fn check_kind(
         level: claims.level,
         iat: claims.iat,
         exp: claims.exp,
+        aud: claims.aud,
+        agent_key,
     })
 }
 
@@ -307,8 +331,46 @@ pub fn verify(
     if expected.request.get("type").and_then(Value::as_str) == Some(REVOKE_TYPE) {
         return Err(ErrorCode::Malformed);
     }
+    verify_bound(
+        approval,
+        crate::bound::Binding::default(),
+        expected,
+        keyring,
+        seen,
+        config,
+        now,
+    )
+}
+
+/// [`verify`], for services that take agent-bound approvals (`pka.2`).
+///
+/// A bound approval needs the agent's proof (`binding.proof`, the
+/// `Phygital-Proof` header): without one it is `PROOF_REQUIRED`, with a wrong
+/// one `BAD_PROOF`. With `binding.required`, an approval that is not bound
+/// (`pka.1`) is `PROOF_REQUIRED` too. The id is spent only when everything,
+/// the proof included, checks out.
+pub fn verify_bound(
+    approval: &str,
+    binding: crate::bound::Binding,
+    expected: &Expected,
+    keyring: &Keyring,
+    seen: &dyn SeenStore,
+    config: &Config,
+    now: i64,
+) -> Result<Verified, ErrorCode> {
+    // A revocation is never an action to carry out.
+    if expected.request.get("type").and_then(Value::as_str) == Some(REVOKE_TYPE) {
+        return Err(ErrorCode::Malformed);
+    }
     let ok = check(approval, expected, keyring, config, now)?;
-    // 7. Never used before. Spent now, even if acting fails later.
+    // 7b. Bound to the agent that asked: its proof must come along.
+    match (&ok.agent_key, binding.proof) {
+        (Some(_), Some(proof)) => crate::bound::check_proof(proof, &ok, now)?,
+        (Some(_), None) => return Err(ErrorCode::ProofRequired),
+        (None, _) if binding.required => return Err(ErrorCode::ProofRequired),
+        (None, _) => {}
+    }
+    // 8. Never used before. Spent now, even if acting fails later.
     if !seen.insert_if_new(&ok.id, ok.exp, now) {
         return Err(ErrorCode::Replayed);
     }
@@ -372,6 +434,18 @@ impl<S: SeenStore> Verifier<S> {
         request: &Value,
         level: Level,
     ) -> Result<Verified, ErrorCode> {
+        self.verify_bound(approval, crate::bound::Binding::default(), request, level)
+    }
+
+    /// [`Verifier::verify`] with the agent's proof for bound approvals
+    /// (see [`verify_bound`]).
+    pub fn verify_bound(
+        &self,
+        approval: &str,
+        binding: crate::bound::Binding,
+        request: &Value,
+        level: Level,
+    ) -> Result<Verified, ErrorCode> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
@@ -381,8 +455,9 @@ impl<S: SeenStore> Verifier<S> {
             request,
             level,
         };
-        verify(
+        verify_bound(
             approval,
+            binding,
             &expected,
             &self.keyring,
             &self.seen,

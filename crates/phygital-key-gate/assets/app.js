@@ -126,6 +126,11 @@ async function approvePage() {
     : request.type;
   $("aud").textContent = (view.adds_key || view.removes_key) ? "This approval gate (your list of trusted keys)" : view.aud;
   $("level").textContent = view.level === "high" ? "Fingerprint, face or PIN" : "A touch on your key";
+  if (view.agent_key_fingerprint) {
+    // pka.2: the yes names the asking program's key; a copy is useless to anyone else.
+    $("bound").textContent = "The program that asked (key " + view.agent_key_fingerprint.slice(0, 12) + "…)";
+    $("bound-row").hidden = false;
+  }
   $("raw").textContent = view.request_jcs;
   $("hash").textContent = view.request_hash;
   const body = $("params").querySelector("tbody");
@@ -272,9 +277,16 @@ async function approvePage() {
       const claims = JSON.parse(started.claims_jcs);
       // Sign only if the claims say exactly what this page shows.
       const shownHash = b64u(await sha256(utf8(view.request_jcs)));
+      // pka.2 (bound to the asking program's key) only when the page says so, and
+      // only with the very key whose fingerprint the page shows.
+      const bound = Boolean(view.agent_key_fingerprint);
+      const fields = ["aud", "exp", "iat", "id", "level", "request", "request_hash", "v"].concat(bound ? ["cnf"] : []).sort();
+      const boundOk = !bound || (claims.cnf && Object.keys(claims.cnf).join() === "key" &&
+          b64u(await sha256(unb64u(claims.cnf.key))) === view.agent_key_fingerprint);
       if (claims.aud !== view.aud || claims.level !== view.level || claims.request_hash !== shownHash ||
           claims.request_hash !== view.request_hash || JSON.stringify(claims.request) !== JSON.stringify(request) ||
-          claims.id !== view.id || claims.v !== "pka.1" ||
+          claims.id !== view.id || claims.v !== (bound ? "pka.2" : "pka.1") || !boundOk ||
+          Object.keys(claims).sort().join() !== fields.join() ||
           (view.standing && claims.exp !== view.standing.until)) {
         throw new Error("What would be signed does not match what is shown. Nothing was signed.");
       }

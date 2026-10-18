@@ -821,8 +821,219 @@ fn run() -> Result<(), String> {
         Some("REPLAYED"),
     );
 
+    // Agent-bound approvals (pka.2) and the agent's proof.
+    let agent = TestKey::new("agent")?;
+    let agent_spki = b64::encode(
+        agent
+            .signing
+            .verifying_key()
+            .to_public_key_der()
+            .map_err(|e| e.to_string())?
+            .as_bytes(),
+    );
+    let bound_claims = |cnf: Value| {
+        let mut c = claims_for(&base_request(), "medium", IAT, IAT + 60);
+        set(&mut c, "v", json!("pka.2"));
+        set(&mut c, "cnf", cnf);
+        c
+    };
+    let mut bound = Build::new("medium");
+    bound.claims = bound_claims(json!({"key": agent_spki}));
+    let bound_approval = bound.approval(&alice);
+    let req_hash = canonical::hash_b64(&base_request()).map_err(|e| format!("{e:?}"))?;
+    let proof_by = |key: &TestKey, p: phygital_key_verify::bound::Proof| {
+        phygital_key_verify::bound::sign_proof(&p, &key.signing).unwrap_or_default()
+    };
+    let good_proof = phygital_key_verify::bound::Proof::for_approval(&id, AUD, &req_hash, NOW);
+    let mut bvec = |name: &str,
+                    d: &str,
+                    approval: String,
+                    proof: Option<String>,
+                    required: bool,
+                    err: Option<&str>| {
+        v.push(name, d, approval, err);
+        if let Some(input) = v.list.last_mut().and_then(|x| x.get_mut("input")) {
+            if let Some(p) = proof {
+                set(input, "proof", json!(p));
+            }
+            if required {
+                set(input, "require_binding", json!(true));
+            }
+        }
+    };
+    bvec(
+        "valid_bound",
+        "An approval bound to the asking agent's key, used with that agent's proof.",
+        bound_approval.clone(),
+        Some(proof_by(&agent, good_proof.clone())),
+        false,
+        None,
+    );
+    bvec(
+        "valid_bound_when_binding_required",
+        "The service requires bound approvals; this one is bound and proven.",
+        bound_approval.clone(),
+        Some(proof_by(&agent, good_proof.clone())),
+        true,
+        None,
+    );
+    bvec(
+        "bound_without_proof",
+        "A bound approval sent without the agent's proof: someone who copied it cannot use it.",
+        bound_approval.clone(),
+        None,
+        false,
+        Some("PROOF_REQUIRED"),
+    );
+    bvec(
+        "unbound_when_binding_required",
+        "The service requires bound approvals; this one (pka.1) is not bound.",
+        medium.approval(&alice),
+        None,
+        true,
+        Some("PROOF_REQUIRED"),
+    );
+    bvec(
+        "bound_proof_by_another_key",
+        "The proof is signed by another key, not the one the person approved.",
+        bound_approval.clone(),
+        Some(proof_by(&mallory, good_proof.clone())),
+        false,
+        Some("BAD_PROOF"),
+    );
+    let mut p = good_proof.clone();
+    p.approval_id = b64::encode([8u8; 16]);
+    bvec(
+        "bound_proof_for_another_approval",
+        "The proof names another approval id.",
+        bound_approval.clone(),
+        Some(proof_by(&agent, p)),
+        false,
+        Some("BAD_PROOF"),
+    );
+    let mut p = good_proof.clone();
+    p.aud = "https://evil.example.com".into();
+    bvec(
+        "bound_proof_for_another_service",
+        "The proof names another service.",
+        bound_approval.clone(),
+        Some(proof_by(&agent, p)),
+        false,
+        Some("BAD_PROOF"),
+    );
+    let mut p = good_proof.clone();
+    p.request_hash = b64::encode([0u8; 32]);
+    bvec(
+        "bound_proof_for_another_request",
+        "The proof names another request hash.",
+        bound_approval.clone(),
+        Some(proof_by(&agent, p)),
+        false,
+        Some("BAD_PROOF"),
+    );
+    let mut p = good_proof.clone();
+    p.iat = NOW - 31;
+    bvec(
+        "bound_proof_31s_old",
+        "The proof was made 31 seconds before the service checks it.",
+        bound_approval.clone(),
+        Some(proof_by(&agent, p)),
+        false,
+        Some("BAD_PROOF"),
+    );
+    let mut p = good_proof.clone();
+    p.iat = NOW - 30;
+    bvec(
+        "valid_bound_proof_30s_old",
+        "A proof made 30 seconds earlier is still fresh.",
+        bound_approval.clone(),
+        Some(proof_by(&agent, p)),
+        false,
+        None,
+    );
+    let mut p = good_proof.clone();
+    p.v = "pka.proof.2".into();
+    bvec(
+        "bound_proof_unknown_version",
+        "The proof has an unknown version.",
+        bound_approval.clone(),
+        Some(proof_by(&agent, p)),
+        false,
+        Some("BAD_PROOF"),
+    );
+    let flipped = {
+        let t = proof_by(&agent, good_proof.clone());
+        let mut parts: Vec<String> = t.split('.').map(String::from).collect();
+        if let Some(sig) = parts.get_mut(2) {
+            let mut raw = b64::decode(sig).unwrap_or_default();
+            if let Some(b) = raw.first_mut() {
+                *b ^= 0x01;
+            }
+            *sig = b64::encode(raw);
+        }
+        parts.join(".")
+    };
+    bvec(
+        "bound_proof_flipped_bit",
+        "One bit of the proof's signature changed.",
+        bound_approval.clone(),
+        Some(flipped),
+        false,
+        Some("BAD_PROOF"),
+    );
+    bvec(
+        "bound_proof_junk",
+        "The proof is not a JWS.",
+        bound_approval.clone(),
+        Some("not.a.proof".into()),
+        false,
+        Some("BAD_PROOF"),
+    );
+    let mut c = Build::new("medium");
+    c.claims = claims_for(&base_request(), "medium", IAT, IAT + 60);
+    set(&mut c.claims, "v", json!("pka.2"));
+    bvec(
+        "v2_without_agent_key",
+        "Version pka.2 without cnf.",
+        c.approval(&alice),
+        None,
+        false,
+        Some("MALFORMED"),
+    );
+    let mut c = Build::new("medium");
+    c.claims = claims_for(&base_request(), "medium", IAT, IAT + 60);
+    set(&mut c.claims, "cnf", json!({"key": agent_spki}));
+    bvec(
+        "v1_with_agent_key",
+        "Version pka.1 with cnf: an unknown field for pka.1.",
+        c.approval(&alice),
+        None,
+        false,
+        Some("MALFORMED"),
+    );
+    let mut c = Build::new("medium");
+    c.claims = bound_claims(json!({"key": "AAAA"}));
+    bvec(
+        "bound_bad_agent_key",
+        "cnf.key is not a P-256 public key.",
+        c.approval(&alice),
+        Some(proof_by(&agent, good_proof.clone())),
+        false,
+        Some("MALFORMED"),
+    );
+    let mut c = Build::new("medium");
+    c.claims = bound_claims(json!({"key": agent_spki, "jkt": "x"}));
+    bvec(
+        "bound_cnf_extra_field",
+        "cnf has a field besides key.",
+        c.approval(&alice),
+        Some(proof_by(&agent, good_proof.clone())),
+        false,
+        Some("MALFORMED"),
+    );
+
     let doc = json!({
-        "spec": "pka.1",
+        "spec": "pka.1 and pka.2",
         "note": "Generated by crates/phygital-key-testgen. Keys are TEST ONLY. Every implementation must pass every vector.",
         "vectors": v.list
     });
@@ -848,7 +1059,8 @@ fn run() -> Result<(), String> {
             {"name": alice.name, "private_scalar_b64": b64::encode(alice.secret), "card": alice.card()?},
             {"name": mallory.name, "private_scalar_b64": b64::encode(mallory.secret), "card": mallory.card()?},
             {"name": bob.name, "private_scalar_b64": b64::encode(bob.secret), "card": bob.card()?},
-            {"name": use_key.name, "private_scalar_b64": b64::encode(use_key.secret), "card": use_key.card()?}
+            {"name": use_key.name, "private_scalar_b64": b64::encode(use_key.secret), "card": use_key.card()?},
+            {"name": agent.name, "private_scalar_b64": b64::encode(agent.secret), "card": agent.card()?}
         ]
     });
     let keys_text = serde_json::to_string_pretty(&keys).map_err(|e| e.to_string())? + "\n";

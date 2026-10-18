@@ -43,3 +43,10 @@ path = "fuzz_targets/standing.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "proof"
+path = "fuzz_targets/proof.rs"
+test = false
+doc = false
+bench = false

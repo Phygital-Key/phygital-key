@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use phygital_key_verify::{Config, Expected, Keyring, Level, verify};
+use phygital_key_verify::{Config, Expected, Keyring, Level};
 
 use crate::product::{self, Adapter, Product, product};
 use crate::state::{self, Gate, Settings};
@@ -152,6 +152,12 @@ enum Command {
         /// File that remembers used approvals, so each works once [default: <home>/seen-ids.jsonl].
         #[arg(long)]
         seen_file: Option<PathBuf>,
+        /// The agent's proof, for an approval bound to its key (or @file).
+        #[arg(long)]
+        proof: Option<String>,
+        /// Refuse approvals that are not bound to the asking agent's key.
+        #[arg(long)]
+        require_binding: bool,
     },
     /// Check a service's signed receipt for an approval.
     ReceiptCheck {
@@ -537,8 +543,11 @@ async fn run_cli(cli: Cli, adapter: Arc<dyn Adapter>) -> Result<(), String> {
             level,
             keyring,
             seen_file,
+            proof,
+            require_binding,
         } => {
             let approval = read_arg(&approval)?;
+            let proof = proof.as_deref().map(read_arg).transpose()?;
             let request: serde_json::Value = serde_json::from_str(&read_arg(&request)?)
                 .map_err(|e| format!("--request: {e}"))?;
             let level = Level::parse(&level).ok_or("--level is medium or high")?;
@@ -555,7 +564,19 @@ async fn run_cli(cli: Cli, adapter: Arc<dyn Adapter>) -> Result<(), String> {
             let seen = seen::FileSeenStore::new(
                 seen_file.unwrap_or_else(|| s.home.join("seen-ids.jsonl")),
             );
-            match verify(&approval, &expected, &ring, &seen, &s.config(), util::now()) {
+            let binding = phygital_key_verify::bound::Binding {
+                proof: proof.as_deref(),
+                required: require_binding,
+            };
+            match phygital_key_verify::verify_bound(
+                &approval,
+                binding,
+                &expected,
+                &ring,
+                &seen,
+                &s.config(),
+                util::now(),
+            ) {
                 Ok(ok) => {
                     println!(
                         "{}",

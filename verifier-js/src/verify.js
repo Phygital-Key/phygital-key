@@ -4,8 +4,10 @@
 
 import { MAX_DEPTH, NotSafeInteger, b64decode, b64encode, get, parseBytes, fromPlain } from "./strict.js";
 import { canonical, tryCanonical, challenge, sha256, utf8, concat, equalBytes } from "./canonical.js";
+import { agentKeyOk, proofError } from "./bound.js";
 
 export const VERSION = "pka.1";
+export const VERSION_BOUND = "pka.2";
 export const MAX_APPROVAL_BYTES = 16 * 1024;
 export const MAX_REQUEST_BYTES = 8 * 1024;
 export const MAX_LIFETIME_SECS = 300;
@@ -116,13 +118,22 @@ export async function checkKind(approval, expected, keyring, config, now, standi
   if (!keysAre(obj, ["claims", "signatures"])) no("MALFORMED");
   const claims = obj.get("claims");
   const sigs = obj.get("signatures");
-  if (!keysAre(claims, ["v", "id", "aud", "request", "request_hash", "level", "iat", "exp"])) no("MALFORMED");
+  // pka.1 has exactly these claims; pka.2 adds cnf, the asking agent's key.
+  const CLAIMS = ["v", "id", "aud", "request", "request_hash", "level", "iat", "exp"];
+  const bound = claims instanceof Map && claims.get("v") === VERSION_BOUND;
+  if (!keysAre(claims, bound ? [...CLAIMS, "cnf"] : CLAIMS)) no("MALFORMED");
+  let agentKey = null;
+  if (bound) {
+    const cnf = claims.get("cnf");
+    if (!keysAre(cnf, ["key"]) || !(await agentKeyOk(cnf.get("key")))) no("MALFORMED");
+    agentKey = cnf.get("key");
+  }
   const [v, id, aud, request, requestHash, level, iat, exp] = ["v", "id", "aud", "request", "request_hash", "level", "iat", "exp"].map((k) => claims.get(k));
   if (!isStr(v) || !isStr(id) || !isStr(aud) || !isStr(requestHash) || !isLevel(level) || !isInt(iat) || !isInt(exp)) no("MALFORMED");
   if (!Array.isArray(sigs) || !sigs.every((s) => keysAre(s, ["credential_id", "authenticator_data", "client_data_json", "signature"]) && [...s.values()].every(isStr))) no("MALFORMED");
-  if (v !== VERSION || !idOk(id) || !requestShapeOk(request)) no("MALFORMED");
+  if ((v !== VERSION && v !== VERSION_BOUND) || !idOk(id) || !requestShapeOk(request)) no("MALFORMED");
   const isStanding = request.get("type") === STANDING_TYPE;
-  if (isStanding !== standing) no("MALFORMED");
+  if (isStanding !== standing || (standing && agentKey !== null)) no("MALFORMED");
   if (standing && level !== "high") no("ASSURANCE_TOO_LOW");
   const maxLife = standing ? MAX_STANDING_SECS : MAX_LIFETIME_SECS;
   if (sigs.length !== 1) no("MALFORMED");
@@ -171,7 +182,7 @@ export async function checkKind(approval, expected, keyring, config, now, standi
   const flags = authData[32];
   if (!(flags & 0x01) || (level === "high" && !(flags & 0x04))) no("ASSURANCE_TOO_LOW");
 
-  return { id, request_hash: requestHash, credential_id: card.credential_id, approver: card.name, level, iat, exp };
+  return { id, request_hash: requestHash, credential_id: card.credential_id, approver: card.name, level, iat, exp, aud, agent_key: agentKey };
 }
 
 /** A seen store in memory. */
@@ -188,12 +199,23 @@ export class MemorySeenStore {
 /**
  * Verify an approval before acting on `expected.request`.
  * Returns { ok: true, verified } or { ok: false, error }. Never throws for bad input.
+ * `binding` (optional): { proof, required } for agent-bound approvals (pka.2):
+ * `proof` is the agent's proof (the Phygital-Proof header); `required` refuses
+ * approvals that are not bound.
  */
-export async function verify(approval, expected, keyring, seen, config, now) {
+export async function verify(approval, expected, keyring, seen, config, now, binding = {}) {
   try {
     // A revocation is never an action to carry out.
     if (asModel(expected.request)?.get?.("type") === REVOKE_TYPE) no("MALFORMED");
     const verified = await checkKind(approval, expected, keyring, config, now, false);
+    // 7b. Bound to the agent that asked: its proof must come along.
+    if (verified.agent_key !== null) {
+      if (binding?.proof === undefined || binding?.proof === null) no("PROOF_REQUIRED");
+      const err = await proofError(binding.proof, verified, now);
+      if (err) no(err);
+    } else if (binding?.required === true) {
+      no("PROOF_REQUIRED");
+    }
     // The store may be sync or async; only an exact `true` means "first use".
     if ((await seen.insertIfNew(verified.id, verified.exp, now)) !== true) no("REPLAYED");
     return { ok: true, verified };

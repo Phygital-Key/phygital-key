@@ -31,8 +31,13 @@ fn every_vector_passes() -> Result<(), String> {
             request: &input["request"],
             level,
         };
-        let got = verify(
+        let binding = phygital_key_verify::bound::Binding {
+            proof: input["proof"].as_str(),
+            required: input["require_binding"].as_bool().unwrap_or(false),
+        };
+        let got = phygital_key_verify::verify_bound(
             input["approval"].as_str().unwrap_or(""),
+            binding,
             &expected,
             &keyring,
             &seen,

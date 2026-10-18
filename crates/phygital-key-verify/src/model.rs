@@ -3,8 +3,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Version string carried in every approval.
+/// Version string carried in every approval that any holder may use once.
 pub const VERSION: &str = "pka.1";
+
+/// Version string of an agent-bound approval: [`VERSION`] plus `cnf`, the key
+/// of the agent that asked. Only that agent can use it, with a proof.
+pub const VERSION_BOUND: &str = "pka.2";
 
 /// Largest encoded approval accepted (base64url text), in bytes.
 pub const MAX_APPROVAL_BYTES: usize = 16 * 1024;
@@ -70,6 +74,17 @@ pub struct Claims {
     pub iat: i64,
     /// Expires at, Unix seconds.
     pub exp: i64,
+    /// `pka.2` only: the key of the agent that asked. Absent in `pka.1`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cnf: Option<Cnf>,
+}
+
+/// The agent key an approval is bound to (`pka.2`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Cnf {
+    /// SubjectPublicKeyInfo DER of the agent's P-256 key, base64url.
+    pub key: String,
 }
 
 /// One WebAuthn assertion, every field base64url.

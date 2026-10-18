@@ -14,8 +14,8 @@ use phygital_key_verify::receipt;
 use phygital_key_verify::standing::{self, StandingParams, Use};
 use phygital_key_verify::webauthn::{self, AssertionCheck};
 use phygital_key_verify::{
-    Assertion, Config, Expected, KeyCard, Keyring, Level, MAX_REQUEST_BYTES, VERSION, b64,
-    canonical, check, request_shape_ok,
+    Assertion, Config, Expected, KeyCard, Keyring, Level, MAX_REQUEST_BYTES, VERSION,
+    VERSION_BOUND, b64, canonical, check, request_shape_ok,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -145,6 +145,9 @@ struct Request {
     issued: HashMap<String, String>,
     /// Standing approvals: the person's revocation is signed and published.
     revocation_published: bool,
+    /// pka.2: the asking agent's public key (base64url SPKI). The approval is
+    /// bound to it, so only that agent can use it.
+    agent_key: Option<String>,
 }
 
 impl Request {
@@ -209,6 +212,9 @@ pub struct View {
     /// What the service reported after acting (`success` or `error`): set only
     /// from a receipt signed by the service's pinned key.
     pub service_reported: Option<String>,
+    /// pka.2: fingerprint (base64url SHA-256 of the SPKI) of the agent key the
+    /// approval is bound to.
+    pub agent_key_fingerprint: Option<String>,
 }
 
 /// What the page needs to sign.
@@ -386,6 +392,26 @@ impl Gate {
         self.create_kind(request, aud, level, Kind::Action)
     }
 
+    /// [`Gate::create`], bound to the asking agent's key when it gives one
+    /// (`agent_key`: base64url SPKI of a P-256 key). The approval is then
+    /// `pka.2` and works only with that agent's proof.
+    pub fn create_for_agent(
+        &self,
+        request: Value,
+        aud: &str,
+        level: Level,
+        agent_key: Option<String>,
+    ) -> Result<View, String> {
+        if let Some(k) = &agent_key
+            && phygital_key_verify::webauthn::parse_public_key(k).is_none()
+        {
+            return Err(
+                "agent_key must be a P-256 public key (SubjectPublicKeyInfo DER, base64url)".into(),
+            );
+        }
+        self.create_full(request, aud, level, Kind::Action, None, agent_key)
+    }
+
     fn create_kind(
         &self,
         request: Value,
@@ -393,7 +419,7 @@ impl Gate {
         level: Level,
         kind: Kind,
     ) -> Result<View, String> {
-        self.create_full(request, aud, level, kind, None)
+        self.create_full(request, aud, level, kind, None, None)
     }
 
     /// Create a request. `standing` is the end time and use key of a standing
@@ -405,6 +431,7 @@ impl Gate {
         level: Level,
         kind: Kind,
         standing: Option<(i64, SigningKey)>,
+        agent_key: Option<String>,
     ) -> Result<View, String> {
         if !request_shape_ok(&request) {
             return Err(
@@ -510,13 +537,14 @@ impl Gate {
             usable: false,
             issued: HashMap::new(),
             revocation_published: false,
+            agent_key,
         };
         if let Some((_, key)) = standing {
             inner.use_keys.insert(id.clone(), key);
         }
         inner.audit.append(
             "requested",
-            json!({"id": id, "aud": aud, "level": level.as_str(), "request_hash": request_hash}),
+            json!({"id": id, "aud": aud, "level": level.as_str(), "request_hash": request_hash, "agent_key": r.agent_key.as_deref().map(agent_fingerprint)}),
             t,
         )?;
         let view = self.view_of(&r, t);
@@ -560,6 +588,7 @@ impl Gate {
                 .as_deref()
                 .and_then(receipt::peek)
                 .map(|x| x.status),
+            agent_key_fingerprint: r.agent_key.as_deref().map(agent_fingerprint),
         }
     }
 
@@ -682,7 +711,7 @@ impl Gate {
                 allow,
             });
         }
-        let claims = json!({
+        let mut claims = json!({
             "v": VERSION,
             "id": r.id,
             "aud": r.aud,
@@ -695,6 +724,10 @@ impl Gate {
                 None => t + self.settings.lifetime,
             },
         });
+        if let (Some(key), Some(obj)) = (&r.agent_key, claims.as_object_mut()) {
+            obj.insert("v".into(), json!(VERSION_BOUND));
+            obj.insert("cnf".into(), json!({"key": key}));
+        }
         let claims_jcs = canonical::canonical_string(&claims)
             .map_err(|_| "claims: no canonical form".to_string())?;
         r.claims = Some(claims);
@@ -1173,6 +1206,7 @@ impl Gate {
             Level::High,
             Kind::Standing(params),
             Some((days, key)),
+            None,
         )
     }
 
@@ -1278,4 +1312,12 @@ pub fn write_enroll_token(settings: &Settings) -> Result<String, String> {
     let doc = json!({"token": token, "expires": now() + ENROLL_SECS});
     util::write_private(&settings.token_path(), doc.to_string().as_bytes())?;
     Ok(format!("{}/enroll#token={token}", settings.origin))
+}
+
+/// base64url SHA-256 of an agent key's SPKI DER, for the page and the log.
+fn agent_fingerprint(spki_b64: &str) -> String {
+    use sha2::Digest;
+    b64::encode(sha2::Sha256::digest(
+        b64::decode(spki_b64).unwrap_or_default(),
+    ))
 }

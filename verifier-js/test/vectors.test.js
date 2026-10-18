@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { verify, MemorySeenStore, keyringFrom } from "../src/verify.js";
 import { verifyHistory, verifyHistoryUpdate } from "../src/history.js";
 import { verifyUse, revocationsFrom, MemoryUseStore } from "../src/standing.js";
-import { b64encode } from "../src/strict.js";
+import { b64encode, b64decode } from "../src/strict.js";
 
 const load = (f) => JSON.parse(readFileSync(new URL(`../../test-vectors/${f}`, import.meta.url), "utf8"));
 
@@ -15,7 +15,7 @@ test("every approval vector", async () => {
     const i = v.input;
     const seen = new MemorySeenStore();
     for (const id of i.seen_ids) seen.insertIfNew(id, Number.MAX_SAFE_INTEGER, i.now);
-    const got = await verify(i.approval, { aud: i.aud, request: i.request, level: i.level }, keyringFrom(i.keyring), seen, i.config, i.now);
+    const got = await verify(i.approval, { aud: i.aud, request: i.request, level: i.level }, keyringFrom(i.keyring), seen, i.config, i.now, { proof: i.proof, required: i.require_binding === true });
     const want = v.expected.ok ? "ok" : v.expected.error;
     const have = got.ok ? "ok" : got.error;
     if (want !== have) failures.push(`${v.name}: want ${want}, got ${have}`);
@@ -116,4 +116,24 @@ test("async stores are awaited: a database-style use store still counts and stop
   assert.equal((await verifyUse(i.standing, i.use, e, keyring, uses, new Set(), i.config, i.now)).error, "REPLAYED");
   const odd = { recordUse: async () => "many" };
   assert.equal((await verifyUse(i.standing, i.use, e, keyring, odd, new Set(), i.config, i.now)).error, "MALFORMED");
+});
+
+test("signProof makes a proof the checker accepts for a bound approval", async () => {
+  const { signProof } = await import("../src/bound.js");
+  const keys = JSON.parse(readFileSync(new URL("../../test-vectors/keys/test-keys.json", import.meta.url), "utf8")).keys;
+  const agent = keys.find((k) => k.name === "agent");
+  const spki = b64decode(agent.card.public_key);
+  const pub = await crypto.subtle.importKey("spki", spki, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pub);
+  const priv = await crypto.subtle.importKey("jwk", { ...jwk, d: agent.private_scalar_b64, key_ops: ["sign"] }, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const v = load("vectors.json").vectors.find((x) => x.name === "valid_bound");
+  const i = v.input;
+  const claims = JSON.parse(new TextDecoder().decode(b64decode(i.approval))).claims;
+  const proof = await signProof({ approvalId: claims.id, aud: claims.aud, requestHash: claims.request_hash, iat: i.now }, priv);
+  const e = { aud: i.aud, request: i.request, level: i.level };
+  const ok = await verify(i.approval, e, keyringFrom(i.keyring), new MemorySeenStore(), i.config, i.now, { proof });
+  assert.equal(ok.ok, true, ok.error);
+  const late = await signProof({ approvalId: claims.id, aud: claims.aud, requestHash: claims.request_hash, iat: i.now - 31 }, priv);
+  assert.equal((await verify(i.approval, e, keyringFrom(i.keyring), new MemorySeenStore(), i.config, i.now, { proof: late })).error, "BAD_PROOF");
+  assert.equal((await verify(i.approval, e, keyringFrom(i.keyring), new MemorySeenStore(), i.config, i.now)).error, "PROOF_REQUIRED");
 });

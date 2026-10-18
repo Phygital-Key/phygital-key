@@ -12,6 +12,7 @@
 #![warn(missing_docs)]
 
 pub mod b64;
+pub mod bound;
 pub mod canonical;
 pub mod history;
 mod model;
@@ -22,11 +23,11 @@ mod verify;
 pub mod webauthn;
 
 pub use model::{
-    ApprovalObject, Assertion, Claims, Config, DEFAULT_LIFETIME_SECS, Expected, KeyCard, Keyring,
-    Level, MAX_APPROVAL_BYTES, MAX_CLOCK_SKEW_SECS, MAX_LIFETIME_SECS, MAX_REQUEST_BYTES, VERSION,
-    id_ok, request_shape_ok,
+    ApprovalObject, Assertion, Claims, Cnf, Config, DEFAULT_LIFETIME_SECS, Expected, KeyCard,
+    Keyring, Level, MAX_APPROVAL_BYTES, MAX_CLOCK_SKEW_SECS, MAX_LIFETIME_SECS, MAX_REQUEST_BYTES,
+    VERSION, VERSION_BOUND, id_ok, request_shape_ok,
 };
 pub use verify::{
     ErrorCode, MemorySeenStore, REVOKE_TYPE, STANDING_TYPE, SeenStore, Verified, Verifier, check,
-    verify,
+    verify, verify_bound,
 };

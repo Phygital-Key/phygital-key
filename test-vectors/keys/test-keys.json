@@ -43,6 +43,17 @@
       },
       "name": "gate use key",
       "private_scalar_b64": "ipJdDWhuKRYo2qsbGlijHP0qhu8gcyuVML0avI6s6b4"
+    },
+    {
+      "card": {
+        "created": "2026-10-17",
+        "credential_id": "g9eXnb6bIeq3b37uOeCOug",
+        "name": "agent (TEST ONLY)",
+        "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEd_-9Tqs1uA_Z8-tGYb4lk2D0-0CfCArMQrllKeE6jpGAG2bfF91RgOmyF_AxjuIVljMzuOxdxut9DiJQDNZ0Cg",
+        "rp_id": "approve.example.com"
+      },
+      "name": "agent",
+      "private_scalar_b64": "2okDeaCo537xaM1fAUm69E_mIO6EieTvZzZT2vuNaHw"
     }
   ],
   "warning": "TEST ONLY. These private keys are public. Never trust them anywhere."

@@ -16,7 +16,7 @@ use p256::pkcs8::EncodePublicKey;
 use phygital_key_verify::receipt::{self, Receipt};
 use phygital_key_verify::standing::{MemoryUseStore, Revocations, verify_use};
 use phygital_key_verify::{
-    Config, Expected, Keyring, Level, MemorySeenStore, b64, canonical, verify,
+    Config, Expected, Keyring, Level, MemorySeenStore, b64, canonical, verify_bound,
 };
 use serde_json::{Value, json};
 
@@ -110,7 +110,7 @@ async fn info(State(d): State<Arc<Demo>>) -> Response {
             "POST /payment": "level high. Body: params, e.g. {\"to\":\"ACME Ltd\",\"amount_cents\":12000,\"currency\":\"EUR\"}",
             "POST /send_message": "level medium. Body: params, e.g. {\"to\":\"sam@example.com\",\"text\":\"Hi\"}"
         },
-        "how": "First get an approval for {\"type\": <action>, \"params\": <body>} with aud set to this service's aud. Then POST the body with header `Phygital-Approval: <approval>`. With a standing approval, also send `Phygital-Use: <use_token>`."
+        "how": "First get an approval for {\"type\": <action>, \"params\": <body>} with aud set to this service's aud. Then POST the body with header `Phygital-Approval: <approval>`. With a standing approval, also send `Phygital-Use: <use_token>`. With an approval bound to your key (asked with agent_key), also send `Phygital-Proof: <proof>`."
     }))
     .into_response()
 }
@@ -157,7 +157,20 @@ async fn act(
             now(),
         )
         .map(|u| (u.standing, Some(u.use_id))),
-        None => verify(approval, &expected, &keyring, &d.seen, &d.config, now()).map(|v| (v, None)),
+        // An agent-bound approval (pka.2) needs the agent's proof as well.
+        None => verify_bound(
+            approval,
+            phygital_key_verify::bound::Binding {
+                proof: headers.get("phygital-proof").and_then(|h| h.to_str().ok()),
+                required: false,
+            },
+            &expected,
+            &keyring,
+            &d.seen,
+            &d.config,
+            now(),
+        )
+        .map(|v| (v, None)),
     };
     match result {
         Ok((ok, use_id)) => Json(json!({
