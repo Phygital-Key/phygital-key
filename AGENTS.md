@@ -13,7 +13,7 @@ This repository (`Phygital-Key/phygital-key`, renamed from `phygital-key-mcp`) i
 
 | Product | Repository | Program | Agent protocol |
 |---|---|---|---|
-| Phygital Key MCP | [Phygital-Key/phygital-key-mcp](https://github.com/Phygital-Key/phygital-key-mcp) | `phygital-key-mcp` (0.4.0) | MCP over stdio, or Streamable HTTP at `/mcp` |
+| Phygital Key MCP | [Phygital-Key/phygital-key-mcp](https://github.com/Phygital-Key/phygital-key-mcp) | `phygital-key-mcp` (0.5.0) | MCP over stdio, or Streamable HTTP at `/mcp` |
 | Phygital Key A2A | [Phygital-Key/phygital-key-a2a](https://github.com/Phygital-Key/phygital-key-a2a) (new) | `phygital-key-a2a` | A2A 1.0 JSON-RPC at `/a2a`, agent card at `/.well-known/agent-card.json` |
 
 Four parts live here, all Apache-2.0:
@@ -28,7 +28,7 @@ Free and open source under Apache-2.0. Status: pre-audit. No outside paid audit 
 ## Layout
 
 ```
-Cargo.toml                         workspace: three crates, version 0.4.0, shared dependency versions, unsafe_code = "forbid"
+Cargo.toml                         workspace: three crates, version 0.5.0, shared dependency versions, unsafe_code = "forbid"
 Cargo.lock                         locked dependency versions (CI builds with --locked)
 deny.toml                          cargo-deny: allowed licences, advisories, bans, sources
 LICENSE                            Apache-2.0

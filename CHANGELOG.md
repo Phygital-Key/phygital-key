@@ -2,7 +2,10 @@
 
 Changes to the base. Each product keeps its own changelog for its releases. Entries up to 0.3.0 describe the single program `phygital-key`, from before the split, and keep the names it had then.
 
-## Unreleased
+## 0.5.0 (2026-10-18)
+
+Released in Phygital Key MCP 0.5.0 and Phygital Key A2A 0.2.0.
+
 
 - **Fix: the daily update job never ran from its service manager.** systemd and launchd start the job with no `HOME`, and the program stops without one ("no home folder found"), so automatic updates failed every day on Linux and macOS. Running `<program>-admin update` by hand worked. The units now set `HOME`, and the secure install test starts the job through systemd and launchd. Existing secure installs keep the broken unit until the next install, so run `<program>-admin update` once after the next release.
 - **Fix: idle connections are closed after 10 seconds.** Before, a connection that never sent a request stayed open for good, and launchd gives a service 256 open files, so a program on the same computer could keep the approval page from loading by opening about 250 of them. Each connection now gets a 10-second header timeout (idle ones included), a failed accept waits and goes on, and both service files raise the limit to 8192 open files.

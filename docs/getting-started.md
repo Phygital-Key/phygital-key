@@ -136,7 +136,7 @@ On a Linux server you can also run the gate from the container image `ghcr.io/ph
 From a fresh terminal that no AI controls (macOS or Linux):
 
 ```bash
-curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.4.0/install-service.sh | sudo bash
+curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.5.0/install-service.sh | sudo bash
 ```
 
 It downloads the official v0.4.0 release, checks that its file list is signed by a pinned release key and that the archive matches the signed SHA-256, installs it where only an administrator can change it, and starts it as its own user. From then on it updates itself once a day to newer signed releases ([updates](updates.md#automatic-updates-secure-install); add `-s -- --no-auto-update` after `sudo bash` to turn that off). Then:

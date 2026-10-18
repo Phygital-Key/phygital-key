@@ -170,7 +170,7 @@ sudo /Library/PhygitalKey/mcp/bin/phygital-key-mcp install-service --auto-update
 (On Linux: `/usr/lib/phygital-key-mcp/bin/phygital-key-mcp`.) To install with updates off from the start:
 
 ```bash
-curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.4.0/install-service.sh | sudo bash -s -- --no-auto-update
+curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.5.0/install-service.sh | sudo bash -s -- --no-auto-update
 ```
 
 The choice is saved as `on` or `off` in `<prefix>/auto-update` and kept on later installs until you pass the other option. `--no-auto-update` removes the job; `phygital-key-mcp-admin update` still works when you want it. Both options run the whole install again for the installed version, so the gate restarts.

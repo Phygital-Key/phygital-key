@@ -1,6 +1,6 @@
 {
   "name": "phygital-key-verify",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Check a Phygital Key approval: a person's signed yes (passkey, fingerprint or hardware key) for one exact request. Independent JavaScript checker, no dependencies.",
   "type": "module",
   "exports": "./src/index.js",

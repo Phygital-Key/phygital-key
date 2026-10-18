@@ -872,7 +872,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "phygital-key-gate"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "axum",
  "base64",
@@ -893,7 +893,7 @@ dependencies = [
 
 [[package]]
 name = "phygital-key-testgen"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "p256",
  "phygital-key-verify",
@@ -903,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "phygital-key-verify"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "base64",
  "p256",
