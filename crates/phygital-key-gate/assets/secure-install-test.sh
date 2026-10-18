@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034 # every script carries the whole PRODUCT block; not all use every value
 # CI check for the secure install (needs password-less sudo, as on CI runners).
 # Generated for one product (the PRODUCT block) from the template in
 # Phygital-Key/phygital-key, crates/phygital-key-gate/assets.
@@ -49,14 +50,14 @@ for fam, host in ((socket.AF_INET6, "::1"), (socket.AF_INET, "127.0.0.1")):
 time.sleep(300)' "$PORT" &
 HIJACK=$!
 sleep 1
-lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null | grep -qx "$HIJACK" || ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -q "pid=$HIJACK" || fail "test setup: the fake program is not listening"
+lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | grep -qx "$HIJACK" || ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -q "pid=$HIJACK" || fail "test setup: the fake program is not listening"
 if "${INSTALL[@]}" >/dev/null 2>&1; then fail "installed while another program held the address"; else pass "refuses while another program holds the address"; fi
 kill $HIJACK 2>/dev/null || true; wait $HIJACK 2>/dev/null || true
 sleep 1
 
 "${INSTALL[@]}" || fail "install did not succeed"
-curl -fsS http://localhost:$PORT/api/status >/dev/null && pass "gate answers" || fail "gate answers"
-for p in $(sudo lsof -nP -iTCP:$PORT -sTCP:LISTEN -t | sort -u); do
+curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "gate answers" || fail "gate answers"
+for p in $(sudo lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t | sort -u); do
   [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] || fail "a listener is not the gate user"
 done
 pass "only the gate user listens (IPv4 and IPv6)"
@@ -78,7 +79,7 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: bearer 
 [ "$code" != 401 ] && [ "$code" != 403 ] && pass "agent endpoint accepts the token (any case of Bearer)" || fail "agent endpoint with token gave $code"
 
 "${INSTALL[@]}" >/dev/null
-curl -fsS http://localhost:$PORT/api/status >/dev/null && pass "installing again (update) works" || fail "installing again (update) works"
+curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "installing again (update) works" || fail "installing again (update) works"
 
 # Automatic updates: on by default, a root-owned job, refused when not signed.
 BIN="$PREFIX/bin/$P_BIN"
@@ -102,14 +103,14 @@ if "$BIN" release-check --file "$T/release.txt" --sig "$T/release.txt.sig" >/dev
 rm -rf "$T"
 before=$("$BIN" --version)
 sudo "$BIN" install-service --auto-update-run >/dev/null 2>&1 || true
-[ "$("$BIN" --version)" = "$before" ] && curl -fsS http://localhost:$PORT/api/status >/dev/null && pass "update job leaves the gate running unless a newer signed release exists" || fail "update job leaves the gate running unless a newer signed release exists"
+[ "$("$BIN" --version)" = "$before" ] && curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "update job leaves the gate running unless a newer signed release exists" || fail "update job leaves the gate running unless a newer signed release exists"
 sudo cat "$PREFIX/update-status" | grep -Eq "up to date|update check failed|update refused" && pass "update job records its result" || fail "no update result recorded"
 if [ "$(uname -s)" = Linux ]; then
   # The sandboxed daily job itself (not just the command) still runs to the end.
   sudo rm -f "$PREFIX/update-status"
   sudo systemctl start "$P_BIN-update.service" || true
   sudo cat "$PREFIX/update-status" 2>/dev/null | grep -Eq "up to date|update check failed|update refused" &&
-    curl -fsS http://localhost:$PORT/api/status >/dev/null && pass "the sandboxed update service runs" || fail "the sandboxed update service did not run"
+    curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "the sandboxed update service runs" || fail "the sandboxed update service did not run"
   # systemd's own sandbox score: 0 is fully locked, 10 is open.
   for u in "$P_BIN.service" "$P_BIN-update.service"; do
     score=$(systemd-analyze security "$u" --no-pager 2>/dev/null | awk '/Overall exposure level/ {print $(NF-1)}')
@@ -134,7 +135,7 @@ if [ -e /tmp/pka-path-planted ]; then fail "root ran a program from the user's P
 printf '#!/bin/sh\nexit 1\n' > /tmp/pka-broken
 sudo install -m 0755 -o root /tmp/pka-broken "$CI_DIR/broken"; rm -f /tmp/pka-broken
 if sudo "$CI_DIR/$P_BIN" install-service --binary "$CI_DIR/broken" >/dev/null 2>&1; then fail "installed a program that does not start"; fi
-[ "$("$BIN" --version)" = "$before" ] && curl -fsS http://localhost:$PORT/api/status >/dev/null && pass "a failed update switches back to the previous program" || fail "no switch back after a failed update"
+[ "$("$BIN" --version)" = "$before" ] && curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "a failed update switches back to the previous program" || fail "no switch back after a failed update"
 
 # Turning updates off is remembered on the next install.
 "${INSTALL[@]}" --no-auto-update >/dev/null
@@ -145,7 +146,7 @@ if updates_on; then fail "a later install turned updates back on"; else pass "th
 updates_on && pass "--auto-update turns it back on" || fail "--auto-update did not turn it on"
 sudo "$PREFIX/bin/$P_BIN" install-service --uninstall
 sleep 1
-if curl -fsS http://localhost:$PORT/api/status >/dev/null 2>&1; then fail "still running after uninstall"; else pass "uninstall stops it"; fi
+if curl -fsS "http://localhost:$PORT/api/status" >/dev/null 2>&1; then fail "still running after uninstall"; else pass "uninstall stops it"; fi
 sudo test -d "$DATA" && pass "uninstall keeps keys" || fail "uninstall keeps keys"
 sudo "$CI_DIR/$P_BIN" install-service --uninstall --purge
 if sudo test -d "$DATA"; then fail "purge left data"; else pass "purge removes everything"; fi

@@ -1,11 +1,15 @@
 # Weekly update checks. Each update arrives as a pull request and goes through the
 # full CI (tests, both verifiers, end-to-end, secure install) before anyone merges it.
+# A new version waits 7 days first, so a bad release is usually caught and pulled
+# before it gets here. Security fixes skip the wait.
 version: 2
 updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       rust:
         patterns: ["*"]
@@ -13,6 +17,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]

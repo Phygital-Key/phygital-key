@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034 # every script carries the whole PRODUCT block; not all use every value
 # Set up release signing (run once, by the repository owner, in a terminal).
 #
 #   scripts/release-key.sh

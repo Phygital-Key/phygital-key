@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2034 # every script carries the whole PRODUCT block; not all use every value
 # Install a Phygital Key product on macOS or Linux (the PRODUCT block below says
 # which). Generated from the template in Phygital-Key/phygital-key.
 #

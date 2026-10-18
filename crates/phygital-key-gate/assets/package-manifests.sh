@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034 # every script carries the whole PRODUCT block; not all use every value
 # Write the Homebrew formula, Scoop manifest and winget manifests for a
 # published release, using the SHA-256 files attached to that release.
 #
