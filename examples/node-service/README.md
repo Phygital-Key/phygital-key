@@ -11,27 +11,27 @@ What it does on each call:
 
 ## Run it
 
-You need Node 20 or later and `phygital-key` ([getting started](../../docs/getting-started.md)).
+You need Node 20 or later and a Phygital Key product, for example `phygital-key-mcp` ([getting started](../../docs/getting-started.md)).
 
 **1. Start the demo gate** in one terminal. It serves the approval page on port 7468 and its own fake service on 7469:
 
 ```bash
-phygital-key demo
+phygital-key-mcp demo
 ```
 
-The first time, it prints a one-time link: open it and add your passkey or security key. It also prints how to connect an AI app (or run `phygital-key mcp-token`).
+The first time, it prints a one-time link: open it and add your passkey or security key. It also prints how to connect an AI app (or run `phygital-key-mcp token`).
 
 **2. Start this service** in a second terminal, from this folder:
 
 ```bash
-KEYRING=~/.phygital-key/keyring.json node server.mjs
+KEYRING=~/.phygital-key-mcp/keyring.json node server.mjs
 ```
 
 It listens on `127.0.0.1:7600` with the audience `http://localhost:7600`. `GET /` answers with that audience and what `POST /deploy` needs.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `KEYRING` | (required) | The keyring file to trust. The gate's is `~/.phygital-key/keyring.json`; `phygital-key keys` prints it |
+| `KEYRING` | (required) | The keyring file to trust. The gate's is `~/.phygital-key-mcp/keyring.json`; `phygital-key-mcp keys` prints it |
 | `PORT` | `7600` | Port to listen on |
 | `AUD` | `http://localhost:<PORT>` | This service's audience id |
 | `GATE_ORIGIN` | `http://localhost:7468` | The approval page origin. Its host name is the allowed relying party id |
@@ -44,7 +44,7 @@ The approval page opens. Approve with your fingerprint, face or PIN. The AI then
 
 ## What you should see
 
-These are the responses from a real run (approval from `phygital-key demo` with a virtual passkey, gate on port 18600 with `--lifetime 300`, this service on 18650 through `PORT`, `AUD` and `GATE_ORIGIN`):
+These are the responses from a real run (approval from `phygital-key-mcp demo` with a virtual passkey, gate on port 18600 with `--lifetime 300`, this service on 18650 through `PORT`, `AUD` and `GATE_ORIGIN`):
 
 | Call | Response |
 |---|---|
@@ -71,7 +71,7 @@ A failed check does not use up the approval: after the `REQUEST_MISMATCH` and `W
 ## Before real use
 
 - Keep used ids in a shared, durable store (a database, Redis `SET NX`) if you run more than one instance. `MemorySeenStore` forgets on restart and is per process. `verify` awaits the store, so an async `insertIfNew` works. It must be atomic, and only an exact `true` counts as a first use.
-- Check the keyring's signed history against the person's fingerprint before you trust it, and keep the copy you accepted: `phygital-key keys --check <fingerprint> --file keyring.json --signed-on <gate origin>`. See [key history](../../docs/key-history.md).
+- Check the keyring's signed history against the person's fingerprint before you trust it, and keep the copy you accepted: `phygital-key-mcp keys --check <fingerprint> --file keyring.json --signed-on <gate origin>`. See [key history](../../docs/key-history.md).
 - Serve it over HTTPS (a proxy in front) if anything outside this machine calls it.
 - For standing approvals, add `verifyUse` and the revocation list. See [integrate](../../docs/integrate.md).
 

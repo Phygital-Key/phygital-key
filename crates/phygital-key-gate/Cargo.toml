@@ -1,18 +1,17 @@
 [package]
-name = "phygital-key"
-description = "Phygital Key gate: an MCP server and approval page so a person approves exact AI actions with a passkey or hardware key."
+name = "phygital-key-gate"
+description = "The Phygital Key gate engine: approval page, keys, standing approvals, receipts, audit log, secure install and signed updates, shared by every Phygital Key product (MCP, A2A)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-keywords = ["mcp", "webauthn", "passkey", "approval", "ai-agents"]
-categories = ["authentication", "command-line-utilities"]
+keywords = ["webauthn", "passkey", "approval", "ai-agents", "human-in-the-loop"]
+categories = ["authentication"]
 
-[[bin]]
-name = "phygital-key"
-path = "src/main.rs"
+[lib]
+path = "src/lib.rs"
 
 [dependencies]
 phygital-key-verify.workspace = true
@@ -22,8 +21,6 @@ sha2.workspace = true
 getrandom.workspace = true
 subtle.workspace = true
 p256.workspace = true
-rmcp = { version = "3.5", features = ["server", "macros", "schemars", "elicitation", "transport-io", "transport-streamable-http-server"] }
-schemars = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-std"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query"] }
 clap = { version = "4", features = ["derive", "env"] }

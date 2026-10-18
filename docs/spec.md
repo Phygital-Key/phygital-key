@@ -1,4 +1,4 @@
-# Phygital Key Approval (PKA), spec (format `pka.1`, project v0.3)
+# Phygital Key Approval (PKA), spec (format `pka.1`, project v0.4)
 
 **Goal.** A small open base for one thing: a signed yes from a person, for one exact request, that anyone can check. The person approves with a passkey, fingerprint, face or hardware key. Any party can verify the yes offline in a few lines of code. It works between any two sides: person to person, person to business, business to business, person to system, AI agent to service. Built on WebAuthn (FIDO2) and aligned with AP2 (now at the FIDO Alliance). License: Apache-2.0.
 
@@ -11,7 +11,7 @@ The words MUST, MUST NOT and SHOULD are used as in RFC 2119. The test vectors in
 | Role | What it is | Must |
 |---|---|---|
 | Requester | Anyone or anything that asks for a yes: an AI agent, an app, a business, a person | Build the request. Never holds the approver's key. Never approves. |
-| Relay | Passes the request to the approver and the approval back. Today this is the Gate, an MCP server | Canonicalize and hash the request, show it on the approval page, keep state. No LLM inside. Can never create a yes by itself. |
+| Relay | Passes the request to the approver and the approval back. Today this is the Gate, run by a product (Phygital Key MCP, or the new Phygital Key A2A) | Canonicalize and hash the request, show it on the approval page, keep state. No LLM inside. Can never create a yes by itself. |
 | Approver | A person, their authenticator (phone, laptop, security key) and the approval page (AP2 "Trusted Surface") | See the exact request, decide, sign with their own key. The key never leaves their device. |
 | Verifier | Anyone who acts on the yes: a service, a business, another person's app, a machine | Check the approval with the verifier before acting. Never trust "they said yes" from the requester. |
 
@@ -19,9 +19,10 @@ One party can hold several roles. Example: a business can be both Requester and 
 
 ## 2. Adapters (how a request reaches the approver)
 
-The base is the format and the verifier. Adapters are the doorways.
+The base is the format and the verifier. Adapters are the doorways: each product is the same gate with one adapter.
 
-- **MCP (the only adapter today).** The Gate is an MCP server (stdio, or Streamable HTTP at `/mcp`). It asks the client to open the approval page with MCP URL-mode elicitation. If the client has no URL elicitation, it returns the link for the person to open. It never auto-approves. Over HTTP, `/mcp` needs a bearer token (`Authorization: Bearer <token>`, made once and kept in the gate's data folder; `phygital-key mcp-token` prints it) and refuses any request that carries a browser `Origin`. `--open-mcp` turns the token off. stdio needs no token: only the app that started the gate can talk to it.
+- **MCP (Phygital Key MCP).** The Gate is an MCP server (stdio, or Streamable HTTP at `/mcp`). It asks the client to open the approval page with MCP URL-mode elicitation. If the client has no URL elicitation, it returns the link for the person to open. It never auto-approves. Over HTTP, `/mcp` needs a bearer token (`Authorization: Bearer <token>`, made once and kept in the gate's data folder; `phygital-key-mcp token` prints it) and refuses any request that carries a browser `Origin`. `--no-token` turns the token off. stdio needs no token: only the app that started the gate can talk to it.
+- **A2A (Phygital Key A2A, new, being built).** An A2A 1.0 JSON-RPC endpoint at `/a2a` with the same access token and Origin rule, and a public agent card at `/.well-known/agent-card.json`. No stdio mode.
 - **Later:** plain HTTP API, email link, chat apps, QR code on a screen, SDKs for apps.
 
 All adapters produce the same approval object and use the same verifier.
@@ -97,7 +98,7 @@ Two clocks, so people are not rushed:
   { "credential_id": "...", "public_key": "<base64url SPKI DER>", "rp_id": "approve.example.com", "name": "My phone", "created": "2026-10-17" }
   ```
 
-- **Enrollment links** are made by the person in their own terminal (`phygital-key enroll`). The gate never prints a token in `mcp` mode, where its output goes to the AI app's logs. The token travels in the link's `#fragment`, which browsers never send to servers. It is used up when the person starts enrolling and the session lasts at most 10 minutes.
+- **Enrollment links** are made by the person in their own terminal (`phygital-key-mcp enroll`). The gate never prints a token in `stdio` mode, where its output goes to the AI app's logs. The token travels in the link's `#fragment`, which browsers never send to servers. It is used up when the person starts enrolling and the session lasts at most 10 minutes.
 - **Every key change is an approval.** Adding a key is a request `{"type": "add_key", "params": <key card>}`; removing one is `{"type": "remove_key", "params": {"credential_id", "name"}}`. Both are level `high`, with audience `phygital-key:keyring:<origin>`, so a change approved on one gate never counts on another.
   - The **first key** signs its own `add_key` (it proves it works, and starts the history).
   - Every **later change** must be signed by a key that is trusted at that point. A new key can never approve itself. The last key cannot be removed.
@@ -114,7 +115,7 @@ Two clocks, so people are not rushed:
   So a keyring can be trusted with one short fingerprint, learned once (in person, on a call, on a business card), plus the last copy you accepted. Whoever controls the website or the file cannot add a key without a signature from a key that was trusted at that point, and cannot bring back a removed key.
 - **Keyring:** a verifier keeps the key cards it trusts: `{"keys": [ ...key cards ]}`. The verifier only reads the keyring it is given. It never fetches anything.
 - **Sharing keys:**
-  - Inside one team or system: copy the keyring file, or run `phygital-key keys`.
+  - Inside one team or system: copy the keyring file, or run `phygital-key-mcp keys`.
   - Between parties: a party publishes its keyring (cards plus signed history) at `https://<domain>/.well-known/phygital-key.json`. The receiving app (not the verifier) fetches it over HTTPS, checks the history against the pinned root fingerprint and its expected origin, and stores it. Later fetches go through `verify_history_update` against the stored copy.
 - **Lost or retired key:** remove it with a `remove_key` approval from another trusted key. People SHOULD enroll two keys so one loss does not lock them out. If every key is lost, start a new keyring with a new root fingerprint.
 - **Synced passkeys:** `signCount` is not reliable, so it is never used. The single-use `id` stops replays.
@@ -122,7 +123,7 @@ Two clocks, so people are not rushed:
 ## 6. Flow
 
 1. Requester asks the relay: `request_approval(request, aud, level)`.
-2. Relay canonicalizes and hashes the request, stores it as `pending`, and sends the approver to the approval page. In MCP, "Accept" only means the person opened the page. It is not a yes.
+2. Relay canonicalizes and hashes the request, stores it as `pending`, and sends the approver to the approval page. In MCP, an elicitation "Accept" only means the person opened the page. It is not a yes.
 3. The page shows the request as built by the relay from the canonical form, never text written by the requester. Every field is shown, nothing truncated, plus the audience, the level and the time left. Keys that are not plain words are quoted. Common invisible, direction-changing and mixed-script characters, and odd spacing, are highlighted (a help, not a guarantee: the real protection is that the exact bytes are signed and checked).
 4. The person presses Approve or Deny. On Approve, the relay fixes the claims (`iat`, `exp`) and returns their canonical text. The page checks that these claims say exactly what it shows, computes the challenge itself from that text, and asks the authenticator to sign. On a desktop without a key, the browser offers a QR code to approve with a phone (built into passkeys).
 5. The relay runs every verifier check (except replay) on the signature before it keeps the approval. A Deny is recorded and returned as a refusal.
@@ -160,7 +161,7 @@ After acting, a verifier MAY answer with a **receipt**: a compact JWS signed wit
 
 `status` is `success` or `error` (then `error` may hold a short code). A receipt for one use of a standing approval also carries `use_id`. Unknown fields are refused. Checking a receipt (`receipt::verify`) needs the service's public key, its `iss`, and the approval it is about. Like AP2 receipts, it points at the approval by hash. A service publishes its receipt key at `/.well-known/phygital-key-service.json` (`{"iss", "receipt_public_key"}`). The header MUST be exactly the canonical bytes above, `success` MUST NOT carry `error`, and `approval_id`, `request_hash` and `iss` MUST match the approval's own claims.
 
-The agent carries receipts back to the gate (`record_receipt`), so the agent could make one up. The gate therefore records a receipt **only if it is signed by a receipt key pinned for that service** (`phygital-key trust-service --aud ... --key ...`, kept in `services.json`; the demo pins its own service). Only then does the person see "the service reported: done". Anyone holding the service key can check a receipt too (`phygital-key receipt-check`).
+The agent carries receipts back to the gate (in MCP, `record_receipt`), so the agent could make one up. The gate therefore records a receipt **only if it is signed by a receipt key pinned for that service** (`phygital-key-mcp trust-service --aud ... --key ...`, kept in `services.json`; the demo pins its own service). Only then does the person see "the service reported: done". Anyone holding the service key can check a receipt too (`phygital-key-mcp receipt-check`).
 
 ## 7c. Standing approvals
 
@@ -208,7 +209,7 @@ A security key without a PIN can only approve `medium`.
 - **In transit:** HTTPS everywhere outside localhost. Passkeys refuse to work otherwise.
 - **At rest:** the relay is self-hosted by the people who use it. Requests live in memory only. They are forgotten an hour after their 10-minute deadline (an approved standing approval, an hour after its end date), or at a restart. On disk: the public keyring, the audit log (`id`, `aud`, `level`, `request_hash`, time, credential and result; never the request itself), signed revocations, pinned service receipt keys and the MCP access token.
 - **No tracking:** no analytics, no third-party scripts, no cloud account, no external fonts.
-- **Network:** the gate makes no outgoing calls. The secure install's daily update job fetches the signed release list from github.com once a day ([decision 36](decisions.md)); `phygital-key update` and `install.sh` contact GitHub only when run.
+- **Network:** the gate makes no outgoing calls. The secure install's daily update job fetches the signed release list from github.com once a day ([decision 36](decisions.md)); a product's `update` and `install.sh` contact GitHub only when run.
 - **Approval page:** plain HTML and JS, strict CSP (`default-src 'none'`), no LLM, never framed.
 - **No encrypted requests for now** ([decision 33](decisions.md)). The approval page is served by the gate, so encrypting a request against the gate helps only if the page comes from somewhere the gate cannot change. If a hosted gate is ever built, private mode would come with it: a pinned approval page and a device-held decryption key.
 
@@ -245,19 +246,19 @@ The full mapping, including Mastercard's Verifiable Intent and what an AP2 expor
 
 - **Shared vectors** (`test-vectors/`): 55 approval cases, 25 key-history cases and 43 standing-approval cases, every error code, every edge (exact size limits, exactly at `exp`, 30 s and 31 s clock drift, 300 s and 301 s life, NFD input, KELVIN SIGN payee, key order, floats, duplicate keys, deep nesting, lone surrogates, look-alike letters, flipped signature bit, wrong origin, wrong RP ID, wrong type, wrong challenge, cross-origin frame, signature over other claims, untrusted key, missing presence, missing verification, replay, prompt-injection text).
 - **Property tests** (2000 cases each): random text and bytes never verify; changing any bit of a valid approval is refused; any other request is refused; canonical form is idempotent; `verify` never panics on random requests.
-- **End-to-end and red team** (`tests/e2e/`, 108 checks): real browser with a virtual passkey, real MCP client, demo service, and every attack an agent can try through the gate and the page.
+- **End-to-end and red team** (in each product; Phygital Key MCP's `tests/e2e/` has 108 checks): real browser with a virtual passkey, real MCP client, demo service, and every attack an agent can try through the gate and the page.
 
 ## 14. Out of scope for now
 
-2 of 3 approvers (format ready), delegation between agents, private mode, payment settlement, an AP2 / SD-JWT export (see `docs/ap2.md`), adapters other than MCP (an A2A version is planned). See the [roadmap](roadmap.md).
+2 of 3 approvers (format ready), delegation between agents, private mode, payment settlement, an AP2 / SD-JWT export (see `docs/ap2.md`), adapters other than MCP and A2A (the A2A product is being built). See the [roadmap](roadmap.md).
 
 ## 15. Deliverables
 
 1. This spec and the test vectors.
-2. Verifier library in Rust (`phygital-key-verify`), an independent JavaScript verifier (`verifier-js/`) that passes the same vectors, and `phygital-key verify` for any other language.
-3. Gate (MCP server, Rust, on the official `rmcp` SDK) and approval page, shipped as one program (`phygital-key`).
-4. Attack test suite.
-5. A self-contained demo anyone can run in one command (`phygital-key demo`): a fake deploy, payment and message service that only acts with a valid approval.
+2. Verifier library in Rust (`phygital-key-verify`), an independent JavaScript verifier (`verifier-js/`) that passes the same vectors, and `phygital-key-mcp verify` for any other language.
+3. The gate engine and approval page (`phygital-key-gate`, Rust), shipped inside each product: Phygital Key MCP (`phygital-key-mcp`, an MCP server on the official `rmcp` SDK) and Phygital Key A2A (`phygital-key-a2a`, new).
+4. Attack test suite (in each product).
+5. A self-contained demo anyone can run in one command (`phygital-key-mcp demo`): a fake deploy, payment and message service that only acts with a valid approval.
 
 ## Sources
 

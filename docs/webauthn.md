@@ -1,6 +1,6 @@
 # WebAuthn and passkeys
 
-This page explains what WebAuthn and passkeys are, then exactly what the verifier checks in each signature, byte by byte. It is for implementers, reviewers and anyone who wants to know why a phishing page cannot collect a yes. The code is `crates/phygital-key-verify/src/webauthn.rs` (checks) and `verify.rs` (order); the browser side is `crates/phygital-key/assets/app.js`.
+This page explains what WebAuthn and passkeys are, then exactly what the verifier checks in each signature, byte by byte. It is for implementers, reviewers and anyone who wants to know why a phishing page cannot collect a yes. The code is `crates/phygital-key-verify/src/webauthn.rs` (checks) and `verify.rs` (order); the browser side is `crates/phygital-key-gate/assets/app.js` (the same in every product).
 
 ## On this page
 

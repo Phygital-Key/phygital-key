@@ -9,13 +9,6 @@ updates:
     groups:
       rust:
         patterns: ["*"]
-  - package-ecosystem: npm
-    directory: /tests/e2e
-    schedule:
-      interval: weekly
-    groups:
-      e2e:
-        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

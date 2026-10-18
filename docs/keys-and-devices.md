@@ -22,11 +22,11 @@ The private key never leaves your device (your phone, your laptop's secure chip,
 
 ## Your first key
 
-1. Make sure the gate is running with the data folder you will use: your AI app running `phygital-key mcp`, or `phygital-key serve`, `phygital-key demo`, or the [secure install](secure-install.md).
+1. Make sure the gate is running with the data folder you will use: your AI app running `phygital-key-mcp stdio`, or `phygital-key-mcp serve`, `phygital-key-mcp demo`, or the [secure install](secure-install.md).
 2. In your own terminal, ask for a link:
 
    ```bash
-   phygital-key enroll
+   phygital-key-mcp enroll
    ```
 
    ```text
@@ -34,10 +34,10 @@ The private key never leaves your device (your phone, your laptop's secure chip,
 
      http://localhost:7468/enroll#token=fB9BO3uHKMTSzuWdatRYwAX_UNwfqAag7FsAvC2_wVY
 
-   The gate must be running (phygital-key serve, or your AI app running phygital-key mcp).
+   The gate must be running (phygital-key-mcp serve, or your AI app running phygital-key-mcp stdio).
    ```
 
-   With the secure install, run `phygital-key-admin enroll` instead.
+   With the secure install, run `phygital-key-mcp-admin enroll` instead.
 3. Open the link. Type a name you will recognise later (for example `My laptop`; at most 64 characters) and press **Add key**.
 4. Your browser asks you to create a passkey: Touch ID, Windows Hello, your phone, a password manager or a security key.
 5. The page moves to **Confirm your key**, with the card title **Trust this key (your first key)** and **Carried out by** "This approval gate (your list of trusted keys)". Press **Approve with my key** and use the same key again, with your fingerprint, face or PIN.
@@ -51,7 +51,7 @@ How the link is protected:
 - The token is 32 random bytes in the link's `#fragment`. Browsers never send a fragment to a server, and the page removes it from the address bar at once.
 - The link works for 10 minutes. It is used up when you press **Add key**; you can retry the key prompt with the same page until the 10 minutes run out.
 - Only the newest link works: each `enroll` replaces the previous token.
-- The gate prints a link only in your terminal (`enroll`, and `demo` at start). In `mcp` mode and in `serve` logs it never does.
+- The gate prints a link only in your terminal (`enroll`, and `demo` at start). In `stdio` mode and in `serve` logs it never does.
 
 > [!IMPORTANT]
 > The gate cannot prove a key is real hardware (attestation is `none`, which is what phones and password managers give). Whoever opens a valid enrollment link first can add the first key. Open the link yourself, at once, and do not paste it anywhere an AI can read it.
@@ -60,7 +60,7 @@ How the link is protected:
 
 Add a second key early, so losing one device does not lock you out.
 
-1. Run `phygital-key enroll` (or `phygital-key-admin enroll`) again and open the new link.
+1. Run `phygital-key-mcp enroll` (or `phygital-key-mcp-admin enroll`) again and open the new link.
 2. Name the new key and press **Add key**. Create the passkey on the new device, or insert the new security key.
 3. The page moves to **Approve a new key?** with "Someone is adding a new key. Approve only if you are adding it yourself, right now."
 4. Approve with a key you **already trust**. The new key cannot approve itself: the page only lets keys already in your keyring sign.
@@ -93,10 +93,10 @@ Your **key fingerprint** is the SHA-256 of your first key's public key (its SPKI
 
 $$\text{fingerprint} = \mathrm{base64url}(\mathrm{SHA256}(\mathrm{SPKI\ DER}(\text{first public key})))$$
 
-It is shown on the home page under **Your key fingerprint**, and `phygital-key keys` prints it (with the whole keyring):
+It is shown on the home page under **Your key fingerprint**, and `phygital-key-mcp keys` prints it (with the whole keyring):
 
 ```bash
-phygital-key keys
+phygital-key-mcp keys
 ```
 
 ```text
@@ -121,7 +121,7 @@ Every change to your keys is itself an approval:
 Anyone with your fingerprint can replay that history and check that it produces exactly the keys listed, every field, and nothing else. A key slipped into the file without a signature, a relabelled key, an entry signed by an untrusted key, or a history signed on another gate is caught:
 
 ```bash
-phygital-key keys --check kZyphIeQPnodbJgeBkVfoywg4zpYwZuIQtI9w2gK2kE --file keyring.json --signed-on http://localhost:7468
+phygital-key-mcp keys --check kZyphIeQPnodbJgeBkVfoywg4zpYwZuIQtI9w2gK2kE --file keyring.json --signed-on http://localhost:7468
 ```
 
 ```text
@@ -136,7 +136,7 @@ keyring NOT ok: the history was signed on another approval page
 An old copy of a keyring (from before a key was removed) is still a valid history. So whoever checks your keyring more than once keeps the copy they accepted and takes a new one only if it extends it:
 
 ```bash
-phygital-key keys --check <fingerprint> --file new.json --signed-on https://approve.example.com --previous accepted.json
+phygital-key-mcp keys --check <fingerprint> --file new.json --signed-on https://approve.example.com --previous accepted.json
 ```
 
 The home page runs the same check on the gate's own keyring and shows "✓ Signed: every key change is approved by a key you already trust. Share this fingerprint so others can check your key list." or, if it fails, "✕ Check this: the key history does not check out. Do not share or trust this key list until it is fixed." The format is in [key history](key-history.md).
@@ -152,10 +152,10 @@ The home page runs the same check on the gate's own keyring and shows "✓ Signe
 
 1. Stop the gate.
 2. Move `keyring.json` out of the data folder (keep it as a record).
-3. Start the gate and run `phygital-key enroll`. Your new first key gives you a new fingerprint.
+3. Start the gate and run `phygital-key-mcp enroll`. Your new first key gives you a new fingerprint.
 4. Give the new fingerprint to every service, the same way you gave the old one.
 
-With the secure install, the keyring is in the gate's data folder (`/Library/Application Support/PhygitalKey` or `/var/lib/phygital-key`): move it with `sudo`, run the locked `install-service` again to restart the gate, then `phygital-key-admin enroll`.
+With the secure install, the keyring is in the gate's data folder (`/Library/Application Support/PhygitalKey/mcp` or `/var/lib/phygital-key-mcp` for Phygital Key MCP; `.../a2a` and `/var/lib/phygital-key-a2a` for A2A): move it with `sudo`, run the locked `install-service` again to restart the gate, then `phygital-key-mcp-admin enroll`.
 
 What someone holding your lost device can do depends on the key. A phone or laptop passkey asks for the device's unlock (fingerprint, face or PIN) before it signs `high`. A security key without a PIN signs `medium` requests with a touch. Approvals still need a waiting request on your gate, and each works once, for one service, for 60 seconds.
 

@@ -1,10 +1,24 @@
 # Getting started
 
-This page gets you from nothing to a first signed [approval](glossary.md). Pick the path that fits you: try the demo, protect your own AI app, or check approvals in a service you run.
+This page gets you from nothing to a first signed [approval](glossary.md). First pick the product that fits how your AI talks, then pick a path: try the demo, protect your own AI app, or check approvals in a service you run.
 
+- [Pick a product](#pick-a-product)
 - [Try the demo (about 2 minutes)](#try-the-demo)
 - [Use it with your AI app](#use-it-with-your-ai-app)
 - [Check approvals in a service](#check-approvals-in-a-service)
+
+## Pick a product
+
+Every product is the same gate (the approval page, your keys, standing approvals, receipts, the audit log, the secure install and signed updates). They differ only in how the AI asks.
+
+| Your AI | Product | Program |
+|---|---|---|
+| An AI app that speaks MCP: Claude Code, Claude Desktop and other MCP clients | [Phygital Key MCP](https://github.com/Phygital-Key/phygital-key-mcp) | `phygital-key-mcp` |
+| An agent that speaks A2A 1.0 (JSON-RPC, agent cards) | [Phygital Key A2A](https://github.com/Phygital-Key/phygital-key-a2a), new and still being built | `phygital-key-a2a` |
+
+If you only check approvals in a service, you need no product at all: go to [check approvals in a service](#check-approvals-in-a-service).
+
+The rest of this page uses Phygital Key MCP. Phygital Key A2A takes the same commands with its own program name, on port `7478`, with its agent endpoint at `/a2a` and no stdio mode ([names per product](reference.md#names-per-product)).
 
 ## Before you start
 
@@ -17,24 +31,26 @@ Install the program (pick one):
 
 | Where | Command |
 |---|---|
-| macOS, Linux (Homebrew) | `brew install phygital-key/tap/phygital-key` |
+| macOS, Linux (Homebrew) | `brew install phygital-key/tap/phygital-key-mcp` |
 | macOS, Linux (script) | `curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh \| sh` |
-| Windows (Scoop) | `scoop bucket add phygital-key https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key` |
-| Anywhere with Rust | `cargo install --locked --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key` |
-| Linux server (Docker) | `docker run -d --name phygital-key -p 127.0.0.1:7468:7468 -v phygital-key:/data ghcr.io/phygital-key/phygital-key:latest` ([run it in a container](own-server.md#run-it-in-a-container)) |
+| Windows (Scoop) | `scoop bucket add phygital-key-mcp https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key-mcp` |
+| Anywhere with Rust | `cargo install --locked --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key-mcp` |
+| Linux server (Docker) | `docker run -d --name phygital-key-mcp -p 127.0.0.1:7468:7468 -v phygital-key-mcp:/data ghcr.io/phygital-key/phygital-key-mcp:latest` ([run it in a container](own-server.md#run-it-in-a-container)) |
 | By hand | Download from [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases). Each release has a signed list of SHA-256 sums, `release.txt` ([how to check it](updates.md#check-a-download-yourself)). |
 
-The script downloads the latest release list (`release.txt`), checks that it is signed by a release key pinned in the script, downloads the archive for your machine, compares its SHA-256 with the signed list and writes one file, `~/.local/bin/phygital-key`. Nothing else is touched. It needs `curl`, `tar` and `openssl`. Later, `phygital-key update` installs newer signed releases ([updates](updates.md)).
+The script downloads the latest release list (`release.txt`), checks that it is signed by a release key pinned in the script, downloads the archive for your machine, compares its SHA-256 with the signed list and writes one file, `~/.local/bin/phygital-key-mcp`. Nothing else is touched. It needs `curl`, `tar` and `openssl`. Later, `phygital-key-mcp update` installs newer signed releases ([updates](updates.md)).
 
 Check that it works:
 
 ```bash
-phygital-key --version
+phygital-key-mcp --version
 ```
 
 ```text
-phygital-key 0.3.0
+phygital-key-mcp 0.4.0
 ```
+
+Coming from 0.3 (the program `phygital-key`)? See [from 0.3 to the products](updates.md#from-03-to-the-products).
 
 ## Try the demo
 
@@ -43,54 +59,54 @@ The demo runs the gate and a fake service on your computer. The fake service dep
 1. Start it:
 
    ```bash
-   phygital-key demo
+   phygital-key-mcp demo
    ```
 
    It prints something like this (your tokens differ):
 
    ```text
-   phygital-key: no key enrolled yet. Open this link to add your passkey (valid 10 minutes, works once):
+   phygital-key-mcp: no key enrolled yet. Open this link to add your passkey (valid 10 minutes, works once):
      http://localhost:7468/enroll#token=G7ZNXW4m...
-   phygital-key demo
+   phygital-key-mcp demo
      approval page   http://localhost:7468
      MCP endpoint    http://localhost:7468/mcp  (needs header  Authorization: Bearer o63AlJdL...)
-     Claude Code:    claude mcp add --transport http phygital-key http://localhost:7468/mcp --header "Authorization: Bearer o63AlJdL..."
+     Claude Code:    claude mcp add --transport http phygital-key-mcp http://localhost:7468/mcp --header "Authorization: Bearer o63AlJdL..."
      demo service    http://localhost:7469  (fake deploy, payment, send_message)
    Add the MCP endpoint to your AI app, then ask it to deploy `api` 2.4.1 to production through the demo service.
    ```
 
 2. **Add your key.** Open the enrollment link, type a name (for example `My laptop`) and press **Add key**. Your browser asks for Touch ID, Windows Hello, your phone or a security key. The page then shows **Confirm your key**: press **Approve with my key** once more. This first signature proves the key works and starts your [signed key history](keys-and-devices.md#the-signed-key-history).
 
-3. **Connect an AI app.** Paste the `Claude Code:` line the demo printed into a terminal, or put the endpoint and header into any other app ([connect your AI app](connect-your-ai.md) shows each shape).
+3. **Connect an AI app.** Paste the `Claude Code:` line the demo printed into a terminal, or put the endpoint and header into any other app ([connect your AI app](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md) shows each shape).
 
 4. **Ask for something.** In the AI app, ask:
 
    > Deploy api 2.4.1 to production through the demo service at http://localhost:7469.
 
-   The AI calls `request_approval` and gives you a link (some apps open it for you). The page shows `deploy`, `env production`, `service api`, `version 2.4.1`, who carries it out (`http://localhost:7469`) and the proof needed (fingerprint, face or PIN). Read it, then press **Approve with my key** or **Deny**. [Approving](approving.md) explains every part of that page.
+   The AI asks the gate for an approval (with MCP, the `request_approval` tool) and gives you a link (some apps open it for you). The page shows `deploy`, `env production`, `service api`, `version 2.4.1`, who carries it out (`http://localhost:7469`) and the proof needed (fingerprint, face or PIN). Read it, then press **Approve with my key** or **Deny**. [Approving](approving.md) explains every part of that page.
 
 5. **Watch the service check it.** If you approved, the AI sends the approval to the demo service, which checks it itself and answers `Deployed (demo: nothing real happened)`. Within the same minute, ask the AI to send the same approval again: the service answers `REPLAYED`. Ask it to deploy `2.4.2` with the approval for `2.4.1`: the service answers `REQUEST_MISMATCH`. After the minute, any reuse answers `EXPIRED`.
 
-Stop the demo with Ctrl-C. Your key stays in the data folder (`~/.phygital-key`), so the next `phygital-key demo` or `phygital-key mcp` already knows it.
+Stop the demo with Ctrl-C. Your key stays in the data folder (`~/.phygital-key-mcp`), so the next `phygital-key-mcp demo` or `phygital-key-mcp stdio` already knows it.
 
 > [!NOTE]
-> The demo prints the enrollment link because it runs in your own terminal. `phygital-key mcp`, which AI apps start, never prints one: its output goes to the AI app's logs, where the AI could read it.
+> The demo prints the enrollment link because it runs in your own terminal. `phygital-key-mcp stdio`, which AI apps start, never prints one: its output goes to the AI app's logs, where the AI could read it.
 
 ## Use it with your AI app
 
-There are two ways to run the gate for real use. Both give the AI the same six tools, and in both the AI can ask, wait, cancel and report, but never approve.
+There are two ways to run the gate for real use. In both, the AI can ask, wait, cancel and report, but never approve.
 
 | | Quick install | Secure install |
 |---|---|---|
-| Runs as | You | Its own system user (`_phygitalkey` on macOS, `phygitalkey` on Linux) |
+| Runs as | You | Its own system user (`_phygitalkeymcp` on macOS, `phygitalkey-mcp` on Linux) |
 | Can an AI acting as you change the gate's program, data or keys? | Yes, if it has shell access as you | No, not without your administrator password |
 | Systems | macOS, Linux, Windows | macOS, Linux |
-| Started by | Your AI app (`phygital-key mcp`) | The system at boot (launchd or systemd) |
+| Started by | Your AI app (`phygital-key-mcp stdio`) | The system at boot (launchd or systemd) |
 | AI app connects over | stdio (the app starts it) | HTTP, `http://localhost:7468/mcp` with an access token |
-| Updates | You run `phygital-key update`, `brew upgrade` or `scoop update` | By itself, daily, signed releases only (can be turned off) |
+| Updates | You run `phygital-key-mcp update`, `brew upgrade` or `scoop update` | By itself, daily, signed releases only (can be turned off) |
 | Good for | Trying it, low-stakes work | Anything that matters |
 
-On a Linux server you can also run the gate from the container image `ghcr.io/phygital-key/phygital-key`: it runs as `serve` inside it, keeps its data in a volume, and you add a key with `docker exec -it phygital-key phygital-key enroll`. It updates when you pull a new image. On your own computer it does not keep the gate out of the AI's reach, because an agent acting as you can run `docker` too, so use the secure install there. Setup, the TLS proxy and updates: [run it in a container](own-server.md#run-it-in-a-container).
+On a Linux server you can also run the gate from the container image `ghcr.io/phygital-key/phygital-key-mcp`: it runs as `serve` inside it, keeps its data in a volume, and you add a key with `docker exec -it phygital-key-mcp phygital-key-mcp enroll`. It updates when you pull a new image. On your own computer it does not keep the gate out of the AI's reach, because an agent acting as you can run `docker` too, so use the secure install there. Setup, the TLS proxy and updates: [run it in a container](own-server.md#run-it-in-a-container).
 
 ### Quick install
 
@@ -98,19 +114,19 @@ On a Linux server you can also run the gate from the container image `ghcr.io/ph
 2. Add the gate to your AI app. For Claude Code:
 
    ```bash
-   claude mcp add phygital-key -- phygital-key mcp
+   claude mcp add phygital-key-mcp -- phygital-key-mcp stdio
    ```
 
-   Other apps take the same command in their MCP settings: command `phygital-key`, argument `mcp`. See [connect your AI app](connect-your-ai.md).
+   Other apps take the same command in their MCP settings: command `phygital-key-mcp`, argument `stdio`. See [connect your AI app](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md).
 3. Start the AI app once, so it starts the gate. The gate's approval page then runs at `http://localhost:7468` for as long as the app keeps it running.
 4. In your own terminal, add your key:
 
    ```bash
-   phygital-key enroll
+   phygital-key-mcp enroll
    ```
 
    Open the link it prints (it works once, for 10 minutes), press **Add key**, then confirm with the same key.
-5. Check it works: ask the AI to call `request_approval` for a harmless `send_message` ([the exact test](connect-your-ai.md#check-that-it-works)).
+5. Check it works: ask the AI to call `request_approval` for a harmless `send_message` ([the exact test](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md#check-that-it-works)).
 
 > [!WARNING]
 > With the quick install, the gate's files live in your own home folder. An AI that can run shell commands as you could edit them. Use the secure install for anything real.
@@ -120,18 +136,18 @@ On a Linux server you can also run the gate from the container image `ghcr.io/ph
 From a fresh terminal that no AI controls (macOS or Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
+curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.4.0/install-service.sh | sudo bash
 ```
 
-It downloads the official v0.3.0 release, checks that its file list is signed by a pinned release key and that the archive matches the signed SHA-256, installs it where only an administrator can change it, and starts it as its own user. From then on it updates itself once a day to newer signed releases ([updates](updates.md#automatic-updates-secure-install); add `-s -- --no-auto-update` after `sudo bash` to turn that off). Then:
+It downloads the official v0.4.0 release, checks that its file list is signed by a pinned release key and that the archive matches the signed SHA-256, installs it where only an administrator can change it, and starts it as its own user. From then on it updates itself once a day to newer signed releases ([updates](updates.md#automatic-updates-secure-install); add `-s -- --no-auto-update` after `sudo bash` to turn that off). Then:
 
 ```bash
-phygital-key-admin enroll      # add your key (prints a one-time link)
-phygital-key-admin token       # the line to paste into your AI app
-phygital-key-admin status      # check that only the gate listens on its port
+phygital-key-mcp-admin enroll      # add your key (prints a one-time link)
+phygital-key-mcp-admin token       # the line to paste into your AI app
+phygital-key-mcp-admin status      # check that only the gate listens on its port
 ```
 
-Each command asks for your administrator password. Paste the line from `token` into your AI app ([HTTP setup](connect-your-ai.md#http-the-app-connects-to-a-url)). Everything the install creates, checks and refuses is on [secure install](secure-install.md).
+Each command asks for your administrator password. Paste the line from `token` into your AI app ([HTTP setup](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md#http-the-app-connects-to-a-url)). Everything the install creates, checks and refuses is on [secure install](secure-install.md).
 
 ### Habits that keep you safe
 
@@ -142,12 +158,12 @@ Each command asks for your administrator password. Paste the line from `token` i
 
 ## Check approvals in a service
 
-If you run the service that acts (a deploy system, a payment API, a mail sender), you are the **verifier**. Your service receives the action plus an `approval` string, usually in a `Phygital-Approval` header. Before acting, it checks the approval itself, offline: right request to the last character, meant for your service, in time, signed by a trusted key at the level you require, never used before.
+If you run the service that acts (a deploy system, a payment API, a mail sender), you are the **verifier**. Your service receives the action plus an `approval` string, usually in a `Phygital-Approval` header. Before acting, it checks the approval itself, offline: right request to the last character, meant for your service, in time, signed by a trusted key at the level you require, never used before. The check is the same whichever product the person uses.
 
-The fastest check from any language is the command line:
+The fastest check from any language is the command line of any product:
 
 ```bash
-phygital-key verify --approval "$APPROVAL" \
+phygital-key-mcp verify --approval "$APPROVAL" \
   --request '{"type":"deploy","params":{"service":"api","env":"production","version":"2.4.1"}}' \
   --aud https://deploy.example.com --level high
 ```
@@ -158,7 +174,7 @@ It prints `{"approved_by":"My laptop","exp":...,"id":...,"level":"high","ok":tru
 
 ## Next
 
-- [Connect your AI app](connect-your-ai.md): exact settings for stdio and HTTP
+- [Connect your AI app](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md) (Phygital Key MCP): exact settings for stdio and HTTP
 - [Approving](approving.md): read the approval page line by line
 - [Secure install](secure-install.md): put the gate out of the AI's reach
 - [Troubleshooting](troubleshooting.md): exact messages and what to do

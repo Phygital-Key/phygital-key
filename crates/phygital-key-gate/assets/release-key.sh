@@ -10,20 +10,29 @@
 #      release, Required reviewers.)
 #   3. Stores the private key as the environment secret RELEASE_SIGNING_KEY. Only a
 #      release run for a v* tag can read it. Then it deletes the local copy.
-#   4. Pins the public key in both installers of this repo (commit that change).
+#   4. Pins the public key in release-keys.pem and the installers (commit that change).
 # From then on, only releases signed by that key install or update.
 #
 # Protect your GitHub account well (two-factor sign-in, ideally a passkey): whoever
 # controls it can push a release tag.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-REPO=Phygital-Key/phygital-key-mcp
+# Generated for one product from the template in Phygital-Key/phygital-key.
+# BEGIN PRODUCT
+P_NAME="Phygital Key"
+P_BIN=phygital-key
+P_ID=dev
+P_REPO=Phygital-Key/phygital-key
+P_PORT=7468
+P_VERSION=v0.0.0
+# END PRODUCT
+REPO="$P_REPO"
 [ -t 0 ] && [ -t 1 ] || { echo "Run this yourself, in a terminal."; exit 1; }
 command -v openssl >/dev/null || { echo "needs openssl"; exit 1; }
 command -v gh >/dev/null || { echo "needs the GitHub CLI (gh), signed in as the repository owner"; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "sign in first: gh auth login"; exit 1; }
-if grep -q -- "-----BEGIN PUBLIC KEY-----" <(sed -n '/^# BEGIN RELEASE KEYS/,/^# END RELEASE KEYS/p' crates/phygital-key/assets/install-service.sh); then
-  echo "A release key is already pinned. Not making another one."; exit 1
+if grep -q -- "-----BEGIN PUBLIC KEY-----" release-keys.pem 2>/dev/null; then
+  echo "A release key is already pinned in release-keys.pem. Not making another one."; exit 1
 fi
 
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
@@ -42,22 +51,13 @@ gh api -X POST "repos/$REPO/environments/release/deployment-branch-policies" \
 echo "Storing the private key as the secret RELEASE_SIGNING_KEY of that environment"
 gh secret set RELEASE_SIGNING_KEY --env release --repo "$REPO" < "$T/key.pem"
 
-block=$(cat "$T/pub.pem")
-for f in crates/phygital-key/assets/install-service.sh install.sh; do
-  BLOCK="$block" python3 - "$f" <<'PY'
-import os, re, sys
-p = sys.argv[1]; s = open(p).read()
-new = "# BEGIN RELEASE KEYS\nRELEASE_KEYS='\n" + os.environ["BLOCK"].strip() + "\n'\n# END RELEASE KEYS"
-s2, n = re.subn(r"# BEGIN RELEASE KEYS\n.*?# END RELEASE KEYS", lambda m: new, s, flags=re.S)
-assert n == 1, p
-open(p, "w").write(s2)
-PY
-done
+cp "$T/pub.pem" release-keys.pem
+echo "Pinned the public key in release-keys.pem; writing the installers again"
+cargo run -q --release -- product-files --out .
 cat <<DONE
 Done.
   - The private key is only in GitHub now (environment "release", secret RELEASE_SIGNING_KEY).
     The local copy is deleted.
-  - The public key is pinned in crates/phygital-key/assets/install-service.sh and install.sh.
-    Commit them.
+  - The public key is in release-keys.pem, install-service.sh and install.sh. Commit them.
   - Each release: push a tag vX.Y.Z. CI builds, signs and publishes it.
 DONE

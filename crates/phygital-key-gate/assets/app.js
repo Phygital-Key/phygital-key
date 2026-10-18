@@ -314,7 +314,7 @@ async function enrollPage() {
   const token = new URLSearchParams(location.hash.slice(1)).get("token") || "";
   history.replaceState(null, "", location.pathname); // keep the token out of history
   if (!token) {
-    note("This page needs the link printed by `phygital-key enroll`.", "bad");
+    note("This page needs the link printed by the gate's `enroll` command.", "bad");
     $("enroll").disabled = true;
     return;
   }
@@ -365,6 +365,7 @@ async function enrollPage() {
 async function indexPage() {
   try {
     const s = await api("/api/status");
+    if (typeof s.program === "string") document.querySelectorAll(".prog").forEach((e) => { e.textContent = s.program; });
     const list = $("keys");
     list.textContent = "";
     if (s.keys.length === 0) {

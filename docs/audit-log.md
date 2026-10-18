@@ -1,6 +1,6 @@
 # Audit log
 
-The gate writes every request, decision, key change and receipt to an append-only log in which each line carries the hash of the line before. This page gives the line format, every event, the chain math, what `phygital-key audit-check` proves and what it cannot. It is for operators and reviewers. The code is `crates/phygital-key/src/audit.rs`; the events are written in `state.rs`.
+The gate writes every request, decision, key change and receipt to an append-only log in which each line carries the hash of the line before. This page gives the line format, every event, the chain math, what `phygital-key-mcp audit-check` proves and what it cannot. It is for operators and reviewers. The code is `crates/phygital-key-gate/src/audit.rs` in the base, the same for every product; the events are written in `state.rs`. Commands are shown with `phygital-key-mcp`; `phygital-key-a2a` takes the same ones.
 
 ## On this page
 
@@ -17,9 +17,9 @@ The gate writes every request, decision, key change and receipt to an append-onl
 
 | Install | File |
 |---|---|
-| Quick try (`phygital-key mcp`, `serve`, `demo`) | `~/.phygital-key/audit.log`, or `<home>/audit.log` with `--home` or `PHYGITAL_KEY_HOME` |
-| Secure install, macOS | `/Library/Application Support/PhygitalKey/audit.log` (folder readable only by the gate user) |
-| Secure install, Linux | `/var/lib/phygital-key/audit.log` (folder readable only by the gate user) |
+| Quick try (`phygital-key-mcp stdio`, `serve`, `demo`) | `~/.phygital-key-mcp/audit.log`, or `<home>/audit.log` with `--home` or `PHYGITAL_KEY_MCP_HOME` |
+| Secure install, macOS | `/Library/Application Support/PhygitalKey/mcp/audit.log` (`.../a2a/` for A2A; folder readable only by the gate user) |
+| Secure install, Linux | `/var/lib/phygital-key-mcp/audit.log` (`/var/lib/phygital-key-a2a/` for A2A; folder readable only by the gate user) |
 
 The file is created with mode `0600`. Each line is appended and flushed to disk (`sync_data`) before the call that caused it returns.
 
@@ -82,13 +82,13 @@ prev="genesis"
 for n,l in enumerate(open(sys.argv[1]),1):
     e=json.loads(l); h=e.pop("hash")
     c=json.dumps(e,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()
-    print(n, base64.urlsafe_b64encode(hashlib.sha256(c).digest()).rstrip(b"=").decode()==h and e["prev"]==prev); prev=h' ~/.phygital-key/audit.log
+    print(n, base64.urlsafe_b64encode(hashlib.sha256(c).digest()).rstrip(b"=").decode()==h and e["prev"]==prev); prev=h' ~/.phygital-key-mcp/audit.log
 ```
 
 ## What audit-check verifies
 
 ```bash
-phygital-key audit-check
+phygital-key-mcp audit-check
 ```
 
 ```text
@@ -108,7 +108,7 @@ For every line, in order, `audit-check` (`verify_file`):
 The first failure stops with the line number and the reason, and exit code 1. After one letter of a key name on line 3 was changed:
 
 ```text
-phygital-key: audit log line 3: hash does not match (line changed)
+phygital-key-mcp: audit log line 3: hash does not match (line changed)
 ```
 
 Other reasons: `not a JSON object`, `no hash`, `chain broken (prev does not match)`, `sequence broken`.
@@ -118,10 +118,10 @@ When there is no `audit.log` at all, `audit-check` looks for `keyring.json` next
 | Data folder | Output | Exit code |
 |---|---|---|
 | Neither file, or a `keyring.json` with no keys | `no audit log yet: nothing has happened on this gate` | 0 |
-| `keyring.json` with a key, but no `audit.log` | `no audit log at <path>, but a key is enrolled: the log was deleted or moved` (printed after `phygital-key: `) | 1 |
-| `keyring.json` that cannot be read or is damaged, and no `audit.log` | `<path>: <error>` or `<path>: damaged keyring (<reason>)` (printed after `phygital-key: `) | 1 |
+| `keyring.json` with a key, but no `audit.log` | `no audit log at <path>, but a key is enrolled: the log was deleted or moved` (printed after `phygital-key-mcp: `) | 1 |
+| `keyring.json` that cannot be read or is damaged, and no `audit.log` | `<path>: <error>` or `<path>: damaged keyring (<reason>)` (printed after `phygital-key-mcp: `) | 1 |
 
-The gate runs the chain check every time it starts: a log whose chain fails stops the gate from starting, with the same message and exit code 1. The checks for a missing log in the table above run only in `audit-check`; a gate started without `audit.log` begins a new one. With the secure install, run it as `phygital-key-admin audit-check`.
+The gate runs the chain check every time it starts: a log whose chain fails stops the gate from starting, with the same message and exit code 1. The checks for a missing log in the table above run only in `audit-check`; a gate started without `audit.log` begins a new one. With the secure install, run it as `phygital-key-mcp-admin audit-check`.
 
 ## What it detects, and what it does not
 
@@ -144,7 +144,7 @@ The unit test `chain_detects_changes` checks both sides: an edited line is caugh
 To detect a rewrite or a cut-off end, copy the last hash out of the gate's reach from time to time: into a ticket, a backup, a chat message to yourself, a commit in another repository. Later, find that hash in the log:
 
 ```bash
-grep -c '"hash":"JtqlskGHFa5GshgtkRzFPKUK62TpXvrhM2WDiphRzHs"' ~/.phygital-key/audit.log
+grep -c '"hash":"JtqlskGHFa5GshgtkRzFPKUK62TpXvrhM2WDiphRzHs"' ~/.phygital-key-mcp/audit.log
 ```
 
 If `audit-check` passes and the anchored hash is still there, every line up to it is unchanged. If it is missing, the log was rewritten or cut.

@@ -2,20 +2,21 @@
 resolver = "3"
 members = [
     "crates/phygital-key-verify",
-    "crates/phygital-key",
+    "crates/phygital-key-gate",
     "crates/phygital-key-testgen",
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.89"
 license = "Apache-2.0"
-repository = "https://github.com/Phygital-Key/phygital-key-mcp"
+repository = "https://github.com/Phygital-Key/phygital-key"
 authors = ["Phygital-Key and the Phygital Key contributors"]
 
 [workspace.dependencies]
-phygital-key-verify = { path = "crates/phygital-key-verify", version = "0.3.0" }
+phygital-key-verify = { path = "crates/phygital-key-verify", version = "0.4.0" }
+phygital-key-gate = { path = "crates/phygital-key-gate", version = "0.4.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_jcs = "0.2"

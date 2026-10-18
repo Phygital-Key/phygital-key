@@ -1,6 +1,6 @@
 # Use cases
 
-Ten concrete situations where a person's signed yes changes what can go wrong, each with the exact request, the audience, the level and what the service checks. It is for people deciding whether Phygital Key fits their job, and for developers planning a [verifier](glossary.md). Every scenario says what is built today (version 0.3.0) and what it would still need.
+Ten concrete situations where a person's signed yes changes what can go wrong, each with the exact request, the audience, the level and what the service checks. It is for people deciding whether Phygital Key fits their job, and for developers planning a [verifier](glossary.md). Every scenario says what is built today (version 0.3.0) and what it would still need. The agent's side is shown with the tool names of Phygital Key MCP (`request_approval`, `get_approval` and the rest); other products reach the same gate steps through their own protocol.
 
 The examples use made-up names on reserved domains (`example.com`, `203.0.113.0/24`). None of them describes a real customer.
 
@@ -52,7 +52,7 @@ In every scenario the service runs the same checks, in this order, and stops at 
 ```mermaid
 sequenceDiagram
     participant A as AI coding agent
-    participant G as Gate (phygital-key)
+    participant G as Gate (phygital-key-mcp)
     participant P as You + passkey
     participant S as Deploy service
     A->>G: request_approval(deploy api 2.4.1, aud, high)
@@ -182,7 +182,7 @@ For regular messages to one person, a standing approval with a fixed `to` and a 
 
 **What you see.** Every field, so `from: 0.0.0.0/0` stands out as plainly as `198.51.100.0/24`.
 
-**What the service checks.** A wrapper you run (a few lines with the [Rust](verifier-rust.md) or [JavaScript](verifier-js.md) checker, or a call to `phygital-key verify`) holds the provider's API key, checks the approval, then makes the call. The agent never holds the provider's key.
+**What the service checks.** A wrapper you run (a few lines with the [Rust](verifier-rust.md) or [JavaScript](verifier-js.md) checker, or a call to `phygital-key-mcp verify`) holds the provider's API key, checks the approval, then makes the call. The agent never holds the provider's key.
 
 **Without it.** The agent holds the provider's API key and can make any change the key allows.
 
@@ -200,11 +200,11 @@ For regular messages to one person, a standing approval with a fixed `to` and a 
 
 **What you see.** The repository, the full commit SHA, the environment and the version.
 
-**What the service checks.** The CI job is the verifier. It builds the request from its own inputs, checks the keyring's signed history against the pinned fingerprint, then runs `phygital-key verify` with `--level high`. A non-zero exit stops the job before the publish step. The runnable workflow is in [`examples/ci-approval/`](../examples/ci-approval/).
+**What the service checks.** The CI job is the verifier. It builds the request from its own inputs, checks the keyring's signed history against the pinned fingerprint, then runs `phygital-key-mcp verify` with `--level high`. A non-zero exit stops the job before the publish step. The runnable workflow is in [`examples/ci-approval/`](../examples/ci-approval/).
 
 **Without it.** Anyone who can start the workflow can publish any commit.
 
-Today the approval reaches the job as an input: the person (or their agent) gets it from the gate, then starts the workflow. A job that waits by itself would call `request_approval` and `get_approval` on a gate it can reach (`phygital-key serve` behind HTTPS, with the MCP token as a CI secret). The MCP tools allow that now, but no ready-made CI step exists. A fresh CI runner also starts with an empty used-approvals file, so the README explains how to stop a replay across runs.
+Today the approval reaches the job as an input: the person (or their agent) gets it from the gate, then starts the workflow. A job that waits by itself would call `request_approval` and `get_approval` on a gate it can reach (`phygital-key-mcp serve` behind HTTPS, with the access token as a CI secret). The MCP tools allow that now, but no ready-made CI step exists. A fresh CI runner also starts with an empty used-approvals file, so the README explains how to stop a replay across runs.
 
 ## 7. Company to company: a supplier's AI asks a buyer to approve an order
 
@@ -216,12 +216,12 @@ Today the approval reaches the job as an input: the person (or their agent) gets
 
 | Audience | Level | Kind | Status |
 |---|---|---|---|
-| `https://orders.supplier.example` | `high` | One-time | Built: the format, the checker and key sharing. Needs: an adapter other than MCP, so an outside party can send a request without an MCP token |
+| `https://orders.supplier.example` | `high` | One-time | Built: the format, the checker and key sharing. Needs: an adapter for outside parties, so they can send a request without the gate's access token |
 
 **How the keys travel.** The buyer's gate publishes its keyring with the signed history at `<gate origin>/.well-known/phygital-key.json`. The supplier learns the buyer's first-key [fingerprint](glossary.md) once, outside the web (on a call, in the contract). The supplier's system fetches the keyring, checks it, and keeps the copy it accepted. Each later fetch must extend that copy, so an old copy or a key the buyer removed cannot come back:
 
 ```bash
-phygital-key keys --check <fingerprint> --file new.json --signed-on https://approve.buyer.example --previous accepted.json
+phygital-key-mcp keys --check <fingerprint> --file new.json --signed-on https://approve.buyer.example --previous accepted.json
 ```
 
 ```mermaid
@@ -239,7 +239,7 @@ flowchart LR
 
 **Without it.** The supplier has an email or a portal click from someone at the buyer. Neither proves which person agreed to which lines.
 
-Today the gate takes requests only through MCP: the supplier's agent would need the buyer's MCP token, or the buyer's own agent would relay the request. An HTTP or email adapter is on the [roadmap](roadmap.md), not built.
+Today the gate takes requests only through a product's agent endpoint (MCP, or A2A with the new Phygital Key A2A), with the access token: the supplier's agent would need the buyer's token, or the buyer's own agent would relay the request. An HTTP or email adapter is on the [roadmap](roadmap.md), not built.
 
 ## 8. Person to person: a written agreement approved by both sides
 
@@ -257,7 +257,7 @@ Both approve the same request, one after the other, each with their own gate and
 
 The `sha256` is the hash of the agreed PDF, so the request stays small and the document itself is not in the approval. Each side checks the other's approval with the other's keyring.
 
-**Check it at once.** An approval lives 60 seconds by default (300 at most), and `verify` refuses it after that (`EXPIRED`). The other side should check it right away and keep it. To check a kept approval again later, the Rust library's `check` function (JavaScript: `checkKind`, with its last argument `standing` set to `false`) runs every check except the replay check and takes `now` as a parameter: pass the approval's own `iat` to check it as of the moment it was signed. That is how key histories are checked too. The `phygital-key verify` command always uses the current time.
+**Check it at once.** An approval lives 60 seconds by default (300 at most), and `verify` refuses it after that (`EXPIRED`). The other side should check it right away and keep it. To check a kept approval again later, the Rust library's `check` function (JavaScript: `checkKind`, with its last argument `standing` set to `false`) runs every check except the replay check and takes `now` as a parameter: pass the approval's own `iat` to check it as of the moment it was signed. That is how key histories are checked too. The `phygital-key-mcp verify` command always uses the current time.
 
 **Not built: several signatures in one approval.** The format already has a `signatures` list, but version 0.3.0 requires exactly one signature. "2 of 3 approvers" needs no format change, and it is listed under [maybe later](roadmap.md).
 
@@ -279,7 +279,7 @@ The `sha256` is the hash of the agreed PDF, so the request stays small and the d
 
 **What the device checks.** Its own audience (`device:door-lab-2`), the exact request, `high`, a trusted key, the signature, and first use. Its clock must be right: an approval issued more than 30 seconds in the future, or past its end, is `EXPIRED`.
 
-**Still needed.** The request has to reach the person's gate and the approval has to reach the device. Today that means the device (or a small helper next to it) is an MCP client of a gate it can reach on the local network. A QR code shown on the device, scanned by the person's phone, is an adapter that is not built.
+**Still needed.** The request has to reach the person's gate and the approval has to reach the device. Today that means the device (or a small helper next to it) is an MCP or A2A client of a gate it can reach on the local network. A QR code shown on the device, scanned by the person's phone, is an adapter that is not built.
 
 **Without it.** A shared PIN code or a card that anyone holding it can use.
 
@@ -293,9 +293,9 @@ The `sha256` is the hash of the agreed PDF, so the request stays small and the d
 
 | Audience | Level | Kind | Status |
 |---|---|---|---|
-| `admin:nas` | `high` | One-time | Built: the gate with the [secure install](secure-install.md), and `phygital-key verify`. Needs: the wrapper script and the rule that lets the agent run it |
+| `admin:nas` | `high` | One-time | Built: the gate with the [secure install](secure-install.md), and `phygital-key-mcp verify`. Needs: the wrapper script and the rule that lets the agent run it |
 
-**How it works.** The gate runs on the server with the secure install, as its own system user: the agent, even acting as you, cannot change the gate's program, read its data or write its keys. A small root-owned wrapper script runs each admin action only after `phygital-key verify` exits with 0 for the exact request it is about to run. It reads a root-owned copy of the keyring (from `phygital-key-admin keys`). The agent may run that one wrapper with raised rights (for example through one `sudoers` line for that script), never `sudo` in general, and cannot edit it.
+**How it works.** The gate runs on the server with the secure install, as its own system user: the agent, even acting as you, cannot change the gate's program, read its data or write its keys. A small root-owned wrapper script runs each admin action only after `phygital-key-mcp verify` exits with 0 for the exact request it is about to run. It reads a root-owned copy of the keyring (from `phygital-key-mcp-admin keys`). The agent may run that one wrapper with raised rights (for example through one `sudoers` line for that script), never `sudo` in general, and cannot edit it.
 
 **What the wrapper checks.** Audience `admin:nas`, the exact action, `high`, and first use (the command line remembers used approvals in `seen-ids.jsonl`).
 
@@ -313,15 +313,15 @@ The `sha256` is the hash of the agreed PDF, so the request stays small and the d
 | 3. Payments | One-time and standing approvals, revocations, receipts | Payment network fields (AP2 export is not built, [decision 28](decisions.md)) |
 | 4. Email and messages | Everything | Nothing |
 | 5. DNS and firewall | Checker and CLI | A wrapper in front of the provider's API |
-| 6. CI release | Workflow example with `phygital-key verify` | A ready-made step that waits for approval |
-| 7. Company to company | Format, checker, published keyring with signed history | An adapter other than MCP |
+| 6. CI release | Workflow example with `phygital-key-mcp verify` | A ready-made step that waits for approval |
+| 7. Company to company | Format, checker, published keyring with signed history | An adapter for outside parties |
 | 8. Person to person | Two one-time approvals | Several signatures in one approval (2 of 3) |
 | 9. Door or device | Offline checker with a keyring file | A request and approval path to the device (QR adapter) |
-| 10. Home server | Secure install, `phygital-key verify` | The wrapper script and its `sudoers` rule |
+| 10. Home server | Secure install, `phygital-key-mcp verify` | The wrapper script and its `sudoers` rule |
 
 ## Next
 
-- [Things to ask your AI](examples.md)
+- [Things to ask your AI](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/examples.md) (Phygital Key MCP)
 - [Check approvals in your service](integrate.md)
 - [Runnable examples](../examples/README.md)
 - [Roadmap](roadmap.md)

@@ -1,6 +1,6 @@
 # Testing
 
-This page lists every layer of tests in Phygital Key, with real counts and the command to run each one. It is for contributors, reviewers and anyone who wants to check a claim in the [threat model](threat-model.md) for themselves. Counts are for version 0.3.0, taken from the files in this repository.
+This page lists every layer of tests in the Phygital Key base (this repository), with real counts and the command to run each one, and points to the tests each product runs on top. It is for contributors, reviewers and anyone who wants to check a claim in the [threat model](threat-model.md) for themselves. Counts are for version 0.4.0, taken from the files in this repository.
 
 **On this page**
 
@@ -10,12 +10,11 @@ This page lists every layer of tests in Phygital Key, with real counts and the c
 - [Property tests](#property-tests)
 - [Fuzzing](#fuzzing)
 - [Mutation testing](#mutation-testing)
-- [End-to-end and red team](#end-to-end-and-red-team)
-- [Secure install test](#secure-install-test)
-- [Container image test](#container-image-test)
 - [JavaScript checker tests](#javascript-checker-tests)
+- [Examples](#examples)
 - [Supply chain](#supply-chain)
-- [CI](#ci)
+- [Base CI](#base-ci)
+- [Tests in each product](#tests-in-each-product)
 - [The owner's hand test](#the-owners-hand-test)
 
 ## At a glance
@@ -23,15 +22,15 @@ This page lists every layer of tests in Phygital Key, with real counts and the c
 | Layer | Count | Where | In CI |
 |---|---|---|---|
 | Shared test vectors | 123 (55 approvals, 25 key histories, 43 standing approvals) | `test-vectors/` | Yes, in Rust and in JavaScript |
-| Rust `#[test]` functions | 49 in 10 files (43 plain, 6 property) | `crates/` | Yes, Linux, macOS, Windows |
+| Rust `#[test]` functions | 49 in 11 files (43 plain, 6 property) | `crates/` | Yes, Linux, macOS, Windows |
 | Property tests | 6 functions × 2000 cases = 12,000 random cases per run | `crates/phygital-key-verify/tests/props.rs` | Yes |
 | Fuzz targets | 4, 60 s each | `fuzz/fuzz_targets/` | Yes, Linux |
 | Mutation testing | cargo-mutants on the verifier | by hand | No |
-| End-to-end and red team | 108 checks | `tests/e2e/run.mjs` | Yes, Linux |
-| Secure install | 30 checks | `tests/secure-install.sh` | Yes, macOS and Linux |
-| Container image | 5 checks | `container` job in `.github/workflows/ci.yml` | Yes, Linux (amd64) |
 | JavaScript checker | 9 tests (3 of them run every vector) | `verifier-js/test/` | Yes, Linux |
+| Examples | build and syntax of 3 examples | `examples/` | Yes, Linux |
 | Supply chain | cargo-deny: advisories, licences, bans, sources | `deny.toml` | Yes |
+| Static analysis | CodeQL on Rust, JavaScript and the workflows | `.github/workflows/codeql.yml` | Yes |
+| End to end, secure install, container | 108, 30 and 5 checks in Phygital Key MCP | in each product's repository | Yes, there ([below](#tests-in-each-product)) |
 
 ## Shared test vectors
 
@@ -66,18 +65,18 @@ Counted with `grep -c '#\[test\]'` in each file:
 | `crates/phygital-key-verify/src/canonical.rs` | 7 | Key order (RFC 8785 UTF-16 order), string escapes, floats refused, non-NFC refused, NFC singletons refused rather than folded, composition exclusions |
 | `crates/phygital-key-verify/src/strict.rs` | 3 | Duplicate keys and junk refused, deep nesting refused, brackets inside strings not counted |
 | `crates/phygital-key-verify/src/receipt.rs` | 1 | Receipt round trip and refusals |
-| `crates/phygital-key/src/audit.rs` | 1 | The hash chain detects changes |
-| `crates/phygital-key/src/seen.rs` | 1 | Used ids remembered until expiry; a damaged file fails closed |
-| `crates/phygital-key/src/util.rs` | 1 | Dates |
-| `crates/phygital-key/src/update.rs` | 7 | Signed release lists: a signed list is accepted and parsed; a changed list, a wrong key, no key or a junk signature is refused; the strict line format (final LF, no CRLF, lowercase hex, two spaces, no duplicate or foreign file names, no paths); versions compare by number; keys are read from PEM blocks; both installers pin the same key block; at least one release key is pinned |
+| `crates/phygital-key-gate/src/audit.rs` | 1 | The hash chain detects changes |
+| `crates/phygital-key-gate/src/seen.rs` | 1 | Used ids remembered until expiry; a damaged file fails closed |
+| `crates/phygital-key-gate/src/util.rs` | 1 | Dates |
+| `crates/phygital-key-gate/src/update.rs` | 5 | Signed release lists: a signed list is accepted and parsed; a changed list, a wrong key, no key or a junk signature is refused; the strict line format (final LF, no CRLF, lowercase hex, two spaces, no duplicate or foreign file names, no paths); versions compare by number; keys are read from PEM blocks |
+| `crates/phygital-key-gate/src/product.rs` | 2 | The installers get the product block and its release keys, filled once; environment names are made from the program name |
 | **Total** | **49** | |
 
 ```bash
 cargo test --workspace
 ```
 
-> [!NOTE]
-> `installer_pins_at_least_one_release_key` fails until the repository owner has made the release key with `scripts/release-key.sh` and pinned it in the installers. No key is pinned in this repository yet, so this one test fails on a fresh checkout. It stops a release from being built without a pinned key.
+The base pins no release key: each product pins its own in `release-keys.pem`. A product with no pinned key refuses every install and update ([pinned release keys](architecture.md#pinned-release-keys)); no test in the base fails for that.
 
 ## Property tests
 
@@ -123,241 +122,6 @@ cargo mutants --package phygital-key-verify
 
 It is not part of CI.
 
-## End-to-end and red team
-
-`tests/e2e/run.mjs` runs real pieces only: the release binary, a real Chromium with a virtual passkey (Chrome DevTools WebAuthn), the official MCP TypeScript SDK as the client (`@modelcontextprotocol/sdk` 1.32.1, `playwright` 1.64.1), and the demo service, which checks approvals itself. A passing run prints 108 checks. The file has 106 named `check(` calls, plus one helper check that runs twice (`page shows "production"` and `page shows "evil.example"`); a last `no unexpected error` check runs only if the script crashes. The last local run (2026-10-17, against the current code): 108 passed, 0 failed.
-
-```bash
-cargo build --release -p phygital-key
-cd tests/e2e && npm ci && npx playwright install chromium
-PKA_BIN=../../target/release/phygital-key node run.mjs
-```
-
-It uses ports 17468 (gate), 17469 (demo service), 17478 (stdio gate, also used for the flood test) and 17488 (stdio log test).
-
-| Theme | Checks |
-|---|---|
-| Before any key | 6 |
-| Enrolling the first key | 6 |
-| Happy path and receipts | 15 |
-| Red team (agent attacks) | 12 |
-| Deny and cancel | 4 |
-| Standing approvals and revocation | 26 |
-| Bad input from the agent | 2 |
-| Fixes from the security reviews | 7 |
-| Web hardening | 7 |
-| Adding and removing keys, key history | 13 |
-| Command-line verifier and audit log | 4 |
-| stdio mode | 4 |
-| Flood limit | 2 |
-| **Total** | **108** |
-
-<details><summary>Every check, by theme</summary>
-
-**Before any key**
-
-- MCP endpoint refuses a client without the access token
-- MCP endpoint refuses a wrong access token
-- MCP server names itself phygital-key with its version
-- MCP lists exactly 6 tools, none can approve
-- no key enrolled: request refused
-- enrollment without the CLI token is refused
-
-**Enrolling the first key**
-
-- token is removed from the address bar
-- first key is not trusted until it signs itself
-- first-key page says confirm
-- first key enrolled after signing itself
-- root fingerprint shown
-- enrollment link works only once
-
-**Happy path and receipts**
-
-- request_approval returns an id and link
-- status is pending before the person acts
-- service refuses with no approval
-- page shows "production"
-- get_approval wakes up with the approval
-- approved_by names the key
-- service acts with a valid approval
-- service returns a signed receipt
-- gate records the receipt for this approval
-- a receipt the agent made up is refused (signature checked)
-- a receipt is recorded only once
-- receipt signature checks out with the service's key
-- receipt for another approval is refused
-- approval page shows the service reported done
-- replay is refused
-
-**Red team (agent attacks)**
-
-- approved 2.4.1, tried 2.4.2: refused
-- deploy approval used for a payment: refused
-- extra field added after approval: refused
-- one changed character in the approval: refused
-- untouched approval still works after failed attempts
-- medium approval for a high action: refused
-- page shows "evil.example"
-- approval for another audience: refused
-- prompt injection in params changes nothing: still pending
-- agent can start the page flow
-- forged signature sent to the gate: refused
-- after a forged signature it is still not approved
-
-**Deny and cancel**
-
-- page shows the injected text as plain data
-- deny reaches the agent, with no approval
-- a denied request cannot be approved later
-- cancel works
-
-**Standing approvals and revocation**
-
-- standing approval requested
-- a range without a minimum is refused (no negative amounts)
-- a standing request disguised as a normal one is refused
-- cannot use a standing approval before the person approves
-- page explains the standing permission
-- standing approval approved
-- after approving, the page gives the end date and use cap (no one-time wording)
-- first use signed, one left
-- standing approval alone is not a one-time approval
-- service accepts a use inside the limits
-- receipt for one use of a standing approval is recorded
-- the same use's receipt is recorded only once
-- the same use token twice is refused
-- a use token for 450 cannot pay 999
-- gate refuses a use over the limit
-- gate refuses another payee
-- second use signed, none left
-- third use refused (max 2)
-- page shows uses so far
-- revoked: no new uses, even before the revocation is signed
-- a use token handed out before the revoke still works until the revocation is signed
-- gate still refuses new uses
-- the signed revocation is published
-- after the person signs the revocation, the service refuses the standing approval
-- the revoked standing approval's page says revoked and signed
-
-**Bad input from the agent**
-
-- floats are refused at the gate
-- requests without {type, params} are refused
-
-**Fixes from the security reviews**
-
-- look-alike KELVIN SIGN payee refused at the gate (not NFC)
-- audience with invisible characters refused
-- agent cannot use the gate's own audience
-- too deeply nested request refused before the person sees it
-- claims cannot be swapped while the person signs
-- MCP endpoint refuses calls from web pages
-- local key list is not readable by other websites (no CORS on localhost)
-
-**Web hardening**
-
-- wrong Host header (DNS rebinding) is refused
-- POST from another origin is refused
-- strict CSP header
-- fonts are served by the gate itself
-- the policy allows fonts only from the gate
-- no page loads anything from another site
-- no-store and nosniff headers
-
-**Adding and removing keys, key history**
-
-- second key is NOT trusted before approval
-- add-key page says so
-- second key trusted after the first key approved it
-- signed key list checks out from the command line
-- a key slipped into the file without a signature is caught
-- an older copy of the key list (rollback) is caught
-- a key list signed on another gate is refused
-- a second removal of the same key is refused while one waits
-- remove page says so
-- key is still trusted before approval
-- key removed after approval, history still checks out
-- the last key cannot be removed
-- public key cards and signed history published at /.well-known
-
-**Command-line verifier and audit log**
-
-- CLI verify accepts a valid approval
-- CLI verify remembers used approvals (second use refused)
-- CLI verify refuses a changed request (exit code 1)
-- audit log chain is intact
-
-**stdio mode**
-
-- stdio mode stops cleanly when told to (SIGTERM)
-- stdio mode does not print an enrollment link
-- stdio mode: request_approval works
-- stdio mode: approval page is served
-
-**Flood limit**
-
-- the 31st request in a minute is refused (flood limit)
-- the gate still answers after the flood limit
-
-</details>
-
-## Secure install test
-
-`tests/secure-install.sh` installs the gate for real as its own system user, then checks from your user's side that it cannot be changed, and that automatic updates behave. CI runs it on macOS and Linux on every push. It needs password-less sudo, so it runs only on CI machines; do not set that up on your own computer to run it.
-
-| # | Check |
-|---|---|
-| 1 | refuses a relative --binary |
-| 2 | refuses a binary the user could have changed |
-| 3 | refuses while another program holds the address |
-| 4 | gate answers |
-| 5 | only the gate user listens (IPv4 and IPv6) |
-| 6 | program owned by root |
-| 7 | this user cannot change the program |
-| 8 | this user cannot read the data folder |
-| 9 | this user cannot write the keyring |
-| 10 | admin status confirms the listener |
-| 11 | admin helper makes an enrollment link |
-| 12 | no enrollment link or token in the gate log |
-| 13 | MCP refuses calls without the token |
-| 14 | MCP accepts the token (any case of Bearer) |
-| 15 | installing again (update) works |
-| 16 | daily update job installed, owned by root |
-| 17 | automatic updates on by default |
-| 18 | refuses a release list signed by an unknown key |
-| 19 | update job leaves the gate running unless a newer signed release exists |
-| 20 | update job records its result |
-| 21 | root ignores the user's ~/.curlrc |
-| 22 | root ignores programs early in the user's PATH |
-| 23 | a failed update switches back to the previous program |
-| 24 | --no-auto-update removes the job |
-| 25 | the off choice is kept on later installs |
-| 26 | --auto-update turns it back on |
-| 27 | uninstall stops it |
-| 28 | uninstall keeps keys |
-| 29 | purge removes everything |
-| 30 | uninstall removes the update job |
-
-How the update checks work: check 18 signs a made-up `release.txt` with a fresh key and runs the installed program's `release-check` on it. Check 19 runs the daily job once; with no newer signed release it must leave the same version running. Checks 21 and 22 plant a `~/.curlrc` that would write a file, and a fake `curl` early in `PATH` that would touch a file, then run the daily job with `sudo --preserve-env=HOME,PATH` and `phygital-key-admin update`; neither file may appear. Check 23 installs a program that exits at once and expects the previous gate to come back. The stop-and-restart of a program that takes the port during an update restart, and the wait for standing approvals, have no check here.
-
-> [!WARNING]
-> The release for a version does not exist yet when CI runs, so the test installs a root-owned copy of the fresh build with `--binary`. Downloading a published release, checking its signed `release.txt` and its SHA-256, and a real automatic update are not exercised by this test. They can run for real only once signed releases exist (the first real test is the release after v0.3.0).
-
-## Container image test
-
-The CI job "container image (build and start)" builds the image from `packaging/container/Dockerfile` on every push and pull request. There is no release yet when it runs, so it uses a fresh `cargo build --release --locked -p phygital-key` as the amd64 binary, then:
-
-| # | Check | How |
-|---|---|---|
-| 1 | The image builds | `docker build --platform linux/amd64` |
-| 2 | The program in it runs | `docker run --rm pk-ci --version` |
-| 3 | The gate starts and answers | Container started on `127.0.0.1:7468`, then `curl -fsS http://localhost:7468/api/status` (up to 30 tries, one second apart) |
-| 4 | It runs as the nonroot user | `docker inspect --format '{{.Config.User}}'` must print `65532:65532` |
-| 5 | Enrollment works inside it | `docker exec pk phygital-key enroll` must print an `http://localhost:7468/enroll#token=` link |
-
-Not checked here: the arm64 image, the published image on `ghcr.io`, and its attestation. Those come from the release workflow's `container` job ([CI](#ci)).
-
 ## JavaScript checker tests
 
 `verifier-js/test/vectors.test.js` has 9 tests, run with Node's built-in test runner (`node --test`). The checker has no dependencies.
@@ -378,6 +142,10 @@ Not checked here: the arm64 image, the published image on `ghcr.io`, and its att
 cd verifier-js && npm test
 ```
 
+## Examples
+
+The CI job "examples (build and syntax)" checks that the [examples](../examples/README.md) still build: `node --check examples/node-service/server.mjs`, `cargo build --manifest-path examples/rust-service/Cargo.toml`, and a YAML parse of `examples/ci-approval/example-deploy.yml`. It does not run them against a gate.
+
 ## Supply chain
 
 CI runs [cargo-deny](https://embarkstudios.github.io/cargo-deny/) through `EmbarkStudios/cargo-deny-action` on every push, with the rules in `deny.toml`:
@@ -395,48 +163,54 @@ cargo deny check
 
 `cargo audit` checks the same RustSec database and can be run locally; it is not a separate CI job. In the workflows, every GitHub Action is pinned to a full commit SHA, the default permission is `contents: read`, checkouts use `persist-credentials: false`, and every workspace build uses `--locked`.
 
-## CI
+## Base CI
 
-`.github/workflows/ci.yml` runs on every push to `main` and on every pull request. The eight jobs run side by side; in the jobs that run on several operating systems, a failure on one does not cancel the others (`fail-fast: false`).
+`.github/workflows/ci.yml` runs on every push to `main` and on every pull request. The five jobs run side by side; in the job that runs on several operating systems, a failure on one does not cancel the others (`fail-fast: false`). The base builds no program and makes no release, so there is no release workflow here.
 
 ```mermaid
 flowchart TD
   T["Push to main, or pull request"] --> J1["test: Linux, macOS, Windows"]
-  T --> J2["secure install: Linux, macOS"]
   T --> J3["JavaScript checker: Linux, Node 24"]
   T --> J7["examples: build and syntax"]
-  T --> J8["container image: build and start"]
-  T --> J4["end-to-end and red team: Linux, Node 24, Chromium"]
   T --> J5["fuzz: Linux, nightly, 4 targets x 60 s"]
   T --> J6["licenses and advisories: cargo-deny"]
   J1 --> S1["fmt, clippy -D warnings, cargo test, vectors up to date"]
-  Tag["Tag v*"] --> RB["release build: 5 targets, cargo test first"]
-  RB --> RD["each file with .sha256 and a build record"]
-  RD --> SG["publish job: environment release, no approval step for now"]
-  SG --> RP["release.txt signed and checked, release published"]
-  RP --> RC["container job: image for amd64 and arm64, pushed with a build record"]
+  M["Merged to main"] --> P["Each product's daily sync-base runs the product's own tests on it"]
 ```
 
 | Job | Runs on | Steps |
 |---|---|---|
 | test | `ubuntu-latest`, `macos-latest`, `windows-latest` | `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings`; `cargo test --workspace --locked`; `cargo run -q --release -p phygital-key-testgen --locked -- test-vectors` and `git diff --exit-code test-vectors` |
-| secure install | `ubuntu-latest`, `macos-latest` | Release build, then `tests/secure-install.sh` |
 | JavaScript checker | `ubuntu-latest`, Node 24 | `npm test` in `verifier-js` |
 | examples | `ubuntu-latest`, Node 24 | `node --check examples/node-service/server.mjs`; `cargo build` of `examples/rust-service`; YAML check of `examples/ci-approval/example-deploy.yml` |
-| container image (build and start) | `ubuntu-latest` | Release build, `docker build` of `packaging/container`, then the [5 checks above](#container-image-test) |
-| end-to-end and red team | `ubuntu-latest`, Node 24 | Release build, `npm ci`, `npx playwright install --with-deps chromium`, `node run.mjs` |
 | fuzz | `ubuntu-latest`, nightly Rust | `cargo install --locked cargo-fuzz`, then each of the 4 targets for 60 s |
 | licenses and advisories | `ubuntu-latest` | cargo-deny |
 
-`.github/workflows/release.yml` runs on a `v*` tag. It builds for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, runs `cargo test --workspace --locked` on each runner first, packages the program with `README.md`, `LICENSE` and `NOTICE`, writes a `.sha256` for each archive, publishes a build provenance attestation for each archive (`actions/attest-build-provenance`). Its `publish` job uses the environment `release`, which hands it the key only in a run from a `v*` tag; for now it does not wait for an approval. It computes each SHA-256 itself, writes and signs `release.txt` with the environment secret `RELEASE_SIGNING_KEY`, checks the signature against the keys pinned in that commit's `install-service.sh`, and publishes the release with `release.txt` and `release.txt.sig`. Its last job, `container`, runs only after `publish`: it unpacks the two Linux archives of that release (x86_64 and aarch64), builds the image for `linux/amd64` and `linux/arm64`, pushes it to `ghcr.io/phygital-key/phygital-key` as `vX.Y.Z` and `latest`, and publishes a build provenance attestation for the image. The signing step and the image push run only at a real release, not in CI on push. See [contributing](../CONTRIBUTING.md#releasing).
+`.github/workflows/codeql.yml` runs GitHub CodeQL (static analysis) on the Rust code, the JavaScript (approval page and checker) and the workflows, on every push, every pull request and once a week.
 
-`.github/workflows/scorecard.yml` runs the [OpenSSF Scorecard](https://scorecard.dev) on every push to `main` and once a week: an outside tool that scores the repository's security practices (pinned actions, token permissions, branch protection, signed releases and more). It publishes the result to scorecard.dev, where the README badge reads it, and uploads the details to GitHub code scanning.
+`.github/workflows/scorecard.yml` runs the [OpenSSF Scorecard](https://scorecard.dev) on every push to `main` and once a week: an outside tool that scores the repository's security practices (pinned actions, token permissions, branch protection and more). It publishes the result to scorecard.dev, where the README badge reads it, and uploads the details to GitHub code scanning.
 
-`.github/workflows/codeql.yml` runs GitHub CodeQL (static analysis) on the Rust code, the JavaScript (approval page and checker) and the workflows, on every push, every pull request and once a week. `.github/dependabot.yml` checks Rust crates, the end-to-end test's npm packages and the pinned GitHub Actions every week; each update arrives as a pull request and must pass the full CI.
+`.github/dependabot.yml` checks the Rust crates and the pinned GitHub Actions every week; each update arrives as a pull request and must pass the full CI. (Its npm entry still names `tests/e2e`, which moved to the products.)
+
+## Tests in each product
+
+The base has no program, so the tests that need one run in each product's repository: on every push and pull request there, and in its daily `sync-base` job against the newest base commit, which keeps a base update only if they pass. For Phygital Key MCP:
+
+| Test | Checks | Where |
+|---|---|---|
+| End-to-end and red team: the release build, a real Chromium with a virtual passkey, the official MCP SDK as the client, and the demo service, including agent attacks, web hardening, key changes, standing approvals and revocation, stdio mode and the flood limit | 108 | [`tests/e2e/run.mjs`](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/tests/e2e/run.mjs) |
+| Secure install, for real on macOS and Linux, then attacked as the user, with the update job checks (the list is on [secure install](secure-install.md#how-it-is-tested)) | 30 | [`tests/secure-install.sh`](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/tests/secure-install.sh), written from the base template `crates/phygital-key-gate/assets/secure-install-test.sh` |
+| Container image: builds, the program runs, the gate starts and answers, runs as `65532:65532`, enrollment works inside it | 5 | the `container` job of the product's `ci.yml` |
+| Files made from the base are up to date: `product-files --out .`, then `git diff --exit-code` | 1 | the `product-files` job of the product's `ci.yml` |
+| Tests of the MCP side (`cargo test --locked`) on Linux, macOS and Windows | | the `test` job of the product's `ci.yml` |
+
+Phygital Key A2A is new; its tests live in [its repository](https://github.com/Phygital-Key/phygital-key-a2a).
+
+The release workflow (`release.yml`) is in each product too: on a `v*` tag it runs the tests, builds 5 targets, signs `release.txt` and publishes the release and the container image ([signed in the release run](architecture.md#signed-in-the-release-run)).
 
 ## The owner's hand test
 
-Automated tests use a virtual passkey. On 2026-10-17 the owner also tested by hand with Touch ID on macOS: a deploy was approved once, then reusing the approval and changing the version were both refused.
+Automated tests use a virtual passkey. On 2026-10-17 the owner also tested version 0.3.0 by hand with Touch ID on macOS: a deploy was approved once, then reusing the approval and changing the version were both refused.
 
 ## Next
 

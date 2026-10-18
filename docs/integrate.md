@@ -20,7 +20,7 @@ On this page:
 
 ## How a check fits into your service
 
-The agent asks the person through the **gate** (`phygital-key`). The person reads the exact request on the approval page and signs it with a passkey or hardware key. The agent then sends that **approval** to you with the action. You never talk to the gate during a check: everything you need is in the approval, your **keyring** and your own data.
+The agent asks the person through the **gate** (a Phygital Key product such as `phygital-key-mcp` or `phygital-key-a2a`; the check below is the same for both). The person reads the exact request on the approval page and signs it with a passkey or hardware key. The agent then sends that **approval** to you with the action. You never talk to the gate during a check: everything you need is in the approval, your **keyring** and your own data.
 
 ```mermaid
 sequenceDiagram
@@ -46,7 +46,7 @@ If any check fails, the verifier returns one error code and you do not act. The 
 | Thing | What it is | Where it comes from |
 |---|---|---|
 | Your **audience** (`aud`) | A stable id for your service, for example `https://deploy.example.com` | You choose it. Agents must ask for approvals with this exact string. |
-| The **keyring** | The public **key cards** of the people allowed to approve | `phygital-key keys` on the gate, or the gate's `/.well-known/phygital-key.json`. Check its signed history first: [trusting keys](#trusting-keys). |
+| The **keyring** | The public **key cards** of the people allowed to approve | `phygital-key-mcp keys` on the gate, or the gate's `/.well-known/phygital-key.json`. Check its signed history first: [trusting keys](#trusting-keys). |
 | The **config** | The approval page origin and the WebAuthn relying party id (rp_id, the page's host name) | For a gate at `https://approve.example.com`: `origins: ["https://approve.example.com"]`, `rp_ids: ["approve.example.com"]`. For a local gate: `http://localhost:7468` and `localhost`. |
 | A **seen store** | Remembers approval ids that were used, so each approval works once | In memory for one process; a shared, durable store when you run more than one. See [the seen store](#the-seen-store). |
 | A **level** per action | How strong the proof must be | You decide: `medium` (a touch) or `high` (fingerprint, face or PIN). |
@@ -111,7 +111,7 @@ fn level_for(action: &str) -> Option<Level> {
 }
 ```
 
-This is how the demo service in `crates/phygital-key/src/demo.rs` does it.
+This is how the demo service in `crates/phygital-key-gate/src/demo.rs` does it.
 
 ## Where the approval travels
 
@@ -122,7 +122,7 @@ The approval is one base64url string of at most 16384 characters. Accept it in o
 | HTTP header `Phygital-Approval: <approval>` | Your API takes the action's params as the body. The demo service reads this header. |
 | A JSON field `"approval": "<approval>"` next to the params | Headers are hard to set for your callers, or the call is not HTTP. |
 
-For a standing approval the agent sends two values: the person's standing approval in `Phygital-Approval` and the use token for this one action in `Phygital-Use` (or two JSON fields). The gate's MCP tools tell agents to do exactly this.
+For a standing approval the agent sends two values: the person's standing approval in `Phygital-Approval` and the use token for this one action in `Phygital-Use` (or two JSON fields). The MCP tools of Phygital Key MCP tell agents to do exactly this.
 
 Check that proxies in front of your service allow request headers of that size. Never take the approval from a query string: URLs end up in logs, and an approval can be used by whoever holds it until `exp`.
 
@@ -146,7 +146,7 @@ The built-in stores:
 | Store | Scope | Notes |
 |---|---|---|
 | `MemorySeenStore` (Rust and JavaScript) | One process | Lost on restart. Fine for one instance, tests and demos. |
-| `seen-ids.jsonl` of `phygital-key verify` | One machine | Lock file, temp file then rename, fsync. A damaged line makes every check fail. See [CLI](cli.md#the-seen-ids-file). |
+| `seen-ids.jsonl` of `phygital-key-mcp verify` | One machine | Lock file, temp file then rename, fsync. A damaged line makes every check fail. See [CLI](cli.md#the-seen-ids-file). |
 
 For more than one instance, back the store with your database. Two designs follow. They are sketches: adapt names, error handling and connection pooling to your stack.
 
@@ -189,7 +189,7 @@ Each page has install steps, every function and complete examples.
 |---|---|---|
 | Rust | [verifier-rust](verifier-rust.md) | `phygital_key_verify::verify(...)` or `Verifier::verify(...)` |
 | JavaScript (Node 20+, browsers) | [verifier-js](verifier-js.md) | `await verify(...)` |
-| Any language | [CLI](cli.md) | `phygital-key verify ...`, exit code 0 means go |
+| Any language | [CLI](cli.md) | `phygital-key-mcp verify ...`, exit code 0 means go |
 
 Rust, with your own clock and seen store:
 
@@ -235,7 +235,7 @@ if (!result.ok) refuse(result.error); // for example "REQUEST_MISMATCH"
 Any language, through the command line:
 
 ```bash
-phygital-key --origin https://approve.example.com verify \
+phygital-key-mcp --origin https://approve.example.com verify \
   --approval @approval.txt \
   --request '{"type":"deploy","params":{"service":"api","env":"production","version":"2.4.1"}}' \
   --aud https://deploy.example.com --level high --keyring keyring.json
@@ -293,7 +293,7 @@ Format, refresh cadence and why junk entries are ignored: [revocations](revocati
 
 ## Receipts
 
-After acting, your service can answer with a **receipt**: a JWS signed with your service's own ES256 key, saying `success` or `error` for this approval. The agent passes it back to the gate, and the person sees "The service reported: done." on the approval page, but only if they pinned your receipt key with `phygital-key trust-service`. Signing, publishing your key and checking: [receipts](receipts.md).
+After acting, your service can answer with a **receipt**: a JWS signed with your service's own ES256 key, saying `success` or `error` for this approval. The agent passes it back to the gate, and the person sees "The service reported: done." on the approval page, but only if they pinned your receipt key with `phygital-key-mcp trust-service`. Signing, publishing your key and checking: [receipts](receipts.md).
 
 ## Trusting keys
 
@@ -301,13 +301,13 @@ The keyring decides whose approvals count, so where it comes from matters as muc
 
 | Setup | How to get the keyring |
 |---|---|
-| Your service runs next to the gate, same owner | Read the gate's `keyring.json` (or the output of `phygital-key keys`). |
+| Your service runs next to the gate, same owner | Read the gate's `keyring.json` (or the output of `phygital-key-mcp keys`). |
 | The gate belongs to someone else | Fetch `https://<gate>/.well-known/phygital-key.json` over HTTPS and check its signed **key history** before using it. |
 
-A published keyring carries a signed history of every key change, starting with the first key approving itself. Learn the first key's **fingerprint** once, from the person (their gate's home page shows it, `phygital-key keys` prints it), then check every copy against it:
+A published keyring carries a signed history of every key change, starting with the first key approving itself. Learn the first key's **fingerprint** once, from the person (their gate's home page shows it, `phygital-key-mcp keys` prints it), then check every copy against it:
 
 ```bash
-phygital-key keys --check Pp0IrvTI9djhcmFJeel-FJXJd1_u_tJ2R8j8hpMh1xo \
+phygital-key-mcp keys --check Pp0IrvTI9djhcmFJeel-FJXJd1_u_tJ2R8j8hpMh1xo \
   --file new.json --signed-on https://approve.example.com --previous accepted.json
 ```
 

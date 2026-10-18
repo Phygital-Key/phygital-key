@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security problem, privately
-    url: https://github.com/Phygital-Key/phygital-key-mcp/security/advisories/new
+    url: https://github.com/Phygital-Key/phygital-key/security/advisories/new
     about: Please don't open a public issue for a vulnerability. Only the maintainer sees a private report.
   - name: Read the docs first
-    url: https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/troubleshooting.md
+    url: https://github.com/Phygital-Key/phygital-key/blob/main/docs/troubleshooting.md
     about: Common problems and their fixes.

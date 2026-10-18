@@ -1,6 +1,6 @@
 # Security reviews
 
-This page lists every security review of Phygital Key so far, what each one found, and what was changed. It is for anyone judging how far to trust the project, and for researchers who want to know what has already been looked at.
+This page lists every security review of Phygital Key so far, what each one found, and what was changed. It is for anyone judging how far to trust the project, and for researchers who want to know what has already been looked at. All seven reviews looked at the single program `phygital-key`, before the split into the base and the products in 0.4.0; file names, commands and e2e check names below are as they were then. The reviewed gate code now lives in `crates/phygital-key-gate` and is the same in every product; the MCP tools moved to Phygital Key MCP. The split itself has not had a security review yet.
 
 > [!IMPORTANT]
 > Phygital Key is **pre-audit**. The seven reviews below were done by AI security-auditor agents, not by a paid third-party audit firm. They found real problems, and every confirmed finding was fixed or, where a fix is not built, documented as a limit. They are no substitute for an outside audit.
@@ -158,8 +158,8 @@ Nothing confirmed by a review is open without a fix or a documented limit. These
 - [ ] The audit log detects edits, not a full rewrite or a cut-off end
 - [ ] The limit of 50 waiting requests has no automated test (the 30-a-minute limit now has one: e2e "the 31st request in a minute is refused (flood limit)")
 - [ ] No secure install for Windows
-- [ ] The download path is untested in CI: CI installs the secure install from a root-owned local build (`--binary`), so downloading a published release, checking its signed `release.txt` and its SHA-256, and a real automatic update have not run yet. They can run only once signed releases exist (the first real update test is the release after v0.3.0).
-- [ ] The release key is made once by the owner (`scripts/release-key.sh`). Until it is pinned in the installers, every download and update is refused.
+- [ ] The download path is untested in CI: CI installs the secure install from a root-owned local build (`--binary`), so downloading a published release, checking its signed `release.txt` and its SHA-256, and a real automatic update have not run yet. They can run only once a product publishes signed releases.
+- [ ] Each product's release key is made once by the owner (the product's `scripts/release-key.sh`). Until it is pinned in the product's `release-keys.pem` and installers, every download and update of that product is refused.
 - [ ] Automatic updates trust the release key and the owner's GitHub account: whoever controls that account, or a token with admin rights, can push a `v*` tag and ship a signed update with no second step, because the approval on the release run is off for now (decision 36, supersedes review 7 M2 and M3). Turning it back on: Settings, Environments, release, Required reviewers. A signed release that starts is installed, and a held-back update (a freeze) cannot be seen from the machine. See [the update channel](threat-model.md#the-update-channel).
 - [ ] The gate's port is free for a moment at each update restart. A program that takes it is killed and the gate started again, but handing the open port from launchd or systemd to the gate is not built (review 7, H2). The kill-and-restart has no CI check.
 - [ ] A person's active standing approval can hold back a security update for up to 7 days (review 7, M1). The waiting logic has no CI check.
@@ -167,7 +167,7 @@ Nothing confirmed by a review is open without a fix or a documented limit. These
 
 ## How to report
 
-Please do not open a public issue. Use [private vulnerability reporting](https://github.com/Phygital-Key/phygital-key-mcp/security/advisories/new). A failing test vector is the most helpful report. Details, scope and what to include are in [SECURITY.md](../SECURITY.md).
+Please do not open a public issue. Use [private vulnerability reporting](https://github.com/Phygital-Key/phygital-key/security/advisories/new). A failing test vector is the most helpful report. Details, scope and what to include are in [SECURITY.md](../SECURITY.md).
 
 ## Next
 

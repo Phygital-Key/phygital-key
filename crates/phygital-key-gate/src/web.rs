@@ -4,8 +4,6 @@
 //! Every POST must come from the page's own origin; every request must use
 //! one of our host names (blocks DNS rebinding).
 
-use std::sync::Arc;
-
 use axum::extract::{DefaultBodyLimit, Path, Request, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
@@ -103,7 +101,7 @@ async fn asset_file(Path(rest): Path<String>) -> Response {
 const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self' data:; \
                    base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
-type Shared = Arc<Gate>;
+use crate::state::Shared;
 
 fn err(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(json!({"error": msg.into()}))).into_response()
@@ -145,8 +143,17 @@ async fn guard(State(gate): State<Shared>, req: Request, next: Next) -> Response
     if !allowed_hosts(&gate).contains(&host) {
         return err(StatusCode::MISDIRECTED_REQUEST, "unknown host");
     }
-    let is_mcp = req.uri().path().starts_with("/mcp");
-    if is_mcp && let Some(want) = &gate.settings.mcp_token {
+    let path = req.uri().path();
+    let agent = gate.settings.agent_path;
+    let is_agent = path == agent || path.starts_with(&format!("{agent}/"));
+    // Agent clients are not browsers: a request with a browser Origin is refused.
+    if is_agent && req.headers().contains_key(header::ORIGIN) {
+        return err(
+            StatusCode::FORBIDDEN,
+            "browser requests are not allowed here",
+        );
+    }
+    if is_agent && let Some(want) = &gate.settings.access_token {
         let got = req
             .headers()
             .get(header::AUTHORIZATION)
@@ -157,11 +164,14 @@ async fn guard(State(gate): State<Shared>, req: Request, next: Next) -> Response
         if got.len() != want.len() || !bool::from(got.as_bytes().ct_eq(want.as_bytes())) {
             return err(
                 StatusCode::UNAUTHORIZED,
-                "missing or wrong MCP access token (see `phygital-key mcp-token`)",
+                format!(
+                    "missing or wrong access token (see `{} token`)",
+                    crate::product().bin
+                ),
             );
         }
     }
-    if req.method() != Method::GET && !is_mcp {
+    if req.method() != Method::GET && !is_agent {
         let origin = req
             .headers()
             .get(header::ORIGIN)
@@ -173,7 +183,7 @@ async fn guard(State(gate): State<Shared>, req: Request, next: Next) -> Response
     }
     let mut res = next.run(req).await;
     let h = res.headers_mut();
-    if !is_mcp {
+    if !is_agent {
         h.insert(
             header::CONTENT_SECURITY_POLICY,
             HeaderValue::from_static(CSP),
@@ -217,6 +227,7 @@ async fn status(State(gate): State<Shared>) -> Response {
                 "origin": gate.settings.origin,
                 "root_fingerprint": root,
                 "history_ok": signed,
+                "program": crate::product().bin,
                 "waiting": busy.0,
                 "standing_active": busy.1,
             }))

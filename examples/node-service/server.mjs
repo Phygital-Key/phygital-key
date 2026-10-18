@@ -3,8 +3,8 @@
 // with the independent JavaScript checker in this repo, then "deploys"
 // (nothing real happens).
 //
-// Run:  KEYRING=~/.phygital-key/keyring.json node server.mjs
-// Env:  KEYRING      keyring file (required), from `phygital-key keys` or the gate's data folder
+// Run:  KEYRING=~/.phygital-key-mcp/keyring.json node server.mjs
+// Env:  KEYRING      keyring file (required), from `phygital-key-mcp keys` or the gate's data folder
 //       PORT         port to listen on (default 7600)
 //       AUD          this service's audience id (default http://localhost:<PORT>)
 //       GATE_ORIGIN  the approval page origin (default http://localhost:7468)
@@ -18,7 +18,7 @@ const AUD = process.env.AUD || `http://localhost:${PORT}`;
 const GATE_ORIGIN = process.env.GATE_ORIGIN || "http://localhost:7468";
 const KEYRING = process.env.KEYRING;
 if (!KEYRING) {
-  console.error("Set KEYRING to the keyring file, e.g. KEYRING=~/.phygital-key/keyring.json");
+  console.error("Set KEYRING to the keyring file, e.g. KEYRING=~/.phygital-key-mcp/keyring.json");
   process.exit(2);
 }
 

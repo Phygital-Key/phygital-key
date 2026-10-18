@@ -1,6 +1,6 @@
 # The approval page
 
-The approval page is where a person reads a request and decides. This page explains how it is built, what it shows, how it marks suspicious text, and what it compares before it lets the key sign. It is for reviewers and contributors. The code is `crates/phygital-key/assets/approve.html` and `app.js` (about 410 lines of plain JavaScript, no dependencies), served by the gate from `web.rs`.
+The approval page is where a person reads a request and decides. This page explains how it is built, what it shows, how it marks suspicious text, and what it compares before it lets the key sign. It is for reviewers and contributors. The code is `crates/phygital-key-gate/assets/approve.html` and `app.js` (about 410 lines of plain JavaScript, no dependencies), served by the gate from `web.rs`. It is part of the base, so every product (Phygital Key MCP, Phygital Key A2A) serves the same page.
 
 ## On this page
 

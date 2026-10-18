@@ -27,24 +27,24 @@ No. A phone with a passkey, Touch ID, Windows Hello or any FIDO2 security key wo
 The gate, the checker and the demo run on Windows, macOS and Linux. The secure install (separate system user) is macOS and Linux for now.
 
 **Can I run it in Docker?**
-Yes, on a Linux server. Each release from v0.3.0 has a container image, `ghcr.io/phygital-key/phygital-key` (amd64 and arm64), built from the same Linux binaries as the signed release, running as an unprivileged user with its data in a `/data` volume. You update it by pulling a new image and starting a new container on the same volume; automatic updates and `phygital-key update` do not apply inside it. On your own computer, use the secure install instead: if your user can run `docker`, an agent acting as you can control the container. See [run it in a container](own-server.md#run-it-in-a-container).
+Yes, on a Linux server. Each product release has a container image, for Phygital Key MCP `ghcr.io/phygital-key/phygital-key-mcp` (amd64 and arm64), built from the same Linux binaries as the signed release, running as an unprivileged user with its data in a `/data` volume. You update it by pulling a new image and starting a new container on the same volume; automatic updates and `update` do not apply inside it. On your own computer, use the secure install instead: if your user can run `docker`, an agent acting as you can control the container. See [run it in a container](own-server.md#run-it-in-a-container).
 
 **How does it stay up to date?**
-The secure install updates itself: a daily job (a root LaunchDaemon on macOS, a systemd timer on Linux) fetches the release list, checks its signature against the release keys pinned in the installer, and installs only a strictly newer signed version. It keeps the old program and switches back to it if the new gate does not start. It is on by default; `--no-auto-update` turns it off, and `phygital-key-admin update` updates now. Other installs update when you run them: `phygital-key update` (install script or `cargo install`), `brew upgrade phygital-key`, or `scoop update phygital-key` on Windows. A container updates when you pull a new image. An update restarts the gate, which drops requests still waiting and ends every standing approval it holds. The daily job waits while standing approvals are active (7 days at most, counted from the first wait on the installed version); waiting requests do not hold it back, and the agent asks again after the restart. Approvals already signed still check. The full update path runs for real only once a signed release newer than v0.3.0 exists. See [updates](updates.md).
+The secure install updates itself: a daily job (a root LaunchDaemon on macOS, a systemd timer on Linux) fetches the release list, checks its signature against the release keys pinned in the installer, and installs only a strictly newer signed version. It keeps the old program and switches back to it if the new gate does not start. It is on by default; `--no-auto-update` turns it off, and `phygital-key-mcp-admin update` updates now. Other installs update when you run them: `phygital-key-mcp update` (install script or `cargo install`), `brew upgrade phygital-key-mcp`, or `scoop update phygital-key-mcp` on Windows. A container updates when you pull a new image. An update restarts the gate, which drops requests still waiting and ends every standing approval it holds. The daily job waits while standing approvals are active (7 days at most, counted from the first wait on the installed version); waiting requests do not hold it back, and the agent asks again after the restart. Approvals already signed still check. The full update path runs for real only once a product publishes a newer signed release. Moving from 0.3 (the program `phygital-key`) to a product is done by hand: see [from 0.3 to the products](updates.md#from-03-to-the-products). See [updates](updates.md).
 
 **Who can sign a release?**
-Only a release run on GitHub started by a `v*` tag, and only repository admins (the owner) can push `v*` tags. The [release key](glossary.md#release-key) is a secret of the GitHub environment `release`, and GitHub hands it only to a run from a `v*` tag. For now there is no approval step: the run signs and publishes as soon as the tag is pushed (the owner plans to turn the approval back on as the project grows). A swapped file, a mirror or a stolen workflow token cannot sign. Someone who takes over the owner's GitHub account, or a token with admin rights, could, with a tag push alone, and the secure install would install that release within about a day. If you would rather check each release first, install with `--no-auto-update` and update by hand. See [the update channel](threat-model.md#the-update-channel).
+Only a release run on GitHub started by a `v*` tag, and only repository admins (the owner) can push `v*` tags. Each product signs its own releases in its own repository; the base makes none. The [release key](glossary.md#release-key) is a secret of the product repository's GitHub environment `release`, and GitHub hands it only to a run from a `v*` tag. For now there is no approval step: the run signs and publishes as soon as the tag is pushed (the owner plans to turn the approval back on as the project grows). A swapped file, a mirror or a stolen workflow token cannot sign. Someone who takes over the owner's GitHub account, or a token with admin rights, could, with a tag push alone, and the secure install would install that release within about a day. If you would rather check each release first, install with `--no-auto-update` and update by hand. See [the update channel](threat-model.md#the-update-channel).
 
 **Does it work with any AI app?**
-With any app that can use an MCP server: the gate is one, over stdio (what most AI apps launch) or over HTTP with an access token. Other ways in (an HTTP API, email links, QR codes) are not built. See [connect your AI](connect-your-ai.md).
+With any app that can use an MCP server, through Phygital Key MCP: over stdio (what most AI apps launch) or over HTTP with an access token. Agents that speak A2A can use Phygital Key A2A, which is new. Other ways in (email links, QR codes) are not built. See [connect your AI](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md).
 
 **Does my service need MCP?**
-No. MCP is only how the agent reaches the gate. Your service receives a plain string in a `Phygital-Approval` header and checks it with the Rust library, the JavaScript checker or the `phygital-key verify` command. See [integrate](integrate.md).
+No. MCP (or A2A) is only how the agent reaches the gate. Your service receives a plain string in a `Phygital-Approval` header and checks it with the Rust library, the JavaScript checker or the `phygital-key-mcp verify` command. See [integrate](integrate.md).
 
 ## Safety and the AI
 
 **Can the AI approve on its own?**
-No. Only your key can sign, and your key never leaves your device. The AI can ask, wait, cancel and report, nothing else. None of the six MCP tools can approve, and the gate has no signing key for approvals.
+No. Only your key can sign, and your key never leaves your device. The AI can ask, wait, cancel and report, nothing else. Nothing in any product's agent protocol can approve (in Phygital Key MCP: six tools, none approves), and the gate has no signing key for approvals.
 
 **What if the AI changes the request after I approve?**
 The service checks the request it is about to run against the one you signed, to the last character. Any change is refused with `REQUEST_MISMATCH`.
@@ -93,16 +93,16 @@ Two checkers that share no code (Rust and JavaScript) pass the same shared test 
 The agent picks a level when it asks, but the service decides what it accepts, so an agent cannot ask for `medium` on a production deploy and get through ([decision 7](decisions.md)).
 
 **How does a service get my keys, and how does it know they are mine?**
-From `phygital-key keys`, or from your gate's `/.well-known/phygital-key.json`. The keyring carries a signed history of every key change. The service checks it against your first key's fingerprint, learned once (in person, on a call), and keeps the copy it accepted so an older copy cannot be passed off later. See [key history](key-history.md).
+From `phygital-key-mcp keys`, or from your gate's `/.well-known/phygital-key.json`. The keyring carries a signed history of every key change. The service checks it against your first key's fingerprint, learned once (in person, on a call), and keeps the copy it accepted so an older copy cannot be passed off later. See [key history](key-history.md).
 
 **Can a service accept only hardware keys (like YubiKeys)?**
 Yes, in a simple way: a service trusts only the keys in its keyring. If your company hands out hardware keys and adds only those to the keyring, nothing else can approve. Automatic proof that a key is certified hardware (checking its maker's certificate) is not built ([decision 35](decisions.md)): phone and laptop passkeys never provide it, and the extra code would add risk for few users.
 
 **Can I see who approved?**
-Yes. A successful check in the Rust or JavaScript checker returns the approval id, the request hash, the key's credential id and the name on its key card (`approver`); `phygital-key verify` prints the id, the level, the end time and the name (`approved_by`). Services should log them. The gate keeps its own hash-chained [audit log](audit-log.md).
+Yes. A successful check in the Rust or JavaScript checker returns the approval id, the request hash, the key's credential id and the name on its key card (`approver`); `phygital-key-mcp verify` prints the id, the level, the end time and the name (`approved_by`). Services should log them. The gate keeps its own hash-chained [audit log](audit-log.md).
 
 **Is there a record of what happened?**
-The gate writes every request, approval, denial, key change, receipt and revocation to an append-only, hash-chained audit log, and `phygital-key audit-check` checks the chain. It stores the request hash, never the request itself. It detects edits to past lines, but not a full rewrite or a cut-off end, so keep a copy of the last hash somewhere else. Services can also return signed [receipts](receipts.md), so you see "the service reported: done".
+The gate writes every request, approval, denial, key change, receipt and revocation to an append-only, hash-chained audit log, and `phygital-key-mcp audit-check` checks the chain. It stores the request hash, never the request itself. It detects edits to past lines, but not a full rewrite or a cut-off end, so keep a copy of the last hash somewhere else. Services can also return signed [receipts](receipts.md), so you see "the service reported: done".
 
 ## Encryption and privacy
 
@@ -116,10 +116,10 @@ That the yes is real and unchanged. Your key signs with ES256 (ECDSA over P-256 
 The approval page is served by the gate, so encrypting a request against the gate only helps if the page comes from somewhere the gate cannot change, such as a separate, pinned page or an app. On your own computer, the AI is already on that machine. If a hosted gate is ever built, encryption comes with it ([decision 33](decisions.md)).
 
 **What is protected in transit and at rest?**
-In transit: HTTPS for any address other than localhost (passkeys refuse to work otherwise). At rest: the gate's data folder is readable only by the gate (mode 0700; only the gate's own user with the secure install); pending requests live only in memory; the MCP access token is a file with mode 0600. The audit log never stores the request itself. See [privacy](privacy.md).
+In transit: HTTPS for any address other than localhost (passkeys refuse to work otherwise). At rest: the gate's data folder is readable only by the gate (mode 0700; only the gate's own user with the secure install); pending requests live only in memory; the access token for the agent endpoint is a file with mode 0600. The audit log never stores the request itself. See [privacy](privacy.md).
 
 **Does it send anything to the internet?**
-The gate itself makes no network calls: no analytics, no cloud, no account, no external fonts or scripts. The secure install contacts github.com once a day to fetch the signed release list (and the release file when it updates); `--no-auto-update` stops that. The install script and `phygital-key update` contact GitHub only when you run them. Every download is checked against the signed release list and its SHA-256. If your passkeys sync (for example through your phone's password manager), that syncing is done by your platform, not by Phygital Key.
+The gate itself makes no network calls: no analytics, no cloud, no account, no external fonts or scripts. The secure install contacts github.com once a day to fetch the signed release list (and the release file when it updates); `--no-auto-update` stops that. The install script and `update` contact GitHub only when you run them. Every download is checked against the signed release list and its SHA-256. If your passkeys sync (for example through your phone's password manager), that syncing is done by your platform, not by Phygital Key.
 
 ## Time limits
 
@@ -163,13 +163,13 @@ Nothing can be approved: there are no approvals without the gate and your key, s
 Yes, if their keys are in the keyring the service trusts. Any one trusted key can approve, and the result names which key signed, so a service can require a specific person for a specific action. An approval that needs 2 of 3 people is not built: the format has a list of signatures, but version 0.3.0 requires exactly one.
 
 **Does it work between companies?**
-Yes. A company publishes its keyring at its gate's `/.well-known/phygital-key.json`; the other side checks it against a fingerprint learned once and keeps the copy it accepted. Today requests reach the gate through MCP only, so an outside company's agent needs an access token, or your own agent relays the request. See [use cases](use-cases.md#7-company-to-company-a-suppliers-ai-asks-a-buyer-to-approve-an-order).
+Yes. A company publishes its keyring at its gate's `/.well-known/phygital-key.json`; the other side checks it against a fingerprint learned once and keeps the copy it accepted. Today requests reach the gate through MCP or, with Phygital Key A2A, A2A; either way an outside company's agent needs an access token, or your own agent relays the request. See [use cases](use-cases.md#7-company-to-company-a-suppliers-ai-asks-a-buyer-to-approve-an-order).
 
 **Does it work with AP2 (agent payments)?**
 It follows the same ideas: closed and open mandates (one-time and standing approvals), a Trusted Surface (the approval page, with no AI), and receipts that point at the approval by hash. The difference: your own passkey signs, where AP2 uses a wallet or provider key. There is no AP2 export yet ([decision 28](decisions.md)); the mapping and what an export would cost are in [ap2.md](ap2.md).
 
 **Can it be used with A2A (Agent2Agent)?**
-The approval is a signed string, so it can travel in any message, and the checkers work in any agent that receives one. An A2A adapter that carries approvals inside A2A messages is planned for later and is not built ([roadmap](roadmap.md)).
+Yes, through [Phygital Key A2A](https://github.com/Phygital-Key/phygital-key-a2a), a new product on the same base: an A2A 1.0 JSON-RPC endpoint at `/a2a` and an agent card at `/.well-known/agent-card.json`. It is still being built, and its guides come later. The approval is a signed string either way, so it can travel in any message, and the checkers work in any agent that receives one.
 
 ## Comparisons
 

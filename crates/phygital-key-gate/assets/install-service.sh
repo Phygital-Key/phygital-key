@@ -1,13 +1,14 @@
 #!/bin/bash
 # Phygital Key: run the gate as its own locked-down system user (macOS, Linux).
+# This file is generated for one product (the PRODUCT block below) from the
+# template in Phygital-Key/phygital-key, crates/phygital-key-gate/assets.
 #
-# Recommended (from a fresh terminal you trust):
-#   curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh | sudo bash
+# Recommended (from a fresh terminal you trust), with the product's own copy:
+#   curl -q -fsSL https://raw.githubusercontent.com/<product repo>/<tag>/install-service.sh | sudo bash
 # It then updates itself once a day to the latest SIGNED release (see below).
 # Later, use the locked copy it installs:
-#   sudo /Library/PhygitalKey/bin/phygital-key install-service [--release vX.Y.Z | --no-auto-update | --uninstall]   (macOS)
-#   sudo /usr/lib/phygital-key/bin/phygital-key install-service [--release vX.Y.Z | --no-auto-update | --uninstall]  (Linux)
-# Shortcut: `sudo phygital-key install-service` runs YOUR copy of the program as
+#   sudo <prefix>/bin/<program> install-service [--release vX.Y.Z | --no-auto-update | --uninstall]
+# Shortcut: `sudo <program> install-service` runs YOUR copy of the program as
 # administrator. Only use it if nothing else could have changed that file.
 #
 # Options:  --uninstall        remove the service (keeps keys and log)
@@ -19,7 +20,7 @@
 # Why: an AI agent runs as you. If the gate also ran as you, the agent could edit
 # the gate's program, keys and log. Here the gate runs as a separate user. Its
 # program is the official release, whose file list and SHA-256 sums are signed with
-# the project's release key (used only in release runs for owner-only v* tags), and it
+# the product's release key (used only in release runs for owner-only v* tags), and it
 # is kept in folders only an administrator can change. Its data folder is closed to everyone else. Nothing that you (or an agent acting as you) could have edited is
 # ever run as root or installed.
 set -euo pipefail
@@ -31,9 +32,19 @@ HOME=$(cd ~root && pwd); export HOME
 unset CURL_HOME XDG_CONFIG_HOME SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE OPENSSL_CONF OPENSSL_MODULES BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH
 umask 022
 
-REPO="Phygital-Key/phygital-key-mcp"
-VERSION="${PKA_VERSION:-v0.3.0}"
-PORT="${PKA_PORT:-7468}"
+# The product this copy installs (filled in when the product is built).
+# BEGIN PRODUCT
+P_NAME="Phygital Key"
+P_BIN=phygital-key
+P_ID=dev
+P_REPO=Phygital-Key/phygital-key
+P_PORT=7468
+P_VERSION=v0.0.0
+# END PRODUCT
+[[ "$P_ID" =~ ^[a-z0-9]+$ ]] && [[ "$P_BIN" =~ ^[a-z0-9-]+$ ]] || { echo "bad product block" >&2; exit 1; }
+REPO="$P_REPO"
+VERSION="${PKA_VERSION:-$P_VERSION}"
+PORT="${PKA_PORT:-$P_PORT}"
 BINARY="${PKA_BINARY:-}"   # optional: an already root-owned binary (used by CI)
 MODE=install
 PURGE=no
@@ -53,21 +64,17 @@ for a in "$@"; do
 done
 # Pinned release keys (P-256). A release installs only if its release.txt is signed
 # by one of these. scripts/release-key.sh writes this block; the program reads the
-# same block, so the shell installer and `phygital-key update` trust the same keys.
+# same block, so the shell installer and `<program> update` trust the same keys.
 # BEGIN RELEASE KEYS
 RELEASE_KEYS='
------BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE20rJyJxya04dIg9glW3+S/9A8eCS
-qxHS4ARIaSSaF5lWATAX8cDl2JleS2qtDcKNsJB0wCWDqExQfgyIrIfc5w==
------END PUBLIC KEY-----
 '
 # END RELEASE KEYS
 
 say() { printf '%s\n' "$*"; }
 die() {
-  # The daily job leaves its result for phygital-key-admin status.
+  # The daily job leaves its result for <program>-admin status.
   [ "${AUTO_RUN:-no}" = yes ] && declare -F note >/dev/null && note "update stopped: $*" >/dev/null
-  printf 'phygital-key install-service: %s\n' "$*" >&2; exit 1
+  printf '%s install-service: %s\n' "$P_BIN" "$*" >&2; exit 1
 }
 [ "$(id -u)" = 0 ] || die "needs administrator rights (sudo)."
 [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "bad version: $VERSION"
@@ -76,29 +83,30 @@ case "$BINARY" in ""|/*) ;; *) die "--binary needs a full path (starting with /)
 
 case "$(uname -s)" in
   Darwin)
-    OS=mac; SVC_USER=_phygitalkey
-    PREFIX=/Library/PhygitalKey
-    DATA="/Library/Application Support/PhygitalKey"
-    LOGS=/Library/Logs/PhygitalKey
-    UNIT=/Library/LaunchDaemons/io.phygitalkey.gate.plist
-    UPD_UNIT=/Library/LaunchDaemons/io.phygitalkey.update.plist
-    UPD_LOGS=/Library/Logs/PhygitalKeyUpdate
+    OS=mac; SVC_USER="_phygitalkey$P_ID"
+    PREFIX="/Library/PhygitalKey/$P_ID"
+    DATA="/Library/Application Support/PhygitalKey/$P_ID"
+    LOGS="/Library/Logs/PhygitalKey/$P_ID"
+    LABEL="io.phygitalkey.$P_ID"
+    UNIT="/Library/LaunchDaemons/$LABEL.gate.plist"
+    UPD_UNIT="/Library/LaunchDaemons/$LABEL.update.plist"
+    UPD_LOGS="/Library/Logs/PhygitalKey/$P_ID-update"
     TRIPLE_OS=apple-darwin ;;
   Linux)
-    OS=linux; SVC_USER=phygitalkey
-    PREFIX=/usr/lib/phygital-key
-    DATA=/var/lib/phygital-key
+    OS=linux; SVC_USER="phygitalkey-$P_ID"
+    PREFIX="/usr/lib/$P_BIN"
+    DATA="/var/lib/$P_BIN"
     LOGS=""
-    UNIT=/etc/systemd/system/phygital-key.service
-    UPD_UNIT=/etc/systemd/system/phygital-key-update.service
-    UPD_TIMER=/etc/systemd/system/phygital-key-update.timer
+    UNIT="/etc/systemd/system/$P_BIN.service"
+    UPD_UNIT="/etc/systemd/system/$P_BIN-update.service"
+    UPD_TIMER="/etc/systemd/system/$P_BIN-update.timer"
     UPD_LOGS=""
     TRIPLE_OS=unknown-linux-gnu ;;
   *) die "only macOS and Linux for now." ;;
 esac
-BIN="$PREFIX/bin/phygital-key"
-ADMIN="$PREFIX/bin/phygital-key-admin"
-LINK=/usr/local/bin/phygital-key-admin
+BIN="$PREFIX/bin/$P_BIN"
+ADMIN="$PREFIX/bin/$P_BIN-admin"
+LINK="/usr/local/bin/$P_BIN-admin"
 
 owner_of() { if [ "$OS" = mac ]; then stat -f %Su "$1"; else stat -c %U "$1"; fi; }
 mode_of() { if [ "$OS" = mac ]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi; }
@@ -159,7 +167,7 @@ verify_release() {
     [ -z "$(tail -c 1 "$d/release.txt")" ] || return 1
     ! LC_ALL=C grep -q "$(printf '\r')" "$d/release.txt" || return 1
     [ "$(sed -n '3,$p' "$d/release.txt" | wc -l | tr -d ' ')" -ge 1 ] || return 1
-    [ "$(sed -n '3,$p' "$d/release.txt" | LC_ALL=C grep -cvE "^[0-9a-f]{64}  phygital-key-${v//./\\.}-[A-Za-z0-9._-]+\.(tar\.gz|zip)\$" || true)" = 0 ] || return 1
+    [ "$(sed -n '3,$p' "$d/release.txt" | LC_ALL=C grep -cvE "^[0-9a-f]{64}  ${P_BIN}-${v//./\\.}-[A-Za-z0-9._-]+\.(tar\.gz|zip)\$" || true)" = 0 ] || return 1
     [ -z "$(sed -n '3,$p' "$d/release.txt" | awk '{ print $2 }' | sort | uniq -d)" ] || return 1
   elif [ -x "$BIN" ] && root_only "$BIN" 2>/dev/null; then
     # The installed, root-owned program checks it with the same pinned keys.
@@ -176,7 +184,7 @@ fetch_release_list() { # $1 = base URL, $2 = folder
   curl -q --proto '=https' --tlsv1.2 --max-time 120 -fsSL "$1/release.txt.sig" -o "$2/release.txt.sig"
 }
 
-# The daily update job's last result, for phygital-key-admin status (root-only folder).
+# The daily update job's last result, for <program>-admin status (root-only folder).
 note() {
   [ -n "${PREFIX:-}" ] && [ -d "$PREFIX" ] || return 0
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" > "$PREFIX/update-status.new" &&
@@ -186,18 +194,18 @@ note() {
 
 stop_updates() {
   if [ "$OS" = mac ]; then
-    launchctl bootout system/io.phygitalkey.update 2>/dev/null || true
+    launchctl bootout system/$LABEL.update 2>/dev/null || true
     rm -f "$UPD_UNIT"
   else
-    systemctl disable --now phygital-key-update.timer 2>/dev/null || true
+    systemctl disable --now "$P_BIN-update.timer" 2>/dev/null || true
     rm -f "$UPD_TIMER" "$UPD_UNIT"
     systemctl daemon-reload 2>/dev/null || true
   fi
 }
 
 stop_service() {
-  if [ "$OS" = mac ]; then launchctl bootout system/io.phygitalkey.gate 2>/dev/null || true
-  else systemctl disable --now phygital-key.service 2>/dev/null || true; fi
+  if [ "$OS" = mac ]; then launchctl bootout system/$LABEL.gate 2>/dev/null || true
+  else systemctl disable --now "$P_BIN.service" 2>/dev/null || true; fi
 }
 
 if [ "$MODE" = uninstall ]; then
@@ -213,14 +221,14 @@ if [ "$MODE" = uninstall ]; then
       dscl . -delete "/Users/$SVC_USER" 2>/dev/null || true
       dscl . -delete "/Groups/$SVC_USER" 2>/dev/null || true
     else userdel "$SVC_USER" 2>/dev/null || true; fi
-    say "Removed Phygital Key, its user, keys and log."
+    say "Removed $P_NAME, its user, keys and log."
   else
-    say "Removed the Phygital Key service. Your keys and log are kept in: $DATA"
+    say "Removed the $P_NAME service. Your keys and log are kept in: $DATA"
   fi
   exit 0
 fi
 
-WORK=$(mktemp -d /tmp/phygital-key-install.XXXXXX)
+WORK=$(mktemp -d "/tmp/$P_BIN-install.XXXXXX")
 chmod 700 "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 REL="$WORK/release"
@@ -256,7 +264,7 @@ if [ "$AUTO_RUN" = yes ]; then
         printf '%s %s\n' "$since" "$HAVE" > "$PREFIX/update-postponed.new" && mv -f "$PREFIX/update-postponed.new" "$PREFIX/update-postponed"
       fi
       if [ $(( nowts - since )) -lt $(( 7 * 86400 )) ]; then
-        note "waiting to install $LATEST: ${a} standing approval(s) active. It installs once they end, after 7 days at the latest, or now with: phygital-key-admin update --now"
+        note "waiting to install $LATEST: ${a} standing approval(s) active. It installs once they end, after 7 days at the latest, or now with: $P_BIN-admin update --now"
         exit 0
       fi
     fi
@@ -269,10 +277,10 @@ fi
 # 1. Get the program: the official signed release, checked, or a binary root already owns.
 if [ -n "$BINARY" ]; then
   root_only "$BINARY" || die "$BINARY is not safe to run as root: it (or a folder above it) is not owned by root only."
-  cp "$BINARY" "$WORK/phygital-key"
+  cp "$BINARY" "$WORK/program"
 else
   case "$(uname -m)" in arm64|aarch64) ARCH=aarch64 ;; x86_64|amd64) ARCH=x86_64 ;; *) die "unsupported CPU $(uname -m)" ;; esac
-  NAME="phygital-key-$VERSION-$ARCH-$TRIPLE_OS"
+  NAME="$P_BIN-$VERSION-$ARCH-$TRIPLE_OS"
   BASE="https://github.com/$REPO/releases/download/$VERSION"
   URL="$BASE/$NAME.tar.gz"
   if [ "$AUTO_RUN" != yes ]; then
@@ -288,8 +296,8 @@ else
   else have=$(shasum -a 256 "$WORK/r.tar.gz" | cut -d ' ' -f 1); fi
   [ "$want" = "$have" ] || die "the download does not match its signed SHA-256. Nothing was installed."
   tar --no-same-owner -xzf "$WORK/r.tar.gz" -C "$WORK"
-  [ -f "$WORK/$NAME/phygital-key" ] && [ ! -L "$WORK/$NAME/phygital-key" ] || die "the release does not contain the expected program."
-  mv "$WORK/$NAME/phygital-key" "$WORK/phygital-key"
+  [ -f "$WORK/$NAME/$P_BIN" ] && [ ! -L "$WORK/$NAME/$P_BIN" ] || die "the release does not contain the expected program."
+  mv "$WORK/$NAME/$P_BIN" "$WORK/program"
 fi
 
 # 2. The gate user: no login, no shell, no home.
@@ -302,13 +310,13 @@ if [ "$OS" = mac ]; then
     done
     [ -n "$id" ] || die "no free system user id between 400 and 499."
     dscl . -create "/Groups/$SVC_USER" PrimaryGroupID "$id"
-    dscl . -create "/Groups/$SVC_USER" RealName "Phygital Key"
+    dscl . -create "/Groups/$SVC_USER" RealName "$P_NAME"
     dscl . -create "/Users/$SVC_USER"
     dscl . -create "/Users/$SVC_USER" UniqueID "$id"
     dscl . -create "/Users/$SVC_USER" PrimaryGroupID "$id"
     dscl . -create "/Users/$SVC_USER" UserShell /usr/bin/false
     dscl . -create "/Users/$SVC_USER" NFSHomeDirectory /var/empty
-    dscl . -create "/Users/$SVC_USER" RealName "Phygital Key"
+    dscl . -create "/Users/$SVC_USER" RealName "$P_NAME"
     dscl . -create "/Users/$SVC_USER" IsHidden 1
   fi
 else
@@ -326,14 +334,14 @@ install -d -m 0700 -o "$SVC_USER" "$DATA"
 # 4. The program, swapped in at once (no moment without a gate binary). The old
 #    one is kept until the new gate has passed its checks, to switch back to.
 [ -f "$BIN" ] && cp -p "$BIN" "$WORK/previous"
-install -m 0755 -o root "$WORK/phygital-key" "$BIN.new"
+install -m 0755 -o root "$WORK/program" "$BIN.new"
 mv -f "$BIN.new" "$BIN"
 
 # 5. The admin helper. Every command goes through sudo, so an agent acting as you
 #    cannot enroll a key or read the gate's files without your password.
 cat > "$WORK/admin" <<ADMINSCRIPT
 #!/bin/bash
-# Phygital Key admin helper (installed by install-service). Run it by its full path
+# $P_NAME admin helper (installed by install-service). Run it by its full path
 # if /usr/local/bin is not root-only on this machine: $ADMIN
 set -euo pipefail
 # Only system folders: sudo below must never run a program from a folder you can write.
@@ -349,7 +357,7 @@ listeners_ok() {
 }
 case "\${1:-help}" in
   enroll) run enroll ;;
-  token) run mcp-token ;;
+  token) run token ;;
   keys) run keys ;;
   audit-check) run audit-check ;;
   update) shift; if [ "\${1:-}" = --now ]; then sudo "$BIN" --port "$PORT" install-service --auto-update-run --now; else sudo "$BIN" --port "$PORT" install-service --auto-update-run; fi ;;
@@ -358,14 +366,14 @@ case "\${1:-help}" in
     echo "auto-update:  \$(cat "$PREFIX/auto-update" 2>/dev/null || echo on)  (last: \$(cat "$PREFIX/update-status" 2>/dev/null || echo "not run yet"))"
     if listeners_ok; then echo "ok: only the gate ($SVC_USER) listens on port $PORT"; curl -q --max-time 5 -fsS "http://localhost:$PORT/api/status"; echo
     else echo "WARNING: something other than the gate is listening on port $PORT, or the gate is not running. Do not approve anything until this is fixed."; exit 1; fi ;;
-  logs) if [ -n "$LOGS" ]; then sudo tail -n 50 "$LOGS/gate.log"; else sudo journalctl -u phygital-key -n 50 --no-pager; fi ;;
-  *) echo "usage: phygital-key-admin enroll | token | keys | audit-check | status | logs | update [--now]" ;;
+  logs) if [ -n "$LOGS" ]; then sudo tail -n 50 "$LOGS/gate.log"; else sudo journalctl -u $P_BIN -n 50 --no-pager; fi ;;
+  *) echo "usage: $P_BIN-admin enroll | token | keys | audit-check | status | logs | update [--now]" ;;
 esac
 ADMINSCRIPT
 install -m 0755 -o root "$WORK/admin" "$ADMIN"
 if [ -d /usr/local/bin ] && root_only /usr/local/bin 2>/dev/null; then
   ln -sfn "$ADMIN" "$LINK"
-  HELPER=phygital-key-admin
+  HELPER="$P_BIN-admin"
 else
   HELPER="$ADMIN"
 fi
@@ -402,7 +410,7 @@ if [ "$OS" = mac ]; then
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>io.phygitalkey.gate</string>
+  <key>Label</key><string>$LABEL.gate</string>
   <key>UserName</key><string>$SVC_USER</string>
   <key>GroupName</key><string>$SVC_USER</string>
   <key>ProgramArguments</key>
@@ -418,7 +426,7 @@ if [ "$OS" = mac ]; then
 </plist>
 PLIST
   install -m 0644 -o root "$WORK/plist" "$UNIT"
-  launchctl bootout system/io.phygitalkey.gate 2>/dev/null || true
+  launchctl bootout system/$LABEL.gate 2>/dev/null || true
   # Wait until an old instance has really let go of the port.
   for _ in $(seq 1 50); do [ -z "$(listener_pids "$PORT")" ] && break; sleep 0.2; done
   ok=no
@@ -430,7 +438,7 @@ PLIST
 else
   cat > "$WORK/unit" <<UNITFILE
 [Unit]
-Description=Phygital Key approval gate
+Description=$P_NAME approval gate
 After=network.target
 
 [Service]
@@ -471,10 +479,10 @@ WantedBy=multi-user.target
 UNITFILE
   install -m 0644 -o root "$WORK/unit" "$UNIT"
   systemctl daemon-reload
-  systemctl enable phygital-key.service >/dev/null 2>&1
-  systemctl stop phygital-key.service 2>/dev/null || true
+  systemctl enable "$P_BIN.service" >/dev/null 2>&1
+  systemctl stop "$P_BIN.service" 2>/dev/null || true
   for _ in $(seq 1 50); do [ -z "$(listener_pids "$PORT")" ] && break; sleep 0.2; done
-  systemctl start phygital-key.service || true
+  systemctl start "$P_BIN.service" || true
 fi
 }
 
@@ -546,7 +554,7 @@ if [ "$AUTO" = on ]; then
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>io.phygitalkey.update</string>
+  <key>Label</key><string>$LABEL.update</string>
   <key>ProgramArguments</key>
   <array>
     <string>$BIN</string><string>--port</string><string>$PORT</string><string>install-service</string><string>--auto-update-run</string>
@@ -565,7 +573,7 @@ PLIST
   else
     cat > "$WORK/upd" <<UNITFILE
 [Unit]
-Description=Phygital Key daily update (signed releases only)
+Description=$P_NAME daily update (signed releases only)
 After=network-online.target
 Wants=network-online.target
 
@@ -577,7 +585,7 @@ ProtectHome=yes
 UNITFILE
     cat > "$WORK/timer" <<UNITFILE
 [Unit]
-Description=Phygital Key daily update check
+Description=$P_NAME daily update check
 
 [Timer]
 OnCalendar=daily
@@ -590,7 +598,7 @@ UNITFILE
     install -m 0644 -o root "$WORK/upd" "$UPD_UNIT"
     install -m 0644 -o root "$WORK/timer" "$UPD_TIMER"
     systemctl daemon-reload
-    systemctl enable --now phygital-key-update.timer >/dev/null 2>&1 || say "Note: could not start the daily update timer (systemctl)."
+    systemctl enable --now "$P_BIN-update.timer" >/dev/null 2>&1 || say "Note: could not start the daily update timer (systemctl)."
     UPDATES="daily, signed releases only (off: sudo $BIN install-service --no-auto-update)"
   fi
 else
@@ -598,7 +606,7 @@ else
 fi
 
 cat <<DONE
-Phygital Key is installed as a locked-down service.
+$P_NAME is installed as a locked-down service.
   approval page   http://localhost:$PORT
   runs as         $SVC_USER: you, and any AI acting as you, cannot change its program,
                   read its data or write its keys without your administrator password

@@ -19,18 +19,18 @@ On this page:
 The package is not published to npm yet. Install it from a clone of the repository:
 
 ```bash
-git clone https://github.com/Phygital-Key/phygital-key-mcp
+git clone https://github.com/Phygital-Key/phygital-key
 cd your-service
-npm install ../phygital-key-mcp/verifier-js
+npm install ../phygital-key/verifier-js
 ```
 
-npm records `"phygital-key-verify": "file:../phygital-key-mcp/verifier-js"` in your `package.json` and links the folder. Then:
+npm records `"phygital-key-verify": "file:../phygital-key/verifier-js"` in your `package.json` and links the folder. Then:
 
 ```js
 import { verify, MemorySeenStore, keyringFrom } from "phygital-key-verify";
 ```
 
-You can also import the file directly: `import { verify } from "./phygital-key-mcp/verifier-js/src/index.js"`.
+You can also import the file directly: `import { verify } from "./phygital-key/verifier-js/src/index.js"`.
 
 | Fact | Value |
 |---|---|
@@ -46,7 +46,7 @@ You can also import the file directly: `import { verify } from "./phygital-key-m
 import { readFileSync } from "node:fs";
 import { verify, MemorySeenStore, keyringFrom } from "phygital-key-verify";
 
-const keyring = keyringFrom(JSON.parse(readFileSync("keyring.json", "utf8"))); // from `phygital-key keys`
+const keyring = keyringFrom(JSON.parse(readFileSync("keyring.json", "utf8"))); // from `phygital-key-mcp keys`
 const config = { origins: ["https://approve.example.com"], rp_ids: ["approve.example.com"] };
 const seen = new MemorySeenStore(); // one process only
 

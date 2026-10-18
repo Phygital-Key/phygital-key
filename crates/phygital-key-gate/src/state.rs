@@ -37,6 +37,9 @@ const MAX_PER_MINUTE: usize = 30;
 /// Most requests held in memory at once (waiting, decided, or active standing).
 const MAX_STORED: usize = 5000;
 
+/// The gate, shared between the page, the agent protocol and timers.
+pub type Shared = std::sync::Arc<Gate>;
+
 /// Where and how the gate runs.
 #[derive(Debug, Clone)]
 pub struct Settings {
@@ -52,8 +55,10 @@ pub struct Settings {
     pub rp_id: String,
     /// Approval life in seconds.
     pub lifetime: i64,
-    /// Bearer token required on `/mcp` in HTTP mode (`None`: open, `--open-mcp`).
-    pub mcp_token: Option<String>,
+    /// Bearer token required on the agent endpoint in HTTP mode (`None`: open, `--no-token`).
+    pub access_token: Option<String>,
+    /// URL path of the agent endpoint (the product's protocol, e.g. `/mcp`).
+    pub agent_path: &'static str,
 }
 
 impl Settings {
@@ -433,7 +438,7 @@ impl Gate {
         if request.get("type").and_then(Value::as_str) == Some(phygital_key_verify::STANDING_TYPE)
             && !matches!(kind, Kind::Standing(_))
         {
-            return Err("\"standing\" is reserved: use request_standing_approval".into());
+            return Err("\"standing\" is reserved: ask for a standing approval instead".into());
         }
         if request.get("type").and_then(Value::as_str) == Some(phygital_key_verify::REVOKE_TYPE)
             && !matches!(kind, Kind::Revoke(_))
@@ -452,7 +457,10 @@ impl Gate {
         let mut inner = self.lock()?;
         let first_key = inner.keyring.keys.is_empty();
         if first_key && matches!(kind, Kind::Action | Kind::Standing(_)) {
-            return Err("No key is enrolled yet. Ask the person to run `phygital-key enroll` and add their passkey first.".into());
+            return Err(format!(
+                "No key is enrolled yet. Ask the person to run `{} enroll` and add their passkey first.",
+                crate::product().bin
+            ));
         }
         Self::forget_old(&mut inner, t);
         while inner.recent.front().is_some_and(|&x| x <= t - 60) {
@@ -822,10 +830,11 @@ impl Gate {
             .ok_or("This request was never approved.")?;
         // Only a receipt signed by the service's own pinned key counts. Without a
         // pinned key the gate cannot tell a real receipt from one the agent made up.
-        let key = self.service_key(&r.aud).ok_or(
+        let key = self.service_key(&r.aud).ok_or(format!(
             "No receipt key is pinned for this service, so the receipt cannot be checked. \
-             Pin it with `phygital-key trust-service`.",
-        )?;
+             Pin it with `{} trust-service`.",
+            crate::product().bin
+        ))?;
         let rec = if matches!(r.kind, Kind::Standing(_)) {
             // One receipt per use, for a use token this gate handed out.
             let use_id = receipt::peek(jws)
@@ -1026,7 +1035,10 @@ impl Gate {
                 .map_err(|e| format!("could not use up the enrollment token: {e}"))?;
             t + ENROLL_SECS
         } else {
-            return Err("This enrollment link is not valid or has expired. Run `phygital-key enroll` for a new one.".into());
+            return Err(format!(
+                "This enrollment link is not valid or has expired. Run `{} enroll` for a new one.",
+                crate::product().bin
+            ));
         };
         let session = EnrollSession {
             token_hash: Sha256::digest(token.as_bytes()).into(),
@@ -1066,7 +1078,10 @@ impl Gate {
         let t = now();
         let mut inner = self.lock()?;
         if !Self::session_ok(&inner, token, t) {
-            return Err("This enrollment link is not valid or has expired. Run `phygital-key enroll` for a new one.".into());
+            return Err(format!(
+                "This enrollment link is not valid or has expired. Run `{} enroll` for a new one.",
+                crate::product().bin
+            ));
         }
         let Some(session) = inner.enroll.as_ref() else {
             return Err("Start again: no enrollment in progress.".into());
@@ -1236,10 +1251,10 @@ impl Gate {
     }
 }
 
-/// The MCP access token for HTTP mode: made once, kept in `<home>/mcp-token`.
-pub fn mcp_token(settings: &Settings) -> Result<String, String> {
+/// The agent endpoint's access token for HTTP mode: made once, kept in `<home>/access-token`.
+pub fn access_token(settings: &Settings) -> Result<String, String> {
     util::private_dir(&settings.home)?;
-    let path = settings.home.join("mcp-token");
+    let path = settings.home.join("access-token");
     if let Ok(t) = std::fs::read_to_string(&path) {
         let t = t.trim().to_string();
         if t.len() >= 32 {

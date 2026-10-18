@@ -1,6 +1,6 @@
 # Standing approvals
 
-A [standing approval](glossary.md) lets an AI repeat one kind of action within limits you set, a few times, for a few days, without asking you each time. This page is for the person who approves one: what you agree to, how to read the limits, how uses show up, and how to revoke. Services that check them: see [integrate](integrate.md).
+A [standing approval](glossary.md) lets an AI repeat one kind of action within limits you set, a few times, for a few days, without asking you each time. This page is for the person who approves one: what you agree to, how to read the limits, how uses show up, and how to revoke. Services that check them: see [integrate](integrate.md). The agent's side is shown with the tool names of Phygital Key MCP (`request_approval`, `get_approval` and the rest); other products reach the same gate steps through their own protocol.
 
 **On this page:** [what you approve](#what-you-approve) · [in short](#the-in-short-summary) · [limits](#the-limits) · [each use](#each-use) · [how uses show](#how-uses-show) · [revoke](#revoke-in-two-steps) · [the 60 seconds](#what-still-works-for-up-to-60-seconds-and-why) · [when to use one](#when-to-use-one-and-when-not)
 

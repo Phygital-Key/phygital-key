@@ -35,7 +35,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      PHYGITAL_KEY_VERSION: v0.3.0
+      PHYGITAL_KEY_VERSION: v0.4.0
       # The approval page origin of the person's gate.
       GATE_ORIGIN: https://approve.example.com
       # The first key's fingerprint, learned once from the person (their gate's home page).
@@ -50,8 +50,8 @@ jobs:
 
       # install.sh checks that the release list is signed by a pinned release key
       # (with openssl, which ubuntu-latest has) and that the SHA-256 matches.
-      # It refuses a release without a signed list, so pin v0.3.0 or later.
-      - name: Install phygital-key (signed release list and SHA-256 checked)
+      # It refuses a release without a signed list. Phygital Key MCP releases start at v0.4.0.
+      - name: Install phygital-key-mcp (signed release list and SHA-256 checked)
         run: |
           curl -fsSL "https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/$PHYGITAL_KEY_VERSION/install.sh" | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -59,7 +59,7 @@ jobs:
       # The keyring comes from this workflow's own branch, reviewed like code.
       # Every key change in it must be signed, starting from the pinned fingerprint.
       - name: Check the keyring
-        run: phygital-key keys --check "$ROOT_FINGERPRINT" --file .phygital-key/keyring.json --signed-on "$GATE_ORIGIN"
+        run: phygital-key-mcp keys --check "$ROOT_FINGERPRINT" --file .phygital-key/keyring.json --signed-on "$GATE_ORIGIN"
 
       # Inputs reach the shell only through env, never pasted into the script.
       - name: Check the approval for this exact deploy
@@ -74,7 +74,7 @@ jobs:
           request="$(jq -cn --arg repo "$REPO" --arg commit "$COMMIT" --arg version "$VERSION" \
             '{type: "deploy", params: {repo: $repo, commit: $commit, env: "production", version: $version}}')"
           echo "request: $request"
-          phygital-key --home "$RUNNER_TEMP/phygital-key" --origin "$GATE_ORIGIN" verify \
+          phygital-key-mcp --home "$RUNNER_TEMP/phygital-key-mcp" --origin "$GATE_ORIGIN" verify \
             --approval "$APPROVAL" --request "$request" --aud "$AUD" --level high \
             --keyring .phygital-key/keyring.json
 

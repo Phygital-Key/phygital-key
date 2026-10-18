@@ -20,11 +20,11 @@ On this page:
 
 ## Install
 
-Add the crate from the repository as a git dependency. Pin a tag so a later change in `main` never reaches your build unseen.
+Add the crate from the base repository as a git dependency. Pin a commit (`rev`) so a later change in `main` never reaches your build unseen: the base makes no releases of its own (the products do), so there is no newer tag. The tags `v0.1.0` to `v0.3.0` from before the split are still there (`tag = "v0.3.0"` works and checks the same `pka.1` format).
 
 ```toml
 [dependencies]
-phygital-key-verify = { git = "https://github.com/Phygital-Key/phygital-key-mcp", tag = "v0.3.0" }
+phygital-key-verify = { git = "https://github.com/Phygital-Key/phygital-key", rev = "<commit>" }
 serde_json = "1"
 ```
 

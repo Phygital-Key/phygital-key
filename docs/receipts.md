@@ -1,6 +1,6 @@
 # Receipts
 
-A receipt is a service's signed answer to one approval: "done" or "it did not complete". This page is for service developers who want to sign receipts, and for anyone who checks them. It covers the exact format, signing in Rust, publishing the service key, pinning it on the gate, checking, receipts for standing approvals, what the person sees, and every failure case. Terms are in the [glossary](glossary.md).
+A receipt is a service's signed answer to one approval: "done" or "it did not complete". This page is for service developers who want to sign receipts, and for anyone who checks them. It covers the exact format, signing in Rust, publishing the service key, pinning it on the gate, checking, receipts for standing approvals, what the person sees, and every failure case. Terms are in the [glossary](glossary.md). The agent's side is shown with the tool names of Phygital Key MCP (`request_approval`, `get_approval` and the rest); other products reach the same gate steps through their own protocol.
 
 On this page:
 
@@ -87,7 +87,7 @@ A receipt is at most 4096 characters; longer input is refused before parsing.
 
 ```toml
 [dependencies]
-phygital-key-verify = { git = "https://github.com/Phygital-Key/phygital-key-mcp", tag = "v0.3.0" }
+phygital-key-verify = { git = "https://github.com/Phygital-Key/phygital-key", rev = "<commit>" }
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 ```
 
@@ -119,7 +119,7 @@ fn receipt_for(
 }
 ```
 
-Keep the receipt key like any service secret. Load it with `SigningKey::from_slice(&secret_32_bytes)`. The demo service makes a fresh key on every run (`crates/phygital-key/src/demo.rs`); a real service keeps one key, so pinned keys stay valid.
+Keep the receipt key like any service secret. Load it with `SigningKey::from_slice(&secret_32_bytes)`. The demo service makes a fresh key on every run (`crates/phygital-key-gate/src/demo.rs`); a real service keeps one key, so pinned keys stay valid.
 
 Return the receipt with your normal response, for example as a `receipt` field. The demo service answers:
 
@@ -151,9 +151,9 @@ In Rust, the SPKI text comes from `key.verifying_key().to_public_key_der()` (tra
 The person tells their gate which key signs receipts for your service:
 
 ```bash
-phygital-key trust-service --aud https://deploy.example.com --key MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
+phygital-key-mcp trust-service --aud https://deploy.example.com --key MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
 # or, with the key saved in a file:
-phygital-key trust-service --aud https://deploy.example.com --key @service-key.txt
+phygital-key-mcp trust-service --aud https://deploy.example.com --key @service-key.txt
 ```
 
 ```text
@@ -177,8 +177,8 @@ The demo pins its own service in memory, so receipts show up in the demo without
 |---|---|---|
 | Rust | `receipt::verify(jws, &service_key, iss, approval)` | One-time approvals |
 | Rust | `receipt::verify_use_receipt(jws, &service_key, iss, standing_approval, use_token)` | One use of a standing approval |
-| Command line | `phygital-key receipt-check --receipt ... --key ... --iss ... --approval ...` | One-time approvals |
-| Gate | `record_receipt` MCP tool | Both, with the pinned key |
+| Command line | `phygital-key-mcp receipt-check --receipt ... --key ... --iss ... --approval ...` | One-time approvals |
+| Gate | The agent hands it to the gate (in Phygital Key MCP, the `record_receipt` tool) | Both, with the pinned key |
 
 `receipt::verify` checks, in order:
 
@@ -200,7 +200,7 @@ println!("service reported: {}", r.status);
 From the command line:
 
 ```text
-$ phygital-key receipt-check --receipt @receipt.txt --key @service-key.txt --iss https://deploy.example.com --approval @approval.txt
+$ phygital-key-mcp receipt-check --receipt @receipt.txt --key @service-key.txt --iss https://deploy.example.com --approval @approval.txt
 {"error":null,"iat":1792273402,"ok":true,"status":"success"}
 ```
 
@@ -219,10 +219,10 @@ With a standing approval, the service signs one receipt per use:
 
 `receipt::verify_use_receipt` runs steps 1 to 5 above against the standing approval, then checks that the approval is of type `standing`, that `use_id` is present and equals the use token's `id`, that `request_hash` equals the use token's `request_hash`, and that the use token's `standing_id` equals `approval_id` (`MISMATCH` otherwise). It reads the use token's payload without checking its signature: pass a token you issued (the gate) or already checked with `verify_use` (a service).
 
-`receipt::verify` and `phygital-key receipt-check` refuse a receipt that carries a `use_id`:
+`receipt::verify` and `phygital-key-mcp receipt-check` refuse a receipt that carries a `use_id`:
 
 ```text
-$ phygital-key receipt-check --receipt @use-receipt.txt --key @service-key.txt --iss https://pay.example.com --approval @standing.txt
+$ phygital-key-mcp receipt-check --receipt @use-receipt.txt --key @service-key.txt --iss https://pay.example.com --approval @standing.txt
 {"error":"MISMATCH","ok":false}
 ```
 
@@ -243,7 +243,7 @@ The gate's audit log gets a `receipt` entry with the approval id, the use id (if
 
 | Case | Where | Result |
 |---|---|---|
-| No key pinned for the service | Gate, `record_receipt` | "No receipt key is pinned for this service, so the receipt cannot be checked. Pin it with `phygital-key trust-service`." |
+| No key pinned for the service | Gate, `record_receipt` | "No receipt key is pinned for this service, so the receipt cannot be checked. Pin it with `phygital-key trust-service`." (the message still names the 0.3 program; use your product's `trust-service`) |
 | A receipt the agent made up | Gate, CLI, library | `BAD_SIGNATURE` |
 | Signed by the service, about another approval | Gate, CLI, library | `MISMATCH` |
 | Wrong `iss` (another service) | Gate, CLI, library | `MISMATCH` |
@@ -257,7 +257,7 @@ The gate's audit log gets a `receipt` entry with the approval id, the use id (if
 | A use receipt without `use_id` | Gate | "This receipt names no use." |
 | `--key` is not a P-256 SPKI key | CLI | `phygital-key: --key is not a P-256 public key (SPKI DER, base64url)` |
 
-On the gate, a refused receipt comes back to the agent as "The receipt was not accepted (`<code>`)." The receipt unit test in `crates/phygital-key-verify/src/receipt.rs` covers another key, another service, another approval, `alg: none`, a reordered header, `success` with an error code, an unknown status, oversize input and a one-time receipt with a use id; `tests/units.rs` checks that per-use receipts are bound to their use. The end-to-end suite (`tests/e2e/run.mjs`) checks that the gate refuses a made-up receipt, records a receipt only once (for a one-time approval and for one use of a standing approval), and that `phygital-key receipt-check` accepts the demo service's real receipt and refuses it for another approval.
+On the gate, a refused receipt comes back to the agent as "The receipt was not accepted (`<code>`)." The receipt unit test in `crates/phygital-key-verify/src/receipt.rs` covers another key, another service, another approval, `alg: none`, a reordered header, `success` with an error code, an unknown status, oversize input and a one-time receipt with a use id; `tests/units.rs` checks that per-use receipts are bound to their use. The end-to-end suite (`tests/e2e/run.mjs`) checks that the gate refuses a made-up receipt, records a receipt only once (for a one-time approval and for one use of a standing approval), and that `phygital-key-mcp receipt-check` accepts the demo service's real receipt and refuses it for another approval.
 
 ## Next
 

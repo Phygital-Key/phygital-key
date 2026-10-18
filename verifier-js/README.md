@@ -13,8 +13,8 @@ Pre-audit, like the rest of the project.
 Not published to npm yet. Install from a clone:
 
 ```bash
-git clone https://github.com/Phygital-Key/phygital-key-mcp
-npm install ./phygital-key-mcp/verifier-js
+git clone https://github.com/Phygital-Key/phygital-key
+npm install ./phygital-key/verifier-js
 ```
 
 ## Example
@@ -22,7 +22,7 @@ npm install ./phygital-key-mcp/verifier-js
 ```js
 import { verify, MemorySeenStore, keyringFrom } from "phygital-key-verify";
 
-const keyring = keyringFrom(JSON.parse(keyringJson));            // from `phygital-key keys`
+const keyring = keyringFrom(JSON.parse(keyringJson));            // from `phygital-key-mcp keys`
 const config = { origins: ["https://approve.example.com"], rp_ids: ["approve.example.com"] };
 const seen = new MemorySeenStore();                                // one process only
 

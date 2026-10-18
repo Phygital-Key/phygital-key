@@ -20,7 +20,7 @@ You learn one value from the person, once: the **fingerprint** of their first ke
 
 $$\text{fingerprint} = \mathrm{base64url}\big(\mathrm{SHA256}(\text{SPKI DER of the first key's public key})\big)$$
 
-It is 43 characters, short enough to read out on a call or print on a card. The gate's home page shows it, and `phygital-key keys` prints it. From that one value and the approval page origin, you can check every later copy of the keyring. Whoever controls the website or the file cannot add a key without a signature from a key that was trusted at that point, and cannot bring back a removed key once you keep the last copy you accepted.
+It is 43 characters, short enough to read out on a call or print on a card. The gate's home page shows it, and `phygital-key-mcp keys` prints it. From that one value and the approval page origin, you can check every later copy of the keyring. Whoever controls the website or the file cannot add a key without a signature from a key that was trusted at that point, and cannot bring back a removed key once you keep the last copy you accepted.
 
 ```mermaid
 flowchart LR
@@ -164,7 +164,7 @@ Ways to narrow this:
 From the command line, with `--previous` for refetches:
 
 ```bash
-phygital-key keys --check Pp0IrvTI9djhcmFJeel-FJXJd1_u_tJ2R8j8hpMh1xo \
+phygital-key-mcp keys --check Pp0IrvTI9djhcmFJeel-FJXJd1_u_tJ2R8j8hpMh1xo \
   --file new.json --signed-on https://approve.example.com --previous accepted.json
 ```
 

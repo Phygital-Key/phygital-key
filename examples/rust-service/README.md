@@ -24,18 +24,18 @@ cargo build --manifest-path examples/rust-service/Cargo.toml
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `KEYRING` | (required) | The keyring file to trust, e.g. `~/.phygital-key/keyring.json`. Read once at start |
+| `KEYRING` | (required) | The keyring file to trust, e.g. `~/.phygital-key-mcp/keyring.json`. Read once at start |
 | `AUD` | `worker:db-maintenance` | This worker's audience id |
 | `GATE_ORIGIN` | `http://localhost:7468` | The approval page origin. Its host name is the allowed relying party id |
 
-1. Start the demo gate (`phygital-key demo`) and add your key with the link it prints.
+1. Start the demo gate (`phygital-key-mcp demo`) and add your key with the link it prints.
 2. Ask your AI app: *"Ask me to approve `{"type":"delete_rows","params":{"database":"shop","table":"sessions","older_than":"2026-01-01"}}` with audience worker:db-maintenance at level high, then give me the approval string."*
 3. Approve on the page, then put the approval in a jobs file and run the worker:
 
 ```bash
 APPROVAL='<approval string>'
 printf '{"approval":"%s","request":{"type":"delete_rows","params":{"database":"shop","table":"sessions","older_than":"2026-01-01"}}}\n' "$APPROVAL" > jobs.jsonl
-KEYRING=~/.phygital-key/keyring.json cargo run --manifest-path examples/rust-service/Cargo.toml < jobs.jsonl
+KEYRING=~/.phygital-key-mcp/keyring.json cargo run --manifest-path examples/rust-service/Cargo.toml < jobs.jsonl
 ```
 
 ## What you should see

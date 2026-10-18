@@ -1,11 +1,11 @@
-//! Signed releases and `phygital-key update`.
+//! Signed releases and `<program> update`.
 //!
 //! Every release carries `release.txt`, a short list of the release's files and
 //! their SHA-256, and `release.txt.sig`, an ECDSA P-256 (SHA-256) signature over
 //! it. The release key is a secret of the GitHub environment "release": the
 //! release workflow can use it only for `v*` tags, which only repository admins
-//! can push. The public release keys are pinned in `assets/install-service.sh`
-//! (one source for the shell installer and this program), so a download mirror,
+//! can push. The public release keys come from the product (`Product::release_keys`, the
+//! same keys its installers pin), so a download mirror,
 //! a swapped file or anyone who cannot push a release tag cannot make an update
 //! that installs.
 //!
@@ -24,10 +24,6 @@ use p256::ecdsa::signature::Verifier as _;
 use p256::ecdsa::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 
-/// The secure installer. Its pinned release keys are the ones this program trusts.
-pub const INSTALL_SCRIPT: &str = include_str!("../assets/install-service.sh");
-
-const REPO: &str = "Phygital-Key/phygital-key-mcp";
 const HEADER: &str = "phygital-key release manifest v1";
 const MAX_MANIFEST: usize = 8192;
 
@@ -81,20 +77,9 @@ impl Manifest {
     }
 }
 
-/// The pinned release keys (PEM `PUBLIC KEY` blocks in the installer).
+/// The running product's pinned release keys.
 pub fn pinned_keys() -> Vec<VerifyingKey> {
-    keys_from_pem(key_block(INSTALL_SCRIPT))
-}
-
-/// The text between `# BEGIN RELEASE KEYS` and `# END RELEASE KEYS` (empty if missing).
-fn key_block(text: &str) -> &str {
-    let (Some(a), Some(b)) = (
-        text.find("# BEGIN RELEASE KEYS"),
-        text.find("# END RELEASE KEYS"),
-    ) else {
-        return "";
-    };
-    text.get(a..b).unwrap_or("")
+    keys_from_pem(crate::product().release_keys)
 }
 
 /// Every P-256 `PUBLIC KEY` PEM block in `text`.
@@ -167,7 +152,7 @@ fn parse_manifest(text: &[u8]) -> Result<Manifest, String> {
     else {
         return bad("bad version line");
     };
-    let prefix = format!("phygital-key-{version}-");
+    let prefix = format!("{}-{version}-", crate::product().bin);
     let mut files: Vec<(String, String)> = Vec::new();
     for line in lines {
         let Some((hash, name)) = line.split_once("  ") else {
@@ -201,10 +186,10 @@ fn target() -> Result<String, String> {
     match std::env::consts::OS {
         "macos" => Ok(format!("{arch}-apple-darwin")),
         "linux" => Ok(format!("{arch}-unknown-linux-gnu")),
-        "windows" => Err(
-            "on Windows, update with Scoop (scoop update phygital-key), or download the new .zip from the Releases page"
-                .into(),
-        ),
+        "windows" => Err(format!(
+            "on Windows, update with Scoop (scoop update {}), or download the new .zip from the Releases page",
+            crate::product().bin
+        )),
         o => Err(format!("no release for this system ({o})")),
     }
 }
@@ -261,7 +246,10 @@ fn private_dir() -> Result<PathBuf, String> {
 
 /// Fetch and check the latest release list.
 fn latest(dir: &Path) -> Result<Manifest, String> {
-    let base = format!("https://github.com/{REPO}/releases/latest/download");
+    let base = format!(
+        "https://github.com/{}/releases/latest/download",
+        crate::product().repo
+    );
     let (m, s) = (dir.join("release.txt"), dir.join("release.txt.sig"));
     download(&format!("{base}/release.txt"), &m)?;
     download(&format!("{base}/release.txt.sig"), &s)?;
@@ -278,32 +266,37 @@ pub fn update(check_only: bool) -> Result<(), String> {
         .and_then(std::fs::canonicalize)
         .map_err(|e| format!("cannot find this program: {e}"))?;
     let shown = exe.display().to_string();
-    if shown.starts_with("/Library/PhygitalKey/") || shown.starts_with("/usr/lib/phygital-key/") {
-        return Err("this is the secure install: it updates itself every day. To update now: phygital-key-admin update".into());
+    let p = crate::product();
+    let bin = p.bin;
+    if shown.starts_with("/Library/PhygitalKey/") || shown.starts_with(&format!("/usr/lib/{bin}/"))
+    {
+        return Err(format!(
+            "this is the secure install: it updates itself every day. To update now: {bin}-admin update"
+        ));
     }
     if shown.contains("/Cellar/") || shown.contains("/homebrew/") || shown.contains("/linuxbrew/") {
-        return Err("installed with Homebrew: run  brew upgrade phygital-key".into());
+        return Err(format!("installed with Homebrew: run  brew upgrade {bin}"));
     }
     let target = target()?;
-    let current = Version::parse(env!("CARGO_PKG_VERSION")).ok_or("bad own version")?;
+    let current = Version::parse(p.version).ok_or("bad own version")?;
     let dir = private_dir()?;
     let result = (|| {
         let m = latest(&dir)?;
         if m.version <= current {
             println!(
-                "phygital-key {current} is up to date (latest signed release: {}).",
+                "{bin} {current} is up to date (latest signed release: {}).",
                 m.version
             );
             return Ok(());
         }
         if check_only {
             println!(
-                "phygital-key {} is available (you have {current}). Run: phygital-key update",
+                "{bin} {} is available (you have {current}). Run: {bin} update",
                 m.version
             );
             return Ok(());
         }
-        let name = format!("phygital-key-{}-{target}.tar.gz", m.version);
+        let name = format!("{bin}-{}-{target}.tar.gz", m.version);
         let want = m
             .sha256_of(&name)
             .ok_or_else(|| format!("the signed release list has no {name}"))?
@@ -311,8 +304,8 @@ pub fn update(check_only: bool) -> Result<(), String> {
         let tarball = dir.join(&name);
         download(
             &format!(
-                "https://github.com/{REPO}/releases/download/{}/{name}",
-                m.version
+                "https://github.com/{}/releases/download/{}/{name}",
+                p.repo, m.version
             ),
             &tarball,
         )?;
@@ -330,9 +323,7 @@ pub fn update(check_only: bool) -> Result<(), String> {
                 .arg(&dir),
             "unpacking",
         )?;
-        let new = dir
-            .join(name.trim_end_matches(".tar.gz"))
-            .join("phygital-key");
+        let new = dir.join(name.trim_end_matches(".tar.gz")).join(bin);
         let meta = std::fs::symlink_metadata(&new)
             .map_err(|_| "the release does not contain the program")?;
         if !meta.file_type().is_file() {
@@ -340,7 +331,7 @@ pub fn update(check_only: bool) -> Result<(), String> {
         }
         // Swap in place: write next to this program, then rename over it.
         // A fresh file (never one that was there before, or a link someone placed).
-        let staged = exe.with_file_name(".phygital-key.update");
+        let staged = exe.with_file_name(format!(".{bin}.update"));
         let _ = std::fs::remove_file(&staged);
         let mut opts = std::fs::OpenOptions::new();
         opts.write(true).create_new(true);
@@ -365,7 +356,7 @@ pub fn update(check_only: bool) -> Result<(), String> {
             exe.display(),
             m.version
         );
-        println!("Restart your AI app, or any running phygital-key serve, to use it.");
+        println!("Restart your AI app, or any running {bin} serve, to use it.");
         Ok(())
     })();
     let _ = std::fs::remove_dir_all(&dir);
@@ -483,20 +474,5 @@ mod tests {
         );
         assert_eq!(keys_from_pem(&text), vec![*k.verifying_key()]);
         assert!(keys_from_pem("nothing").is_empty());
-    }
-
-    #[test]
-    fn both_installers_pin_the_same_keys() {
-        let user = include_str!("../../../install.sh");
-        assert!(!key_block(INSTALL_SCRIPT).is_empty());
-        assert_eq!(key_block(INSTALL_SCRIPT), key_block(user));
-    }
-
-    #[test]
-    fn installer_pins_at_least_one_release_key() {
-        assert!(
-            !pinned_keys().is_empty(),
-            "no release key pinned in assets/install-service.sh: run scripts/release-key.sh"
-        );
     }
 }

@@ -1,6 +1,6 @@
 # Error codes
 
-Every refusal from a Phygital Key verifier is one code. This page is for service developers who log and return codes, and for agents that receive them. For each code: what it means, which check produces it, common causes, what a service should log and return, what an agent should do, and the test vectors that prove it. Terms are in the [glossary](glossary.md).
+Every refusal from a Phygital Key verifier is one code. This page is for service developers who log and return codes, and for agents that receive them. For each code: what it means, which check produces it, common causes, what a service should log and return, what an agent should do, and the test vectors that prove it. Terms are in the [glossary](glossary.md). The agent's side is shown with the tool names of Phygital Key MCP (`request_approval`, `get_approval` and the rest); other products reach the same gate steps through their own protocol.
 
 On this page:
 
@@ -189,7 +189,7 @@ Codes are safe to return to the agent: they name the failed check and carry noth
 
 ## Key-history codes
 
-Returned by `history::verify_history`, `history::verify_history_update` (Rust `HistoryError::code()`), `verifyHistory`, `verifyHistoryUpdate` (JavaScript) and `phygital-key keys --check`.
+Returned by `history::verify_history`, `history::verify_history_update` (Rust `HistoryError::code()`), `verifyHistory`, `verifyHistoryUpdate` (JavaScript) and `phygital-key-mcp keys --check`.
 
 | Code | Meaning | Vectors |
 |---|---|---|
@@ -204,7 +204,7 @@ Causes and the rule behind each: [key history](key-history.md#error-codes).
 
 ## Receipt codes
 
-Returned by `receipt::verify`, `receipt::verify_use_receipt` and `receipt::sign` (Rust `ReceiptError`, printed as below) and by `phygital-key receipt-check`.
+Returned by `receipt::verify`, `receipt::verify_use_receipt` and `receipt::sign` (Rust `ReceiptError`, printed as below) and by `phygital-key-mcp receipt-check`.
 
 | Code | Meaning | Causes |
 |---|---|---|
@@ -217,6 +217,6 @@ Details and the gate's own messages: [receipts](receipts.md#failure-cases).
 ## Next
 
 - [Integrate](integrate.md#what-to-log-and-what-to-answer)
-- [Agents](agents.md)
+- [Agents guide](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/agents.md) (Phygital Key MCP)
 - [Troubleshooting](troubleshooting.md)
 - [Spec, section 7](spec.md)

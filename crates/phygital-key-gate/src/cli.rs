@@ -1,56 +1,34 @@
-//! `phygital-key`: an approval gate for AI actions.
-//! A person approves one exact action with a passkey, fingerprint or hardware key;
-//! the service that acts checks the signed approval itself.
-
-#![forbid(unsafe_code)]
-
-mod audit;
-mod demo;
-mod mcp;
-mod seen;
-mod state;
-mod update;
-mod util;
-mod web;
+//! The shared commands of every Phygital Key product (`serve`, `enroll`, `keys`,
+//! `verify`, `install-service`, ...). The product names itself and adds its agent
+//! protocol through [`crate::Adapter`].
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use phygital_key_verify::{Config, Expected, Keyring, Level, verify};
-use rmcp::ServiceExt;
-use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 
-use crate::state::{Gate, Settings};
+use crate::product::{self, Adapter, Product, product};
+use crate::state::{self, Gate, Settings};
+use crate::{audit, demo, seen, update, util, web};
 
 #[derive(Parser)]
-#[command(
-    name = "phygital-key",
-    version,
-    about = "A person approves exact AI actions with a passkey or hardware key."
-)]
 struct Cli {
-    /// Data folder [env: PHYGITAL_KEY_HOME] [default: ~/.phygital-key]
+    /// Data folder [default: ~/.<program name>]
     #[arg(long, global = true)]
     home: Option<PathBuf>,
-    /// Port for the approval page (and /mcp in serve mode).
-    #[arg(long, global = true, env = "PHYGITAL_KEY_PORT", default_value_t = 7468)]
+    /// Port for the approval page (and the agent endpoint in serve mode).
+    #[arg(long, global = true, default_value_t = 7468)]
     port: u16,
     /// Address to listen on. Keep 127.0.0.1 unless a TLS proxy sits in front.
-    #[arg(
-        long,
-        global = true,
-        env = "PHYGITAL_KEY_BIND",
-        default_value = "127.0.0.1"
-    )]
+    #[arg(long, global = true, default_value = "127.0.0.1")]
     bind: String,
     /// Public origin of the approval page, e.g. https://approve.example.com [default: http://localhost:<port>]
-    #[arg(long, global = true, env = "PHYGITAL_KEY_ORIGIN")]
-    origin: Option<String>,
-    /// Serve /mcp without an access token (anyone on this machine could then create requests).
     #[arg(long, global = true)]
-    open_mcp: bool,
+    origin: Option<String>,
+    /// Serve the agent endpoint without an access token (anyone on this machine could then create requests).
+    #[arg(long, global = true)]
+    no_token: bool,
     /// Approval life in seconds (max 300).
     #[arg(long, global = true, default_value_t = phygital_key_verify::DEFAULT_LIFETIME_SECS)]
     lifetime: i64,
@@ -60,14 +38,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Run the gate for one MCP client over stdio (what most AI apps launch).
-    Mcp,
-    /// Run the gate over HTTP: approval page at / and MCP at /mcp.
+    /// Run the gate for one AI app over stdio (what most MCP apps launch).
+    Stdio,
+    /// Run the gate over HTTP: the approval page at / and the agent endpoint.
     Serve,
     /// Print a one-time link to add a passkey or hardware key (valid 10 minutes).
     Enroll,
-    /// Print the access token for the HTTP MCP endpoint, and how to add it to an AI app.
-    McpToken,
+    /// Print the access token for the agent endpoint, and how to connect an AI app or agent.
+    Token,
     /// Run the gate as its own locked-down system user (macOS, Linux). Needs sudo.
     InstallService {
         /// Remove the service (keeps keys and log unless --purge).
@@ -101,6 +79,13 @@ enum Command {
         /// Only say whether a newer release exists.
         #[arg(long)]
         check: bool,
+    },
+    /// Write the product's files made from the base templates (installers, install test, release scripts).
+    #[command(hide = true)]
+    ProductFiles {
+        /// Folder to write them to.
+        #[arg(long, default_value = ".")]
+        out: PathBuf,
     },
     /// Check a signed release list (used by the secure installer).
     #[command(hide = true)]
@@ -178,17 +163,17 @@ enum Command {
     Demo,
 }
 
-fn settings(cli: &Cli) -> Result<Settings, String> {
+fn settings(cli: &Cli, agent_path: &'static str) -> Result<Settings, String> {
     let home = match &cli.home {
         Some(h) => h.clone(),
-        None => match std::env::var_os("PHYGITAL_KEY_HOME") {
+        None => match std::env::var_os(product().env("HOME")) {
             Some(h) => PathBuf::from(h),
             None => PathBuf::from(
                 std::env::var_os("HOME")
                     .or_else(|| std::env::var_os("USERPROFILE"))
                     .ok_or("no home folder found; use --home")?,
             )
-            .join(".phygital-key"),
+            .join(format!(".{}", product().bin)),
         },
     };
     let origin = cli
@@ -216,7 +201,8 @@ fn settings(cli: &Cli) -> Result<Settings, String> {
         origin: origin.trim_end_matches('/').to_string(),
         rp_id,
         lifetime: cli.lifetime,
-        mcp_token: None,
+        access_token: None,
+        agent_path,
     })
 }
 
@@ -234,12 +220,14 @@ fn hint_enroll(gate: &Gate, print_link: bool) -> Result<(), String> {
         if print_link {
             let link = gate.issue_enroll_token()?;
             eprintln!(
-                "phygital-key: no key enrolled yet. Open this link to add your passkey (valid 10 minutes, works once):\n  {link}"
+                "{}: no key enrolled yet. Open this link to add your passkey (valid 10 minutes, works once):\n  {link}",
+                product().bin
             );
         } else {
             // In stdio mode stderr goes to the AI app's logs, so never print a token here.
+            let b = product().bin;
             eprintln!(
-                "phygital-key: no key enrolled yet. In your own terminal, run: phygital-key enroll (or phygital-key-admin enroll for the secure install)"
+                "{b}: no key enrolled yet. In your own terminal, run: {b} enroll (or {b}-admin enroll for the secure install)"
             );
         }
     }
@@ -257,49 +245,19 @@ fn prune_every_minute(gate: &Arc<Gate>) {
     });
 }
 
-fn mcp_http(gate: &Arc<Gate>) -> axum::Router {
-    let hosts = vec![
-        "localhost".to_string(),
-        "127.0.0.1".to_string(),
-        "::1".to_string(),
-        gate.settings.rp_id.clone(),
-    ];
-    let g = gate.clone();
-    let service: StreamableHttpService<mcp::GateMcp, LocalSessionManager> =
-        StreamableHttpService::new(
-            move || Ok(mcp::GateMcp::new(g.clone())),
-            Default::default(),
-            // MCP clients are not browsers: refuse any request that carries a browser Origin.
-            StreamableHttpServerConfig::default()
-                .with_allowed_hosts(hosts)
-                .enforce_origin_validation(),
-        );
-    axum::Router::new().nest_service("/mcp", service)
-}
-
-/// How to add the HTTP MCP endpoint to an AI app.
-fn mcp_hint(s: &Settings) -> String {
-    match &s.mcp_token {
-        Some(t) => format!(
-            "  MCP endpoint    {o}/mcp  (needs header  Authorization: Bearer {t})\n  Claude Code:    claude mcp add --transport http phygital-key {o}/mcp --header \"Authorization: Bearer {t}\"",
-            o = s.origin
-        ),
-        None => format!(
-            "  MCP endpoint    {}/mcp  (open: no access token)",
-            s.origin
-        ),
+/// The approval page plus the adapter's routes, for serve and demo.
+fn app(gate: &Arc<Gate>, adapter: &Arc<dyn Adapter>) -> axum::Router {
+    let mut extra = adapter.router(gate.clone());
+    if let Some(public) = adapter.public_router(gate.clone()) {
+        extra = extra.merge(public);
     }
+    web::router(gate.clone(), Some(extra))
 }
 
-async fn run(cli: Cli) -> Result<(), String> {
-    let mut s = settings(&cli)?;
-    if !cli.open_mcp
-        && matches!(
-            cli.command,
-            Command::Serve | Command::Demo | Command::McpToken
-        )
-    {
-        s.mcp_token = Some(state::mcp_token(&s)?);
+async fn run_cli(cli: Cli, adapter: Arc<dyn Adapter>) -> Result<(), String> {
+    let mut s = settings(&cli, adapter.path())?;
+    if !cli.no_token && matches!(cli.command, Command::Serve | Command::Demo | Command::Token) {
+        s.access_token = Some(state::access_token(&s)?);
     }
     match cli.command {
         Command::InstallService {
@@ -312,7 +270,7 @@ async fn run(cli: Cli) -> Result<(), String> {
             auto_update_run,
             now,
         } => {
-            const SCRIPT: &str = update::INSTALL_SCRIPT;
+            let script = product::install_service_script(product());
             let mut args = vec!["-s".to_string(), "--".to_string()];
             for (on, flag) in [
                 (uninstall, "--uninstall"),
@@ -344,7 +302,7 @@ async fn run(cli: Cli) -> Result<(), String> {
                 // program file is yours, so it is never what gets installed as root.
                 .env(
                     "PKA_VERSION",
-                    release.unwrap_or_else(|| concat!("v", env!("CARGO_PKG_VERSION")).to_string()),
+                    release.unwrap_or_else(|| format!("v{}", product().version)),
                 )
                 .env(
                     "PKA_BINARY",
@@ -357,7 +315,7 @@ async fn run(cli: Cli) -> Result<(), String> {
             if let Some(mut stdin) = child.stdin.take() {
                 use std::io::Write;
                 stdin
-                    .write_all(SCRIPT.as_bytes())
+                    .write_all(script.as_bytes())
                     .map_err(|e| e.to_string())?;
             }
             let status = child.wait().map_err(|e| e.to_string())?;
@@ -366,10 +324,27 @@ async fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+        Command::ProductFiles { out } => {
+            for (name, text) in product::product_files(product(), adapter.path()) {
+                let path = out.join(name);
+                if let Some(dir) = path.parent() {
+                    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+                }
+                std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+                        .map_err(|e| e.to_string())?;
+                }
+                println!("wrote {}", path.display());
+            }
+            Ok(())
+        }
         Command::Update { check } => update::update(check),
         Command::ReleaseCheck { file, sig } => update::release_check(&file, &sig),
-        Command::McpToken => {
-            println!("{}", mcp_hint(&s));
+        Command::Token => {
+            println!("{}", adapter.connect_hint(&s));
             Ok(())
         }
         Command::Enroll => {
@@ -378,7 +353,8 @@ async fn run(cli: Cli) -> Result<(), String> {
                 "Open this link in your browser to add a passkey or hardware key (valid 10 minutes, works once):\n\n  {link}\n"
             );
             println!(
-                "The gate must be running (phygital-key serve, or your AI app running phygital-key mcp)."
+                "The gate must be running ({} serve, or your AI app running it).",
+                product().bin
             );
             Ok(())
         }
@@ -559,47 +535,48 @@ async fn run(cli: Cli) -> Result<(), String> {
                 }
             }
         }
-        Command::Mcp => {
+        Command::Stdio => {
             let gate = Gate::open(s)?;
+            let Some(protocol) = adapter.stdio(gate.clone()) else {
+                return Err(format!(
+                    "{} has no stdio mode: run `{} serve`",
+                    product().name,
+                    product().bin
+                ));
+            };
             hint_enroll(&gate, false)?;
             prune_every_minute(&gate);
-            let app = web::router(gate.clone(), None);
-            // The approval page and the MCP side live and die together. If the page
+            // The approval page and the agent side live and die together. If the page
             // cannot run (its address is taken, perhaps by something pretending to
-            // be the gate), MCP must not keep handing out links to that address.
-            let page = web::serve(gate.clone(), app);
-            let mcp_side = async {
-                let server = mcp::GateMcp::new(gate)
-                    .serve(rmcp::transport::stdio())
-                    .await
-                    .map_err(|e| format!("mcp: {e}"))?;
-                server.waiting().await.map_err(|e| format!("mcp: {e}"))?;
-                Ok::<(), String>(())
-            };
+            // be the gate), the agent side must not keep handing out links to it.
+            let page = web::serve(gate.clone(), web::router(gate.clone(), None));
             tokio::select! {
                 r = page => r.map_err(|e| format!("approval page: {e}")),
-                r = mcp_side => r,
+                r = protocol => r,
             }
         }
         Command::Serve => {
             let gate = Gate::open(s)?;
             // serve often runs as a service whose output goes to a log file:
-            // never print the enrollment link or the MCP token there.
+            // never print the enrollment link or the access token there.
             hint_enroll(&gate, false)?;
             prune_every_minute(&gate);
-            let mcp_line = if gate.settings.mcp_token.is_some() {
+            let endpoint = if gate.settings.access_token.is_some() {
                 format!(
-                    "  MCP endpoint    {}/mcp  (access token: run  phygital-key mcp-token)",
-                    gate.settings.origin
+                    "  agent endpoint  {}{}  (access token: run  {} token)",
+                    gate.settings.origin,
+                    adapter.path(),
+                    product().bin
                 )
             } else {
-                mcp_hint(&gate.settings)
+                adapter.connect_hint(&gate.settings)
             };
             eprintln!(
-                "phygital-key\n  approval page   {}\n{mcp_line}",
+                "{}\n  approval page   {}\n{endpoint}",
+                product().bin,
                 gate.settings.origin
             );
-            let app = web::router(gate.clone(), Some(mcp_http(&gate)));
+            let app = app(&gate, &adapter);
             web::serve(gate, app).await
         }
         Command::Demo => {
@@ -626,26 +603,67 @@ async fn run(cli: Cli) -> Result<(), String> {
                 let _ = axum::serve(listener, demo::router(demo).into_make_service()).await;
             });
             eprintln!(
-                "phygital-key demo\n  approval page   {}\n{}\n  demo service    {demo_aud}  (fake deploy, payment, send_message)\n\
-                 Add the MCP endpoint to your AI app, then ask it to deploy `api` 2.4.1 to production through the demo service.",
+                "{} demo\n  approval page   {}\n{}\n  demo service    {demo_aud}  (fake deploy, payment, send_message)\n{}",
+                product().bin,
                 s.origin,
-                mcp_hint(&s)
+                adapter.connect_hint(&s),
+                adapter.demo_hint()
             );
-            let app = web::router(gate.clone(), Some(mcp_http(&gate)));
+            let app = app(&gate, &adapter);
             web::serve(gate, app).await
         }
     }
 }
 
-#[tokio::main]
-async fn main() {
-    let cli = Cli::parse();
-    // Exit right away when done: the stdio reader runs on a blocking thread that
+fn leak(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
+
+/// Run the product: parse the command line and do it. Never returns.
+pub fn run(p: &'static Product, adapter: impl Adapter) -> ! {
+    product::set(p);
+    let adapter: Arc<dyn Adapter> = Arc::new(adapter);
+    let mut cmd = Cli::command()
+        .name(p.bin)
+        .bin_name(p.bin)
+        .version(p.version)
+        .about(p.about)
+        .mut_arg("port", |a| {
+            a.default_value(leak(p.port.to_string()))
+                .env(leak(p.env("PORT")))
+        })
+        .mut_arg("bind", |a| a.env(leak(p.env("BIND"))))
+        .mut_arg("origin", |a| a.env(leak(p.env("ORIGIN"))))
+        .mut_arg("home", |a| {
+            a.help(leak(format!(
+                "Data folder [env: {}] [default: ~/.{}]",
+                p.env("HOME"),
+                p.bin
+            )))
+        });
+    if !adapter.has_stdio() {
+        cmd = cmd.mut_subcommand("stdio", |c| c.hide(true));
+    }
+    let cli = match Cli::from_arg_matches(&cmd.get_matches()) {
+        Ok(c) => c,
+        Err(e) => e.exit(),
+    };
+    let rt = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("{}: {e}", p.bin);
+            std::process::exit(1);
+        }
+    };
+    // Exit right away when done: a stdio reader runs on a blocking thread that
     // would otherwise keep the process alive while its input pipe stays open.
-    match run(cli).await {
+    match rt.block_on(run_cli(cli, adapter)) {
         Ok(()) => std::process::exit(0),
         Err(e) => {
-            eprintln!("phygital-key: {e}");
+            eprintln!("{}: {e}", p.bin);
             std::process::exit(1);
         }
     }

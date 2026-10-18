@@ -27,4 +27,4 @@ body:
     id: version
     attributes:
       label: Version
-      description: "The output of `phygital-key --version`, if you have it installed"
+      description: "The output of `phygital-key-mcp --version` (or `phygital-key-a2a --version`), if you have it installed"

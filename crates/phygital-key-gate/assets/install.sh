@@ -1,18 +1,27 @@
 #!/bin/sh
-# Install phygital-key on macOS or Linux.
+# Install a Phygital Key product on macOS or Linux (the PRODUCT block below says
+# which). Generated from the template in Phygital-Key/phygital-key.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/<product repo>/main/install.sh | sh
 #
 # Downloads the latest release for this machine from GitHub, checks that its
-# release list is signed by a pinned release key and that the SHA-256 matches, and puts `phygital-key` in ~/.local/bin (or $PHYGITAL_KEY_BIN_DIR).
+# release list is signed by a pinned release key and that the SHA-256 matches, and puts the program in ~/.local/bin (or $PHYGITAL_KEY_BIN_DIR).
 # Set PHYGITAL_KEY_VERSION=v0.3.0 (or later: earlier releases have no signed list) to pin a version. Nothing else is touched.
 set -eu
 
-REPO="Phygital-Key/phygital-key-mcp"
+# BEGIN PRODUCT
+P_NAME="Phygital Key"
+P_BIN=phygital-key
+P_ID=dev
+P_REPO=Phygital-Key/phygital-key
+P_PORT=7468
+P_VERSION=v0.0.0
+# END PRODUCT
+REPO="$P_REPO"
 BIN_DIR="${PHYGITAL_KEY_BIN_DIR:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*" >&2; }
-fail() { say "phygital-key install: $*"; exit 1; }
+fail() { say "$P_BIN install: $*"; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "needs $1"; }
 need curl
 need tar
@@ -33,10 +42,6 @@ target="$arch-$os"
 # Pinned release keys (P-256), the same block as in the secure installer.
 # BEGIN RELEASE KEYS
 RELEASE_KEYS='
------BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE20rJyJxya04dIg9glW3+S/9A8eCS
-qxHS4ARIaSSaF5lWATAX8cDl2JleS2qtDcKNsJB0wCWDqExQfgyIrIfc5w==
------END PUBLIC KEY-----
 '
 # END RELEASE KEYS
 
@@ -71,7 +76,7 @@ got="$(sed -n 2p "$tmp/release.txt" | sed -n 's/^version \(v[0-9][0-9]*\.[0-9][0
 [ -z "$version" ] || [ "$got" = "$version" ] || fail "the signed release list is for $got, not $version"
 version="$got"
 
-name="phygital-key-$version-$target"
+name="$P_BIN-$version-$target"
 expected="$(awk -v n="$name.tar.gz" '$2 == n && length($1) == 64 { print $1 }' "$tmp/release.txt")"
 [ -n "$expected" ] || fail "the signed release list has no $name.tar.gz"
 
@@ -86,11 +91,11 @@ fi
 
 tar --no-same-owner -xzf "$tmp/$name.tar.gz" -C "$tmp"
 mkdir -p "$BIN_DIR"
-install -m 0755 "$tmp/$name/phygital-key" "$BIN_DIR/phygital-key"
-say "Installed $BIN_DIR/phygital-key ($version)"
+install -m 0755 "$tmp/$name/$P_BIN" "$BIN_DIR/$P_BIN"
+say "Installed $BIN_DIR/$P_BIN ($version)"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) say "Add it to your PATH: export PATH=\"$BIN_DIR:\$PATH\"" ;;
 esac
-say "Try it: phygital-key demo"
-say "Update later with: phygital-key update"
+say "Try it: $P_BIN demo"
+say "Update later with: $P_BIN update"

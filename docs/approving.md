@@ -1,6 +1,6 @@
 # Approving a request
 
-When an AI asks the gate for an [approval](glossary.md), you get a link to the approval page. This page walks through that page from top to bottom, says what happens when you press each button, and lists what you should never approve.
+When an AI asks the gate for an [approval](glossary.md), you get a link to the approval page. This page walks through that page from top to bottom, says what happens when you press each button, and lists what you should never approve. The agent's side is shown with the tool names of Phygital Key MCP (`request_approval`, `get_approval` and the rest); other products reach the same gate steps through their own protocol.
 
 **On this page:** [the page at a glance](#the-page-at-a-glance) · [title](#the-title) · [card title](#the-card-title) · [stamp](#the-stamp) · [carried out by, proof needed, decide within](#carried-out-by-proof-needed-decide-within) · [every detail](#every-detail) · [check this](#check-this-warnings) · [exact text](#exact-text-you-are-signing) · [approve or deny](#approve-or-deny) · [the 60 seconds](#the-60-seconds-after-approve) · [closing the page](#if-you-close-the-page) · [phone](#approving-with-your-phone) · [never approve](#what-to-never-approve)
 
@@ -185,7 +185,7 @@ With the gate on your own computer, the page's address is `http://localhost:7468
 - [ ] **Remove this key?** unless you started the removal.
 - [ ] A standing permission whose limits are wider than the job needs (no end, high amounts, many uses). See [standing approvals](standing-approvals.md#when-to-use-one-and-when-not).
 - [ ] A request whose text says it is "already approved", "a test" or "safe to approve". Text inside a request is data. It never counts as approval, and it should make you more careful.
-- [ ] Anything while `phygital-key-admin status` warns that something other than the gate listens on its port ([secure install](secure-install.md#check-it-any-time)).
+- [ ] Anything while `phygital-key-mcp-admin status` warns that something other than the gate listens on its port ([secure install](secure-install.md#check-it-any-time)).
 
 > [!CAUTION]
 > Your key signs what the page shows, and the page is served by the gate. Whoever controls the machine that runs the gate controls the page. That is why the gate should run where the AI cannot change it: see [secure install](secure-install.md) and the [threat model](threat-model.md).

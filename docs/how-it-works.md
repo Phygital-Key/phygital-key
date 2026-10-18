@@ -1,6 +1,6 @@
 # How it works
 
-This page explains Phygital Key in plain words: who does what, what happens during one approval, and why the yes cannot be faked. It is for anyone, technical or not. Contributors who want the inside of the program should read [architecture](architecture.md) next.
+This page explains Phygital Key in plain words: who does what, what happens during one approval, and why the yes cannot be faked. It is for anyone, technical or not. Contributors who want the inside of the program should read [architecture](architecture.md) next. The agent's side is shown with the tool names of Phygital Key MCP (`request_approval`, `get_approval` and the rest); other products reach the same gate steps through their own protocol.
 
 ## The idea
 
@@ -13,18 +13,18 @@ The yes is a small signed note called an [approval](glossary.md#approval). The s
 | Role | Who | What it does | What it can never do |
 |---|---|---|---|
 | Requester | The AI agent, or any app | Asks for a yes for one exact [request](glossary.md#request) | Hold the person's key, or approve |
-| [Gate](glossary.md#gate) | `phygital-key`, on your computer or a server | Shows the request on the [approval page](approval-page.md), collects the signature, hands back the approval | Create a yes by itself: it has no private key |
+| [Gate](glossary.md#gate) | A product's program (`phygital-key-mcp` or `phygital-key-a2a`), on your computer or a server | Shows the request on the [approval page](approval-page.md), collects the signature, hands back the approval | Create a yes by itself: it has no private key |
 | Approver | You, with your key | Reads the request, then approves with your key or says no | Be asked to sign something the page does not show (the page checks this, see [approval page](approval-page.md)) |
 | [Verifier](glossary.md#verifier) | The service that does the work | Checks the approval before acting | Accept an approval meant for another service, another request or a weaker [level](glossary.md#level) than it requires |
 
-The gate talks to AI apps through MCP (the Model Context Protocol), so any AI app that supports MCP can use it. The verifier is a small library in Rust or JavaScript, or one command (`phygital-key verify`). The two verifiers share no code and pass the same [test vectors](../test-vectors/README.md).
+The gate talks to AI apps through the agent protocol of its product: Phygital Key MCP speaks MCP (the Model Context Protocol), so any AI app that supports MCP can use it, and Phygital Key A2A, which is new, speaks A2A. Everything else (the page, keys, standing approvals, receipts, the audit log) is the same shared base. The verifier is a small library in Rust or JavaScript, or one command (`phygital-key-mcp verify`). The two verifiers share no code and pass the same [test vectors](../test-vectors/README.md).
 
 ## One approval, step by step
 
 ```mermaid
 sequenceDiagram
     participant A as Agent
-    participant G as Gate (phygital-key)
+    participant G as Gate (phygital-key-mcp)
     participant P as You (approval page and key)
     participant S as Service (verifier)
     A->>G: request_approval(request, aud, level)
@@ -71,9 +71,9 @@ Each reason below is a mechanism in the code, with the test that proves it.
 | Look-alike text fails | Text is compared byte for byte. Text that is not in Unicode NFC is refused, never rewritten. | Vectors `unicode_homoglyph` (`REQUEST_MISMATCH`), `kelvin_sign_payee_refused` (`MALFORMED`) |
 | Fake pages do not work | Passkeys sign only for the real address of the gate, and the verifier checks the page origin and the RP ID hash. | Vectors `wrong_origin`, `wrong_rp_id`, `cross_origin_frame` (`BAD_SIGNATURE`) |
 | Text in a request is never a yes | A request is data. Only a signature counts. | Vector `prompt_injection_is_data` (`APPROVAL_REQUIRED`) |
-| The AI cannot change the gate | With the secure install, the gate runs as its own system user: the AI, even acting as you, cannot change its program, read its data or write its keys. Only the administrator password can. | `tests/secure-install.sh`: installs it for real on macOS and Linux in CI on every push to `main` and every pull request, then checks this user cannot change the program, read the data folder or write the keyring |
+| The AI cannot change the gate | With the secure install, the gate runs as its own system user: the AI, even acting as you, cannot change its program, read its data or write its keys. Only the administrator password can. | Each product's `tests/secure-install.sh`: installs it for real on macOS and Linux in CI on every push to `main` and every pull request, then checks this user cannot change the program, read the data folder or write the keyring |
 
-The full list of the 123 shared vectors is in [test vectors](../test-vectors/README.md). The end-to-end suite (108 checks) drives a real browser with a virtual passkey and the official MCP SDK, and tries each attack an agent can make through the gate and the page. See [testing](testing.md).
+The full list of the 123 shared vectors is in [test vectors](../test-vectors/README.md). Phygital Key MCP's end-to-end suite (108 checks) drives a real browser with a virtual passkey and the official MCP SDK, and tries each attack an agent can make through the gate and the page. See [testing](testing.md).
 
 ## Standing approvals
 
@@ -89,7 +89,7 @@ You can revoke it at any time. The gate throws the use key away at once, so no n
 
 ## Keys
 
-- **Your first key** is added through a one-time link that only your own terminal prints (`phygital-key enroll`). The link works for 10 minutes. The first key then signs its own addition, which proves it works and starts the [key history](glossary.md#key-history).
+- **Your first key** is added through a one-time link that only your own terminal prints (`phygital-key-mcp enroll`). The link works for 10 minutes. The first key then signs its own addition, which proves it works and starts the [key history](glossary.md#key-history).
 - **Adding or removing a key** later is itself an approval at level `high`, signed by a key you already trust. A new key can never approve itself. The last key cannot be removed.
 - **Your key list is signed.** Anyone who knows one short [fingerprint](glossary.md#fingerprint) (shown on the gate's home page) can check the whole list and spot an old copy.
 
@@ -97,7 +97,7 @@ Details: [keys and devices](keys-and-devices.md), [key history](key-history.md),
 
 ## Receipts
 
-After acting, a service can send back a signed [receipt](glossary.md#receipt): "done" or "failed", pointing at your approval by hash. The agent carries it back to the gate, so the gate records it only if it is signed by the receipt key you pinned for that service (`phygital-key trust-service`). Only then does the approval page say "The service reported: done." Details: [receipts](receipts.md).
+After acting, a service can send back a signed [receipt](glossary.md#receipt): "done" or "failed", pointing at your approval by hash. The agent carries it back to the gate, so the gate records it only if it is signed by the receipt key you pinned for that service (`phygital-key-mcp trust-service`). Only then does the approval page say "The service reported: done." Details: [receipts](receipts.md).
 
 ## Updates
 

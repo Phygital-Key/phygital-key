@@ -5,15 +5,15 @@ body:
   - type: markdown
     attributes:
       value: |
-        Issues are public. Never paste your MCP access token (`phygital-key mcp-token`), an enrollment link, a private key, or a request that holds a real secret.
+        Issues are public. Never paste your access token (`phygital-key-mcp token`), an enrollment link, a private key, or a request that holds a real secret.
         Approvals and receipts are signed, not secret, but they show the request they cover: remove anything private from them first.
-        If someone could make a service act without a real yes, don't open an issue: [report it privately](https://github.com/Phygital-Key/phygital-key-mcp/security/advisories/new).
+        If someone could make a service act without a real yes, don't open an issue: [report it privately](https://github.com/Phygital-Key/phygital-key/security/advisories/new).
   - type: input
     id: version
     attributes:
       label: Version
-      description: "The output of `phygital-key --version`"
-      placeholder: "phygital-key 0.3.0"
+      description: "The product and the output of its `--version`, for example `phygital-key-mcp --version`"
+      placeholder: "phygital-key-mcp 0.4.0"
     validations:
       required: true
   - type: dropdown
@@ -21,9 +21,9 @@ body:
     attributes:
       label: How you run it
       options:
-        - "phygital-key mcp (started by my AI app)"
-        - "phygital-key serve (HTTP)"
-        - "phygital-key demo"
+        - "phygital-key-mcp stdio (started by my AI app)"
+        - "serve (HTTP), Phygital Key MCP or A2A"
+        - "demo"
         - "Secure install on macOS"
         - "Secure install on Linux"
         - "On Windows"
@@ -42,7 +42,7 @@ body:
     id: status
     attributes:
       label: Secure install status (if you use it)
-      description: "The output of `phygital-key-admin status`: program version, automatic updates on or off, and the last update result."
+      description: "The output of `phygital-key-mcp-admin status` (or `phygital-key-a2a-admin status`): program version, automatic updates on or off, and the last update result."
       render: text
   - type: input
     id: app
@@ -67,7 +67,7 @@ body:
       label: Steps to reproduce
       description: The exact commands or clicks, in order.
       placeholder: |
-        1. phygital-key demo
+        1. phygital-key-mcp demo
         2. ...
     validations:
       required: true

@@ -26,7 +26,7 @@ The `aud` claim: who will act on the approval, such as `https://deploy.example.c
 
 ### Automatic update
 
-The secure install's daily job (`io.phygitalkey.update` on macOS, `phygital-key-update.timer` on Linux) that installs a newer release only if its release list is signed by a pinned release key, and switches back to the previous program if the new gate does not start. On by default; `--no-auto-update` turns it off. See [architecture](architecture.md#the-daily-job).
+The secure install's daily job (`io.phygitalkey.<id>.update` on macOS, `<program>-update.timer` on Linux, for example `io.phygitalkey.mcp.update` and `phygital-key-mcp-update.timer`) that installs a newer release only if its release list is signed by a pinned release key, and switches back to the previous program if the new gate does not start. On by default; `--no-auto-update` turns it off. See [architecture](architecture.md#the-daily-job).
 
 ### Canonical form
 
@@ -38,7 +38,7 @@ The 32 bytes the person's key signs: SHA-256 of `phygital-key/approval/v1`, a ze
 
 ### Elicitation
 
-An MCP feature that lets a server ask the client to show something to the person. The gate uses URL-mode elicitation to offer the approval page link; "accept" there only means the page was opened, never a yes. See [connect your AI](connect-your-ai.md).
+An MCP feature that lets a server ask the client to show something to the person. Phygital Key MCP uses URL-mode elicitation to offer the approval page link; "accept" there only means the page was opened, never a yes. See [connect your AI](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md).
 
 ### ES256
 
@@ -50,7 +50,7 @@ The base64url SHA-256 of a key's SPKI public key. Pinning the first key's finger
 
 ### Gate
 
-The `phygital-key` program: the MCP server plus the approval page, with the state behind them. It shows requests and collects signatures but can never create a yes by itself. See [architecture](architecture.md).
+A product's program (`phygital-key-mcp`, `phygital-key-a2a`): the agent endpoint plus the approval page, with the state behind them, all built on the base's gate engine (`phygital-key-gate`). It shows requests and collects signatures but can never create a yes by itself. See [architecture](architecture.md).
 
 ### JCS
 
@@ -78,7 +78,7 @@ How strongly the person proved it was them: `medium` (a touch, user presence) or
 
 ### MCP
 
-The Model Context Protocol, the standard way AI apps call tools. The gate is an MCP server with six tools, none of which can approve. See [tools](tools.md).
+The Model Context Protocol, the standard way AI apps call tools. Phygital Key MCP is an MCP server with six tools, none of which can approve. See [tools](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/tools.md).
 
 ### NFC
 
@@ -102,7 +102,7 @@ The service's signed answer after acting: `success` or `error`, pointing at the 
 
 ### Release key
 
-The ECDSA P-256 key that signs each release's release list. It is the secret `RELEASE_SIGNING_KEY` of the GitHub environment `release`, made once by the repository owner with `scripts/release-key.sh` (which keeps no local copy), and GitHub gives it only to a release run from a `v*` tag, which only repository admins can push (no approval click for now, decision 36). Its public key is pinned in `install-service.sh` and `install.sh`. See [architecture](architecture.md#pinned-release-keys).
+The ECDSA P-256 key that signs each release's release list. Each product has its own: the secret `RELEASE_SIGNING_KEY` of the GitHub environment `release` in the product's repository, made once by the repository owner with the product's `scripts/release-key.sh` (which keeps no local copy), and GitHub gives it only to a release run from a `v*` tag, which only repository admins can push (no approval click for now, decision 36). Its public key is pinned in the product's `release-keys.pem`, `install-service.sh` and `install.sh`. The base has none. See [architecture](architecture.md#pinned-release-keys).
 
 ### Release list
 
@@ -138,11 +138,11 @@ A one-time `high` approval of limits rather than one action: the same type of ac
 
 ### stdio
 
-Standard input and output: the MCP transport most AI apps use when they start the gate themselves (`phygital-key mcp`). Only the app that started the gate can talk to it, so no access token is needed. See [connect your AI](connect-your-ai.md).
+Standard input and output: the MCP transport most AI apps use when they start the gate themselves (`phygital-key-mcp stdio`). Only the app that started the gate can talk to it, so no access token is needed. See [connect your AI](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md).
 
 ### Streamable HTTP
 
-The MCP transport over HTTP. `phygital-key serve` offers it at `/mcp`, protected by an access token and refusing any browser `Origin`. See [architecture](architecture.md#the-http-guard).
+The MCP transport over HTTP. `phygital-key-mcp serve` offers it at `/mcp`, protected by an access token and refusing any browser `Origin`. See [architecture](architecture.md#the-http-guard).
 
 ### Trusted Surface
 

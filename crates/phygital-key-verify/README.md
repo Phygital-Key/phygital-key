@@ -10,7 +10,7 @@ Pre-audit: no outside security audit has been done yet.
 
 ```toml
 [dependencies]
-phygital-key-verify = { git = "https://github.com/Phygital-Key/phygital-key-mcp", tag = "v0.3.0" }
+phygital-key-verify = { git = "https://github.com/Phygital-Key/phygital-key", rev = "<commit>" }
 serde_json = "1"
 ```
 
@@ -21,7 +21,7 @@ Rust 1.89 or later, edition 2024. `#![forbid(unsafe_code)]`. Licence Apache-2.0.
 ```rust
 use phygital_key_verify::{Config, Keyring, Level, Verifier};
 
-let keyring = Keyring::from_json(&std::fs::read_to_string("keyring.json")?)?; // from `phygital-key keys`
+let keyring = Keyring::from_json(&std::fs::read_to_string("keyring.json")?)?; // from `phygital-key-mcp keys`
 let config = Config { origins: vec!["https://approve.example.com".into()], rp_ids: vec!["approve.example.com".into()] };
 let verifier = Verifier::new("https://deploy.example.com", keyring, config);
 
