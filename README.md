@@ -156,6 +156,8 @@ Then ask your AI app: *"Deploy api 2.4.1 to production through the demo service 
 
 Connecting other AI apps: [connect your AI app](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/docs/connect-your-ai.md).
 
+With Phygital Key A2A, `phygital-key-a2a demo` starts the same gate on port 7478 for agents that speak A2A: [getting started with A2A](https://github.com/Phygital-Key/phygital-key-a2a/blob/main/docs/getting-started.md).
+
 ## What you see
 
 <p align="center">
@@ -371,7 +373,7 @@ The gate keeps its data in one folder (`~/.phygital-key-mcp` for Phygital Key MC
 
 Phygital Key is free and open source under the [Apache-2.0](LICENSE) license, the base and every product. You can use it at home or at work, change it, ship it in a product and sell that product. You can read every line that handles your approvals, and check the release you run against its signed SHA-256 list.
 
-The one thing to keep: the [`NOTICE`](NOTICE) file, with the line "Created by Phygital-Key", in every copy or changed version (Apache-2.0, section 4(d)).
+Keep the [`NOTICE`](NOTICE) file, with the line "Created by Phygital-Key", in every copy or changed version (Apache-2.0, section 4(d)).
 
 Contributions are welcome under the same license: see [CONTRIBUTING.md](CONTRIBUTING.md). Shared behaviour is changed here, never in a product. The format is an open spec ([`pka.1`](docs/spec.md)), so anyone can write another verifier and test it against the shared vectors.
 
