@@ -203,4 +203,4 @@ export async function verify(approval, expected, keyring, seen, config, now) {
   }
 }
 
-export { canonical, b64decode, b64encode, MAX_DEPTH, NotSafeInteger, get };
+export { canonical, b64decode, b64encode, MAX_DEPTH, NotSafeInteger, get, derToRaw };

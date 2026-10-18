@@ -81,7 +81,7 @@ export function allows(sp, request) {
 
 // Raw 64-byte r||s with r, s in [1, n-1] (what the spec's JWS uses).
 const N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
-function scalarOk(bytes) {
+export function scalarOk(bytes) {
   let v = 0n;
   for (const b of bytes) v = (v << 8n) | BigInt(b);
   return v > 0n && v < N;

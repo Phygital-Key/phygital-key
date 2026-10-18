@@ -16,7 +16,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Phygital-Key/phygital-key-mcp.git",
+    "url": "git+https://github.com/Phygital-Key/phygital-key.git",
     "directory": "verifier-js"
   },
   "keywords": [
@@ -28,7 +28,7 @@
     "security"
   ],
   "scripts": {
-    "test": "node --test test/vectors.test.js"
+    "test": "node --test test/vectors.test.js test/wycheproof.test.js"
   },
   "author": "Phygital-Key"
 }
