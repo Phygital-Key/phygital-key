@@ -69,18 +69,20 @@ if (run_gate_up) 2>/dev/null; then fail "an install by hand fought the squatter"
 # --- ours(): which listeners on the port belong to the gate's own system units.
 OS=linux; P_BIN=phygital-key-test; SVC_UID=995
 cg() { mkdir -p "$T/proc/$1"; printf '%s\n' "$2" > "$T/proc/$1/cgroup"; }
-ps() { case "${@: -1}" in 20) echo 995 ;; 21|22) echo 0 ;; *) echo 1000 ;; esac; }
+ps() { case "${@: -1}" in 20|32) echo 995 ;; 21|22) echo 0 ;; *) echo 1000 ;; esac; }
 cg 20 "0::/system.slice/phygital-key-test.service"
 cg 21 "0::/system.slice/phygital-key-test.socket"
 cg 22 "0::/system.slice/other.service"
 cg 30 "0::/user.slice/user-1000.slice/user@1000.service/app.slice/phygital-key-test.service"
 cg 31 "0::/system.slice/phygital-key-test.service"
+cg 32 "0::/user.slice/user-995.slice/session-1.scope"
 ours 1 && pass "systemd (pid 1) holds the port for the gate" || fail "pid 1 not ours"
 ours 20 && pass "the gate in its system unit is ours" || fail "the gate is not ours"
 ours 21 && pass "systemd's helper (root) in the gate's units is ours" || fail "the helper is not ours"
-if ours 22; then fail "root in another unit counted as ours"; else pass "root in another unit is not ours"; fi
+ours 22 && pass "root is trusted (it controls the machine), also outside the gate's units" || fail "root not ours"
 if ours 30; then fail "a user unit with the same name counted as ours"; else pass "a user's own unit named like the gate is not ours"; fi
 if ours 31; then fail "another user's process in the gate's cgroup path counted as ours"; else pass "a process of another user is not ours, whatever its cgroup says"; fi
+if ours 32; then fail "the gate user outside the gate's units counted as ours"; else pass "the gate user outside the gate's units is not ours"; fi
 OS=mac
 if ours 20; then fail "ours() said yes on macOS"; else pass "on macOS nothing is skipped"; fi
 

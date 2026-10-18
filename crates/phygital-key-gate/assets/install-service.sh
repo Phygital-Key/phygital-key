@@ -131,16 +131,19 @@ root_only() {
   done
 }
 
-# Linux: is this process part of the gate's own system units? systemd (pid 1)
-# holds the port, and systemd's helper briefly holds it while it starts the gate.
-# Only the system's units count (/system.slice/<program>.service or .socket, the
-# whole path): a user can name a unit of their own the same, but it lives under
-# /user.slice. And only root or the gate user.
+# Linux: is this listener the gate's own? systemd (pid 1) holds the port, and
+# systemd's root helper holds it for a moment while it starts the gate (also
+# before it is moved into the gate's control group). Root is trusted anyway:
+# root controls this machine (threat model). The gate user counts only inside
+# the system's own units (/system.slice/<program>.service or .socket, the whole
+# path). Any other user, also in a unit of their own named like the gate's
+# (/user.slice/...), is another program.
 ours() {
   [ "$OS" = linux ] || return 1
   [ "$1" = 1 ] && return 0
   local u; u=$(ps -o uid= -p "$1" 2>/dev/null | tr -d ' ')
-  [ "$u" = 0 ] || [ "$u" = "$SVC_UID" ] || return 1
+  [ "$u" = 0 ] && return 0
+  [ "$u" = "$SVC_UID" ] || return 1
   grep -qE "^[0-9]+:[^:]*:/system\.slice/$P_BIN\.(service|socket)\$" "/proc/$1/cgroup" 2>/dev/null
 }
 
@@ -462,14 +465,10 @@ listeners_ok() {
   [ -n "\$pids" ] || return 1
   local want u gate=0; want=\$(id -u "$SVC_USER")
   for p in \$pids; do
-    # Linux: systemd holds the port for the gate (socket activation), and its
-    # helper holds it for a moment while it starts the gate.
-    if [ "$OS" = linux ] && { [ "\$p" = 1 ] || grep -qE "^[0-9]+:[^:]*:/system\\.slice/$P_BIN\\.(service|socket)\\$" "/proc/\$p/cgroup" 2>/dev/null; }; then
-      u=\$(ps -o uid= -p "\$p" | tr -d ' ')
-      [ "\$p" = 1 ] || [ "\$u" = 0 ] || [ "\$u" = "\$want" ] || return 1
-      [ "\$u" = "\$want" ] && gate=1
-      continue
-    fi
+    u=\$(ps -o uid= -p "\$p" | tr -d ' ')
+    # Linux: systemd and its root helper hold the port for the gate (socket activation).
+    if [ "$OS" = linux ] && [ "\$u" = 0 ]; then continue; fi
+    if [ "$OS" = linux ] && ! grep -qE "^[0-9]+:[^:]*:/system\\.slice/$P_BIN\\.(service|socket)\\$" "/proc/\$p/cgroup" 2>/dev/null; then return 1; fi
     [ "\$(ps -o uid= -p "\$p" | tr -d ' ')" = "\$want" ] || return 1
     gate=1
   done
