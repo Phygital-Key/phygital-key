@@ -248,3 +248,70 @@ fn list_standing_id(input: &Value) -> String {
         .and_then(|v| v["claims"]["id"].as_str().map(String::from))
         .unwrap_or_default()
 }
+
+/// A proof made by `sign_proof` checks out, and a proof dated exactly at the
+/// approval's `exp` does not (it must be before `exp`).
+#[test]
+fn sign_proof_round_trip_and_the_exp_edge() {
+    use phygital_key_verify::bound::{Binding, Proof, sign_proof};
+    let doc: Value = serde_json::from_str(include_str!("../../../test-vectors/vectors.json"))
+        .unwrap_or_default();
+    let Some(v) = doc["vectors"]
+        .as_array()
+        .and_then(|a| a.iter().find(|v| v["name"] == json!("valid_bound")))
+    else {
+        unreachable!("vector valid_bound")
+    };
+    let input = &v["input"];
+    let keys: Value =
+        serde_json::from_str(include_str!("../../../test-vectors/keys/test-keys.json"))
+            .unwrap_or_default();
+    let Some(agent) = keys["keys"]
+        .as_array()
+        .and_then(|a| a.iter().find(|k| k["name"] == json!("agent")))
+    else {
+        unreachable!("agent test key")
+    };
+    let raw = b64::decode(agent["private_scalar_b64"].as_str().unwrap_or("")).unwrap_or_default();
+    let agent = SigningKey::from_slice(&raw).unwrap_or_else(|_| unreachable!("valid key"));
+    let approval = input["approval"].as_str().unwrap_or("");
+    let claims: Value = b64::decode(approval)
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+        .map(|v| v["claims"].clone())
+        .unwrap_or_default();
+    let keyring: Keyring = serde_json::from_value(input["keyring"].clone()).unwrap_or_default();
+    let cfg: Config = serde_json::from_value(input["config"].clone()).unwrap_or_else(|_| config());
+    let expected = phygital_key_verify::Expected {
+        aud: input["aud"].as_str().unwrap_or(""),
+        request: &input["request"],
+        level: Level::Medium,
+    };
+    let run = |iat: i64, now: i64| {
+        let p = Proof::for_approval(
+            claims["id"].as_str().unwrap_or(""),
+            claims["aud"].as_str().unwrap_or(""),
+            claims["request_hash"].as_str().unwrap_or(""),
+            iat,
+        );
+        let proof = sign_proof(&p, &agent).unwrap_or_default();
+        assert_eq!(proof.split('.').count(), 3, "a compact JWS");
+        phygital_key_verify::verify_bound(
+            approval,
+            Binding {
+                proof: Some(&proof),
+                required: false,
+            },
+            &expected,
+            &keyring,
+            &MemorySeenStore::new(),
+            &cfg,
+            now,
+        )
+        .map(|_| ())
+    };
+    let now = input["now"].as_i64().unwrap_or(0);
+    let exp = claims["exp"].as_i64().unwrap_or(0);
+    assert_eq!(run(now, now), Ok(()));
+    assert_eq!(run(exp, exp - 1), Err(ErrorCode::BadProof), "iat at exp");
+    assert_eq!(run(exp - 1, exp - 1), Ok(()), "iat just before exp");
+}

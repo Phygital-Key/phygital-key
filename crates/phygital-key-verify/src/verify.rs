@@ -206,9 +206,11 @@ pub(crate) fn check_kind(
     if !id_ok(&claims.id) || !request_shape_ok(&claims.request) {
         return Err(E::Malformed);
     }
-    // pka.1 has no agent key; pka.2 has exactly one valid P-256 agent key.
+    // pka.1 has no agent key (not even "cnf": null); pka.2 has exactly one
+    // valid P-256 agent key.
+    let has_cnf = claims_value.get("cnf").is_some();
     let agent_key = match (claims.v.as_str(), &claims.cnf) {
-        (VERSION, None) => None,
+        (VERSION, None) if !has_cnf => None,
         (VERSION_BOUND, Some(cnf)) if webauthn::parse_public_key(&cnf.key).is_some() => {
             Some(cnf.key.clone())
         }

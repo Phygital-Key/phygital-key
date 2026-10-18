@@ -457,16 +457,21 @@ async fn serve_on(listeners: Vec<tokio::net::TcpListener>, app: Router) -> Resul
     }
 }
 
-/// Sockets handed over by systemd (`LISTEN_FDS`), when there are any. Each must
-/// be a TCP listener on a loopback address and this gate's port; anything else
-/// is refused rather than served.
+/// Sockets handed over by systemd (`LISTEN_FDS`), when there are any and they
+/// are meant for this process (`LISTEN_PID`). They must be exactly the gate's two
+/// loopback addresses on its port, so neither can be left for another program:
+/// `127.0.0.1` and `[::1]` (or `127.0.0.1` alone on a machine with no IPv6).
 #[cfg(target_os = "linux")]
 fn inherited_listeners(port: u16) -> Result<Option<Vec<tokio::net::TcpListener>>, String> {
+    if std::env::var("LISTEN_PID").ok() != Some(std::process::id().to_string()) {
+        return Ok(None);
+    }
     let mut fds = listenfd::ListenFd::from_env();
     if fds.len() == 0 {
         return Ok(None);
     }
     let mut out = Vec::new();
+    let mut seen = Vec::new();
     for i in 0..fds.len() {
         let l = fds
             .take_tcp_listener(i)
@@ -478,8 +483,31 @@ fn inherited_listeners(port: u16) -> Result<Option<Vec<tokio::net::TcpListener>>
                 "systemd handed over {addr}, not a loopback address on port {port}. Refusing to start."
             ));
         }
+        seen.push(addr.ip());
         l.set_nonblocking(true).map_err(|e| e.to_string())?;
         out.push(tokio::net::TcpListener::from_std(l).map_err(|e| e.to_string())?);
+    }
+    let v4 = std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
+    let v6 = std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST);
+    if !seen.contains(&v4) || seen.iter().any(|ip| *ip != v4 && *ip != v6) || seen.len() > 2 {
+        return Err(format!(
+            "systemd must hand over 127.0.0.1:{port} and [::1]:{port}, got {seen:?}. Refusing to start."
+        ));
+    }
+    if !seen.contains(&v6) {
+        // Hold [::1] ourselves, unless this machine has no IPv6 (then nobody can).
+        match std::net::TcpListener::bind((v6, port)) {
+            Ok(l) => {
+                l.set_nonblocking(true).map_err(|e| e.to_string())?;
+                out.push(tokio::net::TcpListener::from_std(l).map_err(|e| e.to_string())?);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AddrNotAvailable => {}
+            Err(e) => {
+                return Err(format!(
+                    "cannot listen on [::1]:{port}: {e}. Refusing to start."
+                ));
+            }
+        }
     }
     Ok(Some(out))
 }

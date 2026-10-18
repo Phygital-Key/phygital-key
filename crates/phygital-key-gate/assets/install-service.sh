@@ -131,13 +131,17 @@ root_only() {
   done
 }
 
-# Linux: is this process part of the gate's own systemd units? systemd (pid 1)
-# holds the port, and systemd's helper briefly holds it while it starts the gate;
-# both live in the gate's control groups, where no other program can be.
+# Linux: is this process part of the gate's own system units? systemd (pid 1)
+# holds the port, and systemd's helper briefly holds it while it starts the gate.
+# Only the system's units count (/system.slice/<program>.service or .socket, the
+# whole path): a user can name a unit of their own the same, but it lives under
+# /user.slice. And only root or the gate user.
 ours() {
   [ "$OS" = linux ] || return 1
   [ "$1" = 1 ] && return 0
-  grep -qE "/$P_BIN\.(service|socket)\$" "/proc/$1/cgroup" 2>/dev/null
+  local u; u=$(ps -o uid= -p "$1" 2>/dev/null | tr -d ' ')
+  [ "$u" = 0 ] || [ "$u" = "$SVC_UID" ] || return 1
+  grep -qE "^[0-9]+:[^:]*:/system\.slice/$P_BIN\.(service|socket)\$" "/proc/$1/cgroup" 2>/dev/null
 }
 
 # Process ids listening on a TCP port (IPv4 and IPv6).
@@ -456,12 +460,14 @@ listeners_ok() {
   if command -v lsof >/dev/null 2>&1; then pids=\$(sudo lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null | sort -u)
   else pids=\$(sudo ss -ltnpH "sport = :$PORT" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); fi
   [ -n "\$pids" ] || return 1
-  local want gate=0; want=\$(id -u "$SVC_USER")
+  local want u gate=0; want=\$(id -u "$SVC_USER")
   for p in \$pids; do
     # Linux: systemd holds the port for the gate (socket activation), and its
     # helper holds it for a moment while it starts the gate.
-    if [ "$OS" = linux ] && { [ "\$p" = 1 ] || grep -qE "/$P_BIN\\.(service|socket)\\$" "/proc/\$p/cgroup" 2>/dev/null; }; then
-      [ "\$(ps -o uid= -p "\$p" | tr -d ' ')" = "\$want" ] && gate=1
+    if [ "$OS" = linux ] && { [ "\$p" = 1 ] || grep -qE "^[0-9]+:[^:]*:/system\\.slice/$P_BIN\\.(service|socket)\\$" "/proc/\$p/cgroup" 2>/dev/null; }; then
+      u=\$(ps -o uid= -p "\$p" | tr -d ' ')
+      [ "\$p" = 1 ] || [ "\$u" = 0 ] || [ "\$u" = "\$want" ] || return 1
+      [ "\$u" = "\$want" ] && gate=1
       continue
     fi
     [ "\$(ps -o uid= -p "\$p" | tr -d ' ')" = "\$want" ] || return 1
@@ -585,6 +591,8 @@ Group=$SVC_USER
 ExecStart=$BIN --home $DATA --port $PORT serve
 Restart=on-failure
 RestartSec=1
+RestartSteps=5
+RestartMaxDelaySec=30
 UMask=0077
 LimitNOFILE=8192
 NoNewPrivileges=yes
@@ -630,6 +638,9 @@ UNITFILE
     systemctl stop "$P_BIN.service" 2>/dev/null || true
     for _ in $(seq 1 50); do [ -z "$(listener_pids "$PORT")" ] && break; sleep 0.2; done
     systemctl start "$P_BIN.socket" || true
+    # The socket unit must hold the port; if it could not (taken), say so.
+    systemctl is-active --quiet "$P_BIN.socket" ||
+      refuse "systemd could not open port $PORT for the gate: another program has it. Find it (sudo ss -ltnp 'sport = :$PORT'), stop it, then run this again. Do not approve anything until then."
     systemctl start "$P_BIN.service" || true
   fi
 fi

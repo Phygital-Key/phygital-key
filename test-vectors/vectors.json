@@ -2923,6 +2923,48 @@
       "name": "v1_with_agent_key"
     },
     {
+      "description": "Version pka.1 with \"cnf\": null: pka.1 carries no cnf at all.",
+      "expected": {
+        "error": "MALFORMED",
+        "ok": false
+      },
+      "input": {
+        "approval": "eyJjbGFpbXMiOnsiYXVkIjoiaHR0cHM6Ly9kZXBsb3kuZXhhbXBsZS5jb20iLCJjbmYiOm51bGwsImV4cCI6MTc2MDcwMDA2MCwiaWF0IjoxNzYwNzAwMDAwLCJpZCI6IkJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQnciLCJsZXZlbCI6Im1lZGl1bSIsInJlcXVlc3QiOnsicGFyYW1zIjp7ImVudiI6InByb2R1Y3Rpb24iLCJzZXJ2aWNlIjoiYXBpIiwidmVyc2lvbiI6IjIuNC4xIn0sInR5cGUiOiJkZXBsb3kifSwicmVxdWVzdF9oYXNoIjoiaFVYdmxwV0hDNHhhckZsaEt3YVUyNkg2cTA1bTNnQnBNb3lFX1lLUks3byIsInYiOiJwa2EuMSJ9LCJzaWduYXR1cmVzIjpbeyJhdXRoZW50aWNhdG9yX2RhdGEiOiJfcGdMdUhRRlBKZUZzLUEtSDN4Q3FfUmZZODdIdzdhM0wzeDRMcjdyRUtrQkFBQUFBQSIsImNsaWVudF9kYXRhX2pzb24iOiJleUpqYUdGc2JHVnVaMlVpT2lKUk1VUjBabGRPY1RWdE5FNHhia04zVnpsS1dHVmZSV0p5V0hKSE5XaDVWRGh1WVVVek9XWTVPV0V3SWl3aVkzSnZjM05QY21sbmFXNGlPbVpoYkhObExDSnZjbWxuYVc0aU9pSm9kSFJ3Y3pvdkwyRndjSEp2ZG1VdVpYaGhiWEJzWlM1amIyMGlMQ0owZVhCbElqb2lkMlZpWVhWMGFHNHVaMlYwSW4wIiwiY3JlZGVudGlhbF9pZCI6InZTelVHU0Q3QUJHemdScms1RmlqQWciLCJzaWduYXR1cmUiOiJNRVlDSVFDSzhmeHZSRHFRYkRyY1FFSVNYQnlMZldaekhIY2RwVlNrNHFVQnJYa0Z2Z0loQU5WRHRrNUZQbktENzBScWpQR0QtR0NneFFhQzZudFRjM2FVRjZ2cXBRdGkifV19",
+        "aud": "https://deploy.example.com",
+        "config": {
+          "origins": [
+            "https://approve.example.com"
+          ],
+          "rp_ids": [
+            "approve.example.com"
+          ]
+        },
+        "keyring": {
+          "keys": [
+            {
+              "created": "2026-10-17",
+              "credential_id": "vSzUGSD7ABGzgRrk5FijAg",
+              "name": "alice (TEST ONLY)",
+              "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwIEBReo47E5PekBrgLxOdBurhDe6mYrlpCuWDVmPyGlsA0QQhQRqMQLlWopGau9EyU1_MCpaJ_worxea-jZNSA",
+              "rp_id": "approve.example.com"
+            }
+          ]
+        },
+        "level": "medium",
+        "now": 1760700010,
+        "request": {
+          "params": {
+            "env": "production",
+            "service": "api",
+            "version": "2.4.1"
+          },
+          "type": "deploy"
+        },
+        "seen_ids": []
+      },
+      "name": "v1_with_null_cnf"
+    },
+    {
       "description": "cnf.key is not a P-256 public key.",
       "expected": {
         "error": "MALFORMED",

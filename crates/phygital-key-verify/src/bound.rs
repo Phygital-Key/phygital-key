@@ -69,7 +69,9 @@ impl Proof {
 pub struct Binding<'a> {
     /// The agent's proof, when it sent one (the `Phygital-Proof` header).
     pub proof: Option<&'a str>,
-    /// Refuse approvals that are not bound to an agent key (`pka.1`).
+    /// Refuse approvals that are not bound to an agent key (`pka.1`). This is
+    /// for one-time approvals; standing approvals (`verify_use`) are bound to the
+    /// gate's use key instead and are not affected.
     pub required: bool,
 }
 

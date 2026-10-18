@@ -128,7 +128,7 @@ async function approvePage() {
   $("level").textContent = view.level === "high" ? "Fingerprint, face or PIN" : "A touch on your key";
   if (view.agent_key_fingerprint) {
     // pka.2: the yes names the asking program's key; a copy is useless to anyone else.
-    $("bound").textContent = "The program that asked (key " + view.agent_key_fingerprint.slice(0, 12) + "…)";
+    $("bound").textContent = "Whoever holds key " + view.agent_key_fingerprint.slice(0, 12) + "… (given by the program that asked)";
     $("bound-row").hidden = false;
   }
   $("raw").textContent = view.request_jcs;

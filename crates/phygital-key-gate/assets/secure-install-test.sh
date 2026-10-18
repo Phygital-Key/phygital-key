@@ -61,7 +61,7 @@ GPID=""
 for p in $(sudo lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t | sort -u); do
   # Linux: systemd holds the port for the gate (socket activation), and its
   # helper holds it for a moment while it starts the gate: both in the gate's units.
-  if [ "$(uname -s)" = Linux ] && { [ "$p" = 1 ] || sudo grep -qE "/$P_BIN\.(service|socket)\$" "/proc/$p/cgroup"; }; then
+  if [ "$(uname -s)" = Linux ] && { [ "$p" = 1 ] || sudo grep -qE "^[0-9]+:[^:]*:/system\.slice/$P_BIN\.(service|socket)\$" "/proc/$p/cgroup"; }; then
     [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] && GPID=$p
     continue
   fi

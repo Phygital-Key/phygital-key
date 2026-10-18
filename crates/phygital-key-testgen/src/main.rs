@@ -1012,6 +1012,17 @@ fn run() -> Result<(), String> {
         Some("MALFORMED"),
     );
     let mut c = Build::new("medium");
+    c.claims = claims_for(&base_request(), "medium", IAT, IAT + 60);
+    set(&mut c.claims, "cnf", Value::Null);
+    bvec(
+        "v1_with_null_cnf",
+        "Version pka.1 with \"cnf\": null: pka.1 carries no cnf at all.",
+        c.approval(&alice),
+        None,
+        false,
+        Some("MALFORMED"),
+    );
+    let mut c = Build::new("medium");
     c.claims = bound_claims(json!({"key": "AAAA"}));
     bvec(
         "bound_bad_agent_key",
