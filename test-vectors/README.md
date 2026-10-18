@@ -2,7 +2,7 @@
 
 Test vectors are shared test cases written as data: an input, and the exact result every verifier must give. They are part of the [spec](../docs/spec.md): every implementation, in any language, must pass every vector, and a spec change needs new vectors first. This page lists the files, their exact shapes, how to run and regenerate them, and every vector by name.
 
-There are 123 vectors: 55 approvals, 25 key histories and 43 standing-approval uses. The Rust verifier and the independent JavaScript verifier both pass all of them.
+There are 141 vectors: 73 approvals, 25 key histories and 43 standing-approval uses. The Rust verifier and the independent JavaScript verifier both pass all of them.
 
 ## On this page
 
@@ -116,7 +116,7 @@ The output is deterministic, so running it twice gives the same bytes:
 
 - the test keys come from fixed seeds: each private key is SHA-256 of `phygital-key TEST ONLY <name>`, and each credential id is the first 16 bytes of SHA-256 of `credential <name>` (names `alice`, `mallory`, `bob`, `gate use key`);
 - ECDSA signatures are deterministic (RFC 6979);
-- times are fixed: approvals are issued at `iat` 1760700000, and 49 of the 55 approval vectors check at `now` 1760700010.
+- times are fixed: approvals are issued at `iat` 1760700000, and 67 of the 73 approval vectors check at `now` 1760700010.
 
 On every push, CI runs the generator and then `git diff --exit-code test-vectors`, so the committed files must be exactly what the generator writes. To add a vector, change the generator, run it, and commit both.
 

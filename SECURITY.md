@@ -4,7 +4,7 @@ Phygital Key lets a person approve exact AI actions with a passkey or hardware k
 
 This policy covers the base (this repository: the verifiers, the gate engine, the spec, the test vectors and the installer templates) and the products built on it, [Phygital Key MCP](https://github.com/Phygital-Key/phygital-key-mcp) and [Phygital Key A2A](https://github.com/Phygital-Key/phygital-key-a2a). Most of the code that guards an approval lives here, so report here unless the problem is only in one product's agent protocol.
 
-Phygital Key is **pre-audit**: eight internal reviews by AI security-auditor agents and one round of outside test suites, every finding fixed or documented as a limit, and no paid third-party audit yet. See [docs/security-reviews.md](docs/security-reviews.md).
+Phygital Key is **pre-audit**: nine internal reviews by AI security-auditor agents and one round of outside test suites, every finding fixed or documented as a limit, and no paid third-party audit yet. See [docs/security-reviews.md](docs/security-reviews.md).
 
 ## Supported versions
 

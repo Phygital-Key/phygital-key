@@ -2,6 +2,14 @@
 
 Every term the Phygital Key docs use, in alphabetical order, each in one to three plain sentences with a link to the page that explains it. Other pages link here the first time they use a term.
 
+### Agent-bound approval
+
+An approval of format `pka.2`: it names the public key of the agent that asked (`cnf`), so it works only with that agent's proof. A copy taken on its way is useless. See [integrate](integrate.md#agent-bound-approvals) and [spec](spec.md#7d-agent-bound-approvals).
+
+### Agent proof
+
+A short compact JWS the agent signs with its own key right before it acts, naming the approval, the service and the request. Sent in the `Phygital-Proof` header with an agent-bound approval; fresh for 30 seconds.
+
 ### AP2
 
 The Agent Payments Protocol, an open protocol for AI agents that pay, now at the FIDO Alliance. Phygital Key borrows its ideas (a non-agentic Trusted Surface, mandates, receipts that point at an approval by hash) but does not export AP2 formats yet. See [AP2](ap2.md).

@@ -87,7 +87,7 @@ Every command accepts these, before or after the command name. Commands that do 
 | `install-service` | `--release <VERSION>` (release to install, `vX.Y.Z`, default this program's version; use it to update), `--binary <BINARY>` (install this root-owned file instead of downloading; it and every folder above it must be owned by root only), `--uninstall` (keeps keys and log), `--purge` (with `--uninstall`: also deletes the gate user, keys and log), `--auto-update` (daily signed updates, the default), `--no-auto-update` (off, kept on later installs until `--auto-update`). `--auto-update` and `--no-auto-update` cannot be combined. Of the global options only `--port` reaches the service: it always serves `http://localhost:<port>` from its own data folder, so `--home`, `--origin`, `--bind`, `--lifetime` and `--no-token` have no effect. |
 | `update` | `--check` (only say whether a newer signed release exists). |
 | `keys` | `--check <FINGERPRINT>` (check the signed history against the first key's fingerprint), `--file <FILE>` (keyring file, default `<home>/keyring.json`), `--signed-on <ORIGIN>` (origin the history must be signed on; required with `--file`, otherwise `--origin` is used), `--previous <PREVIOUS>` (the keyring accepted last time; the new one must extend it). |
-| `verify` | `--approval <APPROVAL>` (or `@file`), `--request <REQUEST>` (the exact request JSON, or `@file`), `--aud <AUD>`, `--level <LEVEL>` (`medium` or `high`, default `high`), `--keyring <KEYRING>` (default `<home>/keyring.json`), `--seen-file <SEEN_FILE>` (default `<home>/seen-ids.jsonl`). The first three are required. |
+| `verify` | `--approval <APPROVAL>` (or `@file`), `--request <REQUEST>` (the exact request JSON, or `@file`), `--aud <AUD>`, `--level <LEVEL>` (`medium` or `high`, default `high`), `--keyring <KEYRING>` (default `<home>/keyring.json`), `--seen-file <SEEN_FILE>` (default `<home>/seen-ids.jsonl`), `--proof <PROOF>` (the agent's proof for an agent-bound approval, or `@file`), `--require-binding` (refuse approvals not bound to an agent key). The first three are required. |
 | `receipt-check` | `--receipt <RECEIPT>` (or `@file`), `--key <KEY>` (service receipt key, SPKI DER base64url, or `@file`), `--iss <ISS>` (the service's audience id), `--approval <APPROVAL>` (or `@file`). All required. |
 | `trust-service` | `--aud <AUD>`, `--key <KEY>` (SPKI DER base64url, or `@file`). Both required. |
 
@@ -173,7 +173,7 @@ On port + 1 (`http://localhost:7469` for Phygital Key MCP; that is also its audi
 | `POST /payment` | Level `high`. |
 | `POST /send_message` | Level `medium`. |
 
-It reads the approval from the `Phygital-Approval` header and, for a standing approval, the use token from `Phygital-Use`. A refusal is HTTP 403 with `{"ok": false, "error": "<CODE>"}`; an action it does not offer is 404 with `UNKNOWN_ACTION`. Nothing real happens.
+It reads the approval from the `Phygital-Approval` header, for an agent-bound approval the agent's proof from `Phygital-Proof`, and for a standing approval the use token from `Phygital-Use`. A refusal is HTTP 403 with `{"ok": false, "error": "<CODE>"}`; an action it does not offer is 404 with `UNKNOWN_ACTION`. Nothing real happens.
 
 ## Files in the data folder
 

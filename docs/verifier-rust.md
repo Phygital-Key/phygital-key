@@ -76,7 +76,8 @@ The crate also ships `examples/basic.rs`, which runs the first shared test vecto
 
 | Path | What is in it |
 |---|---|
-| `phygital_key_verify` (root) | `verify`, `check`, `Verifier`, `Expected`, `Config`, `Keyring`, `KeyCard`, `Level`, `Verified`, `ErrorCode`, `SeenStore`, `MemorySeenStore`, the data types and limits |
+| `phygital_key_verify` (root) | `verify`, `verify_bound`, `check`, `Verifier`, `Expected`, `Config`, `Keyring`, `KeyCard`, `Level`, `Verified`, `ErrorCode`, `SeenStore`, `MemorySeenStore`, the data types and limits |
+| `bound` | Agent-bound approvals (`pka.2`): `Binding`, `Proof`, `sign_proof` ([integrate](integrate.md#agent-bound-approvals)) |
 | `standing` | Standing approvals: `verify_use`, `UseStore`, `MemoryUseStore`, `Revocations` |
 | `receipt` | Signed receipts: `Receipt`, `sign`, `verify`, `verify_use_receipt` |
 | `history` | Signed key history: `verify_history`, `verify_history_update` |
@@ -682,7 +683,7 @@ Bad input gives an error value, not a panic: the workspace lints deny `unwrap`, 
 
 | Test | What it does |
 |---|---|
-| `tests/vectors.rs` | Runs every shared vector: 55 approvals (`test-vectors/vectors.json`), 25 key histories (`keyrings.json`), 43 standing approvals (`standing.json`); checks that every refusal code except `DENIED`, `NOT_ALLOWED`, `USED_UP` and `REVOKED` has an approval vector, and that a valid approval works once. |
+| `tests/vectors.rs` | Runs every shared vector: 73 approvals (`test-vectors/vectors.json`), 25 key histories (`keyrings.json`), 43 standing approvals (`standing.json`); checks that every refusal code except `DENIED`, `NOT_ALLOWED`, `USED_UP` and `REVOKED` has an approval vector, and that a valid approval works once. |
 | `tests/props.rs` | 6 property tests, 2000 random cases each: random text and random bytes never verify, flipping any bit of a valid approval is refused, any other request is refused, canonical form is idempotent, random requests never panic. |
 | `tests/units.rs` | 17 unit tests: known answers for `request_hash` and the receipt reference, wire names of levels and codes, keyring parsing, request shapes, ids, nesting depth, `set_keyring`, standing params rules, use tokens and per-use receipts. |
 | Module tests | Canonical form (7, including RFC 8785 key order and escapes), strict JSON (3), receipts (1, every refusal). |

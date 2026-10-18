@@ -2,7 +2,7 @@
 
 An independent JavaScript checker for [Phygital Key](../README.md) approvals: a person's signed yes, made with a passkey, fingerprint, face or hardware key, for one exact request. A service calls it before it acts, and acts only when `result.ok` is `true`.
 
-- Written from the [spec](../docs/spec.md). It shares no code with the [Rust verifier](../crates/phygital-key-verify/README.md); both pass the same 123 shared test vectors. Two implementations agreeing is how unclear spots in the spec get caught.
+- Written from the [spec](../docs/spec.md). It shares no code with the [Rust verifier](../crates/phygital-key-verify/README.md); both pass the same 141 shared test vectors. Two implementations agreeing is how unclear spots in the spec get caught.
 - No dependencies: WebCrypto (`crypto.subtle`) for ES256 and SHA-256, and its own strict JSON parser. Node 20+ and modern browsers.
 - Pure: no network, no clock (you pass `now`). Fails closed: `verify` never throws for bad input, it returns `{ ok: false, error }`.
 
@@ -60,7 +60,7 @@ Contract and an async database example: [docs/verifier-js.md](../docs/verifier-j
 npm test
 ```
 
-Runs `node --test test/vectors.test.js`, 9 tests: every case in `test-vectors/vectors.json`, `keyrings.json` and `standing.json` (123 in all), an approval working only once, three checks from security reviews, and two checks that async stores are awaited. CI runs it on every push.
+Runs `node --test test/vectors.test.js test/wycheproof.test.js`, 12 tests: every case in `test-vectors/vectors.json`, `keyrings.json` and `standing.json` (141 in all), an approval working only once, three checks from security reviews, two checks that async stores are awaited, a proof made with `signProof` for an agent-bound approval, and every Wycheproof P-256 case. CI runs it on every push.
 
 ## Read more
 

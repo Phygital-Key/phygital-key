@@ -114,6 +114,8 @@ Options:
       --level <LEVEL>          Lowest level you accept: medium or high [default: high]
       --keyring <KEYRING>      Keyring file [default: <home>/keyring.json]
       --seen-file <SEEN_FILE>  File that remembers used approvals, so each works once [default: <home>/seen-ids.jsonl]
+      --proof <PROOF>          The agent's proof, for an approval bound to its key (or @file)
+      --require-binding        Refuse approvals that are not bound to the asking agent's key
 ```
 
 (The global options are accepted too.) `@file` reads the value from a file and trims surrounding whitespace.

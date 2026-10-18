@@ -269,9 +269,9 @@ The full mapping, including Mastercard's Verifiable Intent and what an AP2 expor
 
 ## 13. Tests
 
-- **Shared vectors** (`test-vectors/`): 55 approval cases, 25 key-history cases and 43 standing-approval cases, every error code, every edge (exact size limits, exactly at `exp`, 30 s and 31 s clock drift, 300 s and 301 s life, NFD input, KELVIN SIGN payee, key order, floats, duplicate keys, deep nesting, lone surrogates, look-alike letters, flipped signature bit, wrong origin, wrong RP ID, wrong type, wrong challenge, cross-origin frame, signature over other claims, untrusted key, missing presence, missing verification, replay, prompt-injection text).
+- **Shared vectors** (`test-vectors/`): 73 approval cases, 25 key-history cases and 43 standing-approval cases, every error code, every edge (exact size limits, exactly at `exp`, 30 s and 31 s clock drift, 300 s and 301 s life, NFD input, KELVIN SIGN payee, key order, floats, duplicate keys, deep nesting, lone surrogates, look-alike letters, flipped signature bit, wrong origin, wrong RP ID, wrong type, wrong challenge, cross-origin frame, signature over other claims, untrusted key, missing presence, missing verification, replay, prompt-injection text).
 - **Property tests** (2000 cases each): random text and bytes never verify; changing any bit of a valid approval is refused; any other request is refused; canonical form is idempotent; `verify` never panics on random requests.
-- **End-to-end and red team** (in each product; Phygital Key MCP's `tests/e2e/` has 111 checks): real browser with a virtual passkey, real MCP client, demo service, and every attack an agent can try through the gate and the page.
+- **End-to-end and red team** (in each product; Phygital Key MCP's `tests/e2e/` has 124 checks): real browser with a virtual passkey, real MCP client, demo service, and every attack an agent can try through the gate and the page.
 
 ## 14. Out of scope for now
 

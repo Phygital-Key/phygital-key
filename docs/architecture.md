@@ -99,7 +99,7 @@ Each product depends on the base's `main` branch, and its `Cargo.lock` pins the 
 
 1. `cargo update -p phygital-key-gate -p phygital-key-verify`, a release build, then `product-files --out .`.
 2. If nothing changed, it stops.
-3. Otherwise it runs `cargo test --locked` and the product's end-to-end checks (111 for Phygital Key MCP).
+3. Otherwise it runs `cargo test --locked` and the product's end-to-end checks (124 for Phygital Key MCP).
 4. Only if they pass: it commits "Update the base to <commit>", pushes to the product's `main`, and starts the product's full CI (`gh workflow run ci.yml`).
 
 A base change that breaks a product is never pushed to it; the product stays on the last good commit. Releases stay in the product: a base change reaches users only with the product's next signed release.

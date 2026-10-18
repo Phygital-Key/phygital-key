@@ -3,7 +3,7 @@
 This page lists every security review of Phygital Key so far, what each one found, and what was changed. It is for anyone judging how far to trust the project, and for researchers who want to know what has already been looked at. Reviews 1 to 7 looked at the single program `phygital-key`, before the split into the base and the products in 0.4.0; file names, commands and e2e check names in them are as they were then. The reviewed gate code now lives in `crates/phygital-key-gate` and is the same in every product; the MCP tools moved to Phygital Key MCP. Review 8 covers the split and the A2A adapter.
 
 > [!IMPORTANT]
-> Phygital Key is **pre-audit**. The eight reviews below were done by AI security-auditor agents, not by a paid third-party audit firm. They found real problems, and every confirmed finding was fixed or, where a fix is not built, documented as a limit. They are no substitute for an outside audit.
+> Phygital Key is **pre-audit**. The nine reviews below were done by AI security-auditor agents, not by a paid third-party audit firm. They found real problems, and every confirmed finding was fixed or, where a fix is not built, documented as a limit. They are no substitute for an outside audit.
 
 **On this page**
 
@@ -154,6 +154,22 @@ This round was not a review by a reading agent. Outside test suites and tools ra
 | The installer's release-list check, run on its own (`tests/release-lists.sh`) | Three bugs in the new v2 code before it shipped: an empty array that stops macOS's bash 3.2, a missing memory file that stopped the script, and a `grep -q` in a pipe that could make a refused ML-DSA check look like an older program | Fixed before release |
 | Firefox and WebKit, 10-minute fuzzing per target, SLSA provenance check | Nothing | Kept: browsers job, weekly fuzzing |
 
+## Review 9: agent-bound approvals and Linux socket activation
+
+Scope: the new `pka.2` format and the agent's proof in both verifiers, the gate, the page, MCP and A2A; and systemd holding the gate's port across restarts. Result: 1 high, 2 low and 4 informational findings, all fixed. No way found to use a bound approval without the agent's key, to strip or downgrade the binding, or to make the page sign a key it does not show.
+
+| ID | Severity | Finding | Fix | Proof now |
+|---|---|---|---|---|
+| H1 | HIGH | The installer counted any process whose control-group path *ended in* `<program>.service` as the gate's own, and skipped it in the "another program on the port" checks. A user can name a unit of their own that way (`systemd-run --user --unit=<program>`), so a program could pose as the gate on the port during a first install and pass the install's checks. | A listener counts as the gate's own only when it is pid 1, or root or the gate user inside the system's units (the whole path, `/system.slice/<program>.service` or `.socket`); the installer refuses if the socket unit could not open the port; the admin helper flags a wrong user in the gate's units. | `tests/update-job.sh`: "a user's own unit named like the gate is not ours", "a process of another user is not ours, whatever its cgroup says" |
+| L1 | LOW | The gate took any loopback sockets on its port from `LISTEN_FDS`, without checking `LISTEN_PID` or that both addresses were there, so a gate started with a leaked environment could leave `[::1]` free. | It takes them only when `LISTEN_PID` is its own, and only exactly `127.0.0.1` and `[::1]` (it binds `[::1]` itself when that one is missing, unless the machine has no IPv6). | The code (`web.rs`, `inherited_listeners`); secure install "the gate answers on the sockets systemd hands it" |
+| L2 | LOW | Rust accepted a `pka.1` approval with `"cnf": null`; JavaScript refused it. | Refused in both. | Vector `v1_with_null_cnf` |
+| I1 | INFO | The gate cannot prove that the agent holds the private key for `agent_key`, so "usable only by the program that asked" said too much. | The page says "Usable only by: whoever holds key ... (given by the program that asked)". | e2e "the page says only the program that asked can use the approval" |
+| I2 | INFO | `required` binding applies to one-time approvals only. | Stated in the `Binding` docs and the spec. | |
+| I3 | INFO | A gate that always fails restarted every second for good. | Restarts back off up to 30 s (`RestartSteps`, `RestartMaxDelaySec`); the port stays held. | |
+| I4 | INFO | On a machine with IPv6 off, the socket unit cannot open `[::1]` and the gate does not start (fails closed). | Documented in [secure install](secure-install.md#limits). | |
+
+Mutation testing of the new code (cargo-mutants on `bound.rs` and `verify.rs`): 100 mutants, 87 caught, 8 unviable, 5 missed. Three were real gaps (the output of `sign_proof`, a proof dated at the approval's `exp`) and now have tests; two cannot occur (no valid proof reaches the 4096-byte limit, because its fields are bounded).
+
 ## The documentation review
 
 While this documentation was written for v0.3.0, its pages were checked claim by claim against the code. That is not one of the security reviews, but it found one fail-open bug and several places where the program and its docs disagreed. All were fixed in the code before the release (see the 0.3.0 entry in the [changelog](../CHANGELOG.md)).
@@ -183,18 +199,15 @@ Nothing confirmed by a review is open without a fix or a documented limit. These
 
 - [ ] An outside, paid security audit (the project stays labeled pre-audit until then)
 - [ ] Approvals are signed, not encrypted (decision 33)
-- [ ] An approval is a bearer for its life (60 s by default, at most 300 s); binding it to the requester's key is planned, not built
+- [ ] A `pka.1` approval is a bearer for its life (60 s by default, at most 300 s). An agent with its own key can ask for a `pka.2` approval instead, which only works with that agent's proof; a service has to call `verify_bound` (or require binding) to get that protection
 - [ ] The gate machine draws the approval page, and authenticators do not show what they sign: a gate machine under someone else's control could show one request and sign another. Approving on a second device that computes the challenge itself is planned, not built
 - [ ] Use tokens already handed out work for up to 60 s after a revoke, until the service picks up the signed revocation
 - [ ] No hardware-attestation check (decision 35)
 - [ ] The audit log detects edits, not a full rewrite or a cut-off end
-- [ ] The limit of 50 waiting requests has no automated test (the 30-a-minute limit now has one: e2e "the 31st request in a minute is refused (flood limit)")
 - [ ] No secure install for Windows
 - [ ] The download path is untested in CI: CI installs the secure install from a root-owned local build (`--binary`). Installing from a published, signed release was done by hand for both products, but a real automatic update to a newer release has not run yet, and the ML-DSA signing in a release run has been tried only locally with test keys.
-- [ ] Each product's ML-DSA release key is made once by the owner (`scripts/release-key.sh --pq`). Until it is pinned, release lists carry the P-256 signature only.
-- [ ] The gate's port is free for a moment at each update restart. A program that takes it is killed and the gate started again, but handing the open port from launchd or systemd to the gate is not built (review 7, H2). The kill-and-restart has no CI check.
-- [ ] A person's active standing approval can hold back a security update for up to 7 days (review 7, M1). The waiting logic has no CI check.
-- [ ] The fixes for review 7 L2 and L3 have no automated test.
+- [ ] macOS only: the gate's port is free for a moment at each update restart. A program that takes it is killed and the gate started again (5 times at most, then the gate stops). On Linux, systemd holds the port across restarts. launchd's socket hand-over needs unsafe code, which the project does not use (review 7, H2)
+- [ ] A person's active standing approval can hold back a security update for up to 7 days (review 7, M1)
 
 ## How to report
 

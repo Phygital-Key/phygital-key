@@ -110,10 +110,10 @@ The base has no program, so some checks live in each product's repository and ru
 
 | Check | Phygital Key MCP |
 |---|---|
-| End-to-end and red team (real Chromium, a virtual passkey, the official MCP SDK; 111 checks) | `tests/e2e/run.mjs` |
+| End-to-end and red team (real Chromium, a virtual passkey, the official MCP SDK; 124 checks) | `tests/e2e/run.mjs` |
 | The approval page in Firefox and WebKit (16 checks) | `tests/e2e/browsers.mjs` |
 | Abuse: floods, huge and slow requests, idle connections (16 checks) | `tests/e2e/abuse.mjs` |
-| Secure install, for real on macOS and Linux, with its automatic updates (34 checks on Linux, 32 on macOS) | `tests/secure-install.sh` |
+| Secure install, for real on macOS and Linux, with its automatic updates (36 checks on Linux, 32 on macOS) | `tests/secure-install.sh` |
 | Container image builds and starts | `packaging/container/Dockerfile` |
 | Files made from the base templates are up to date | `phygital-key-mcp product-files --out .` then `git diff --exit-code` |
 

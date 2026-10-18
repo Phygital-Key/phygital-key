@@ -25,20 +25,21 @@ This page lists every layer of tests in the Phygital Key base (this repository),
 
 | Layer | Count | Where | In CI |
 |---|---|---|---|
-| Shared test vectors | 123 (55 approvals, 25 key histories, 43 standing approvals) | `test-vectors/` | Yes, in Rust and in JavaScript |
+| Shared test vectors | 141 (73 approvals, 25 key histories, 43 standing approvals) | `test-vectors/` | Yes, in Rust and in JavaScript |
 | Wycheproof (Google's known-hard cases) | 746 ECDSA P-256 (DER and raw), in both verifiers; 210 ML-DSA-65 | `test-vectors/wycheproof/` | Yes |
 | Cross-check with SimpleWebAuthn | 11 valid and 10 passkey-refusal vectors, 2 stricter cases listed | `crosscheck/` | Yes, Linux |
-| Rust `#[test]` functions | 64 in 13 files (58 plain, 6 property) | `crates/` | Yes, Linux, macOS, Windows |
+| Rust `#[test]` functions | 66 in 13 files (60 plain, 6 property) | `crates/` | Yes, Linux, macOS, Windows |
 | Property tests | 6 functions × 2000 cases = 12,000 random cases per run | `crates/phygital-key-verify/tests/props.rs` | Yes |
-| Fuzz targets | 4, 60 s each on every push, 30 min each every week | `fuzz/fuzz_targets/` | Yes, Linux |
+| Fuzz targets | 5, 60 s each on every push, 30 min each every week | `fuzz/fuzz_targets/` | Yes, Linux |
 | Mutation testing | cargo-mutants on the verifier: 341 mutants, every real gap caught | by hand | No |
-| JavaScript checker | 11 tests (3 run every shared vector, 2 run Wycheproof) | `verifier-js/test/` | Yes, Linux |
+| JavaScript checker | 12 tests (3 run every shared vector, 2 run Wycheproof, 1 signs an agent proof) | `verifier-js/test/` | Yes, Linux |
 | Installer release-list check | 22 checks on lists signed with a test key | `crates/phygital-key-gate/tests/release-lists.sh` | Yes, Linux |
+| Update job and port check | 21 checks with stand-ins: the standing-approval wait, the port takeover, which listeners are the gate's own | `crates/phygital-key-gate/tests/update-job.sh` | Yes, Linux |
 | Scripts and workflows | ShellCheck on the installers, zizmor on the workflows | `.github/workflows/ci.yml` (lint job) | Yes, Linux |
 | Examples | build and syntax of 3 examples | `examples/` | Yes, Linux |
 | Supply chain | cargo-deny: advisories, licences, bans, sources | `deny.toml` | Yes |
 | Static analysis | CodeQL on Rust, JavaScript and the workflows | `.github/workflows/codeql.yml` | Yes |
-| End to end, browsers, abuse, secure install, container | 111, 16, 16, 34 (Linux) and 5 checks in Phygital Key MCP | in each product's repository | Yes, there ([below](#tests-in-each-product)) |
+| End to end, browsers, abuse, secure install, container | 124, 16, 16, 36 (Linux) and 5 checks in Phygital Key MCP | in each product's repository | Yes, there ([below](#tests-in-each-product)) |
 
 ## Shared test vectors
 
@@ -46,10 +47,10 @@ The vectors are part of the [spec](spec.md): every implementation must pass ever
 
 | File | Cases | Accepted | Refused | Codes covered |
 |---|---|---|---|---|
-| `vectors.json` (approvals) | 55 | 11 | 44 | `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `ASSURANCE_TOO_LOW`, `UNTRUSTED_KEY`, `BAD_SIGNATURE`, `REPLAYED` |
+| `vectors.json` (approvals) | 73 | 14 | 59 | `APPROVAL_REQUIRED`, `MALFORMED`, `WRONG_AUDIENCE`, `EXPIRED`, `REQUEST_MISMATCH`, `ASSURANCE_TOO_LOW`, `UNTRUSTED_KEY`, `BAD_SIGNATURE`, `REPLAYED`, `PROOF_REQUIRED`, `BAD_PROOF` |
 | `keyrings.json` (key histories) | 25 | 5 | 20 | `UNSIGNED`, `WRONG_ROOT`, `BAD_ENTRY`, `KEYS_DO_NOT_MATCH`, `WRONG_ORIGIN`, `NOT_AN_UPDATE` |
 | `standing.json` (standing approvals) | 43 | 9 | 34 | `NOT_ALLOWED`, `USED_UP`, `REVOKED`, `REPLAYED`, `REQUEST_MISMATCH`, `BAD_SIGNATURE`, `WRONG_AUDIENCE`, `EXPIRED`, `ASSURANCE_TOO_LOW`, `MALFORMED`, `APPROVAL_REQUIRED` |
-| **Total** | **123** | **25** | **98** | |
+| **Total** | **141** | **28** | **113** | |
 
 The vectors cover exact edges: 8192 and 8193 byte requests, 4096 and 4097 byte client data, 16384 and 16386 character approvals, exactly at `exp`, 30 s and 31 s clock drift, 300 s and 301 s life, NFD text, a KELVIN SIGN payee, a Cyrillic look-alike, floats, duplicate keys, deep nesting, lone surrogates, a flipped signature bit, wrong origin, wrong RP ID, a cross-origin frame, replays, rollbacks and forks of the key history, and every standing-approval limit. Each case has a `description`; see [test vectors](../test-vectors/README.md).
 
@@ -95,16 +96,16 @@ Counted with `grep -c '#\[test\]'` in each file:
 | `crates/phygital-key-verify/tests/units.rs` | 17 | Known-answer `request_hash` and receipt reference, huge integers, level and error-code names, keyring parsing, key cards, request shapes, ids, depth counting, root fingerprint, standing rules, use tokens and use receipts |
 | `crates/phygital-key-verify/tests/props.rs` | 6 | Property tests (next section) |
 | `crates/phygital-key-verify/tests/wycheproof.rs` | 3 | Every Wycheproof P-256 case, DER and raw, through the verifier's own signature calls; high-S signatures verify ([Wycheproof](#wycheproof)) |
-| `crates/phygital-key-verify/tests/edges.rs` | 6 | Edges mutation testing found loose: 36-byte authenticator data refused even when signed; `set_keyring` changes what a live verifier trusts; seen ids and use counts kept until exactly 30 s after expiry; a 4096-character receipt is read; revocation lists read from JSON count and merge |
+| `crates/phygital-key-verify/tests/edges.rs` | 7 | Edges mutation testing found loose: 36-byte authenticator data refused even when signed; `set_keyring` changes what a live verifier trusts; seen ids and use counts kept until exactly 30 s after expiry; a 4096-character receipt is read; revocation lists read from JSON count and merge; a proof made by `sign_proof` checks out, and one dated at the approval's `exp` does not |
 | `crates/phygital-key-verify/src/canonical.rs` | 7 | Key order (RFC 8785 UTF-16 order), string escapes, floats refused, non-NFC refused, NFC singletons refused rather than folded, composition exclusions |
 | `crates/phygital-key-verify/src/strict.rs` | 3 | Duplicate keys and junk refused, deep nesting refused, brackets inside strings not counted |
 | `crates/phygital-key-verify/src/receipt.rs` | 1 | Receipt round trip and refusals |
 | `crates/phygital-key-gate/src/audit.rs` | 1 | The hash chain detects changes |
 | `crates/phygital-key-gate/src/seen.rs` | 1 | Used ids remembered until expiry; a damaged file fails closed |
 | `crates/phygital-key-gate/src/util.rs` | 1 | Dates |
-| `crates/phygital-key-gate/src/update.rs` | 10 | Signed release lists: a signed list is accepted and parsed; a changed list, a wrong key, no key or a junk signature is refused; the strict line format (final LF, no CRLF, lowercase hex, two spaces, no duplicate or foreign file names, no paths); versions compare by number; keys are read from PEM blocks. v2 lists: in date and signed twice is accepted; expired, signed in the future, missing or wrong ML-DSA signature refused; strict `signed` and `expires` lines; ML-DSA keys read from their blocks; the 210 Wycheproof ML-DSA-65 cases |
+| `crates/phygital-key-gate/src/update.rs` | 11 | Signed release lists: a signed list is accepted and parsed; a changed list, a wrong key, no key or a junk signature is refused; the strict line format (final LF, no CRLF, lowercase hex, two spaces, no duplicate or foreign file names, no paths); versions compare by number; keys are read from PEM blocks. v2 lists: in date and signed twice is accepted; expired, signed in the future, missing or wrong ML-DSA signature refused; strict `signed` and `expires` lines; ML-DSA keys read from their blocks; the 210 Wycheproof ML-DSA-65 cases; a link planted at the staging path is replaced, never written through (review 7 L2) |
 | `crates/phygital-key-gate/src/product.rs` | 3 | The installers get the product block and its release keys, filled once; unsafe product values are refused; environment names are made from the program name |
-| **Total** | **64** | |
+| **Total** | **66** | |
 
 ```bash
 cargo test --workspace
@@ -135,6 +136,7 @@ Coverage-guided fuzzing with `cargo-fuzz` (libFuzzer). CI runs each target for 6
 | `strict_json` | Random bytes to the strict parser and the canonical form | Never panics; accepted input is stable through canonical form and back |
 | `keyring_history` | Random keyrings | Never panics, never passes for a random root |
 | `standing` | Random standing approvals and use tokens, each paired with a real one | Never panics, never verifies |
+| `proof` | Random bytes as the agent's proof for a real agent-bound approval, and the real proof with the bytes XORed in | Never panics, never verifies |
 
 Needs nightly Rust and `cargo install cargo-fuzz`:
 
@@ -197,6 +199,14 @@ cd verifier-js && npm test
 
 It found three bugs in the new code before they shipped: an empty array that stops bash 3.2, a missing memory file that stopped the script, and a `grep -q` in a pipe that could make a refused ML-DSA check look like an older program.
 
+## Update job and port check
+
+`crates/phygital-key-gate/tests/update-job.sh` takes three functions out of `assets/install-service.sh` and runs them with stand-ins for curl, kill, ps, systemd and `/proc`. No root, no network. 21 checks:
+
+- `standing_hold`: the daily job waits while standing approvals are active, says why and how to install now, remembers when it first waited for the installed version, waits at 6 days, goes on after 7, ignores an old record for another version, does not wait with `--now` or when the gate does not answer;
+- `gate_up`: a program that takes the port during an unattended update is stopped with `kill -9` once per grab and named in the result line; after 5 tries the gate is stopped (fail closed); an install by hand refuses instead;
+- `ours` (Linux): systemd (pid 1), the gate in its system unit and systemd's helper in the gate's units are the gate's own; root in another unit, a user's own unit named like the gate, and another user's process are not; on macOS nothing is skipped.
+
 ## Scripts and workflows
 
 The CI job "scripts and workflows" runs ShellCheck (`-S warning`) on the installer templates and the test scripts, the release-list check above, and [zizmor](https://docs.zizmor.sh) (offline) on the workflows. The products run zizmor on theirs. Both were clean after the fixes listed in the changelog.
@@ -244,9 +254,9 @@ flowchart TD
 | test | `ubuntu-latest`, `macos-latest`, `windows-latest` | `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --locked -- -D warnings`; `cargo test --workspace --locked`; `cargo run -q --release -p phygital-key-testgen --locked -- test-vectors` and `git diff --exit-code test-vectors` |
 | JavaScript checker | `ubuntu-latest`, Node 24 | `npm test` in `verifier-js` |
 | examples | `ubuntu-latest`, Node 24 | `node --check examples/node-service/server.mjs`; `cargo build` of `examples/rust-service`; YAML check of `examples/ci-approval/example-deploy.yml` |
-| fuzz | `ubuntu-latest`, nightly Rust | `cargo install --locked cargo-fuzz`, then each of the 4 targets for 60 s |
+| fuzz | `ubuntu-latest`, nightly Rust | `cargo install --locked cargo-fuzz`, then each of the 5 targets for 60 s |
 | licenses and advisories | `ubuntu-latest` | cargo-deny |
-| scripts and workflows | `ubuntu-latest` | `shellcheck -S warning` on `crates/phygital-key-gate/assets/*.sh` and `crates/phygital-key-gate/tests/*.sh`; `crates/phygital-key-gate/tests/release-lists.sh`; `pipx run zizmor==1.31.1 --offline .` |
+| scripts and workflows | `ubuntu-latest` | `shellcheck -S warning` on `crates/phygital-key-gate/assets/*.sh` and `crates/phygital-key-gate/tests/*.sh`; `crates/phygital-key-gate/tests/release-lists.sh`; `crates/phygital-key-gate/tests/update-job.sh`; `pipx run zizmor==1.31.1 --offline .` |
 | cross-check with SimpleWebAuthn | `ubuntu-latest`, Node 24 | `npm ci` and `npm test` in `crosscheck` |
 
 `.github/workflows/codeql.yml` runs GitHub CodeQL (static analysis) on the Rust code, the JavaScript (approval page and checker) and the workflows, on every push, every pull request and once a week.
@@ -263,16 +273,16 @@ The base has no program, so the tests that need one run in each product's reposi
 
 | Test | Checks | Where |
 |---|---|---|
-| End-to-end and red team: the release build, a real Chromium with a virtual passkey, the official MCP SDK as the client, and the demo service, including agent attacks, web hardening, key changes, standing approvals and revocation, stdio mode and the flood limit, and what the AI reads (instructions, tool names, descriptions and schemas are short, plain printable ASCII, with no hidden characters and no outside links) | 111 | [`tests/e2e/run.mjs`](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/tests/e2e/run.mjs) |
+| End-to-end and red team: the release build, a real Chromium with a virtual passkey, the official MCP SDK as the client, and the demo service, including agent attacks, web hardening, key changes, standing approvals and revocation, stdio mode and the flood limit, and what the AI reads (instructions, tool names, descriptions and schemas are short, plain printable ASCII, with no hidden characters and no outside links), agent-bound approvals (a copy without the agent's proof, a proof by another key and a stale proof are refused), the waiting limit, and audit-check and trust-service from the command line | 124 | [`tests/e2e/run.mjs`](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/tests/e2e/run.mjs) |
 | The approval page in Firefox and WebKit (Safari's engine), each with its own gate: enroll, confirm, approve once (the replay is refused), deny, and no page or console error. Playwright's virtual passkey stands in for `navigator.credentials`, so this checks the page and the gate in those engines, not each browser's own WebAuthn code | 16 | [`tests/e2e/browsers.mjs`](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/tests/e2e/browsers.mjs) |
 | Abuse against a live gate: 10 MB bodies, 50,000-deep JSON, 1 MB and 2000-line headers, random bytes, 200 idle or half-sent connections (it answers meanwhile and closes them after 10 s), a 2000-request burst, odd paths, memory under 200 MB | 16 | [`tests/e2e/abuse.mjs`](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/tests/e2e/abuse.mjs) |
-| Secure install, for real on macOS and Linux, then attacked as the user, with the update job checks, the job started from systemd and launchd, the open-file limit and (Linux) the systemd sandbox score (the list is on [secure install](secure-install.md#how-it-is-tested)) | 34 on Linux, 32 on macOS | [`tests/secure-install.sh`](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/tests/secure-install.sh), written from the base template `crates/phygital-key-gate/assets/secure-install-test.sh` |
+| Secure install, for real on macOS and Linux, then attacked as the user, with the update job checks, the job started from systemd and launchd, the open-file limit and (Linux) the systemd sandbox score and a program trying to take the port through two restarts (the list is on [secure install](secure-install.md#how-it-is-tested)) | 36 on Linux, 32 on macOS | [`tests/secure-install.sh`](https://github.com/Phygital-Key/phygital-key-mcp/blob/main/tests/secure-install.sh), written from the base template `crates/phygital-key-gate/assets/secure-install-test.sh` |
 | Container image: builds, the program runs, the gate starts and answers, runs as `65532:65532`, enrollment works inside it | 5 | the `container` job of the product's `ci.yml` |
 | Files made from the base are up to date: `product-files --out .`, then `git diff --exit-code` | 1 | the `product-files` job of the product's `ci.yml` |
 | Tests of the MCP side (`cargo test --locked`) on Linux, macOS and Windows | | the `test` job of the product's `ci.yml` |
 | The product's workflows, with zizmor | | the `workflows` job of the product's `ci.yml` |
 
-Phygital Key A2A runs the same secure install, container and zizmor checks, its own 167 end-to-end checks (the official A2A client, and the agent card is plain printable ASCII with no outside links) and the A2A conformance kit: see [its testing page](https://github.com/Phygital-Key/phygital-key-a2a/blob/main/docs/testing.md).
+Phygital Key A2A runs the same secure install, container and zizmor checks, its own 172 end-to-end checks (the official A2A client, and the agent card is plain printable ASCII with no outside links) and the A2A conformance kit: see [its testing page](https://github.com/Phygital-Key/phygital-key-a2a/blob/main/docs/testing.md).
 
 The release workflow (`release.yml`) is in each product too: on a `v*` tag it runs the tests, builds 5 targets, signs `release.txt` and `release2.txt` (P-256, and ML-DSA-65 once that key is pinned, checked by the program it just built) and publishes the release and the container image ([signed in the release run](architecture.md#signed-in-the-release-run)).
 

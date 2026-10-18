@@ -55,7 +55,7 @@ If any check fails, the verifier returns one error code and you do not act. The 
 The check itself is pure: no network, no global state except the seen store. It uses ES256 (ECDSA over P-256 with SHA-256), SHA-256 and RFC 8785 canonical JSON. Approvals are signed and verified, not encrypted: anyone who holds one can read the request in it, so keep secrets out of requests.
 
 > [!IMPORTANT]
-> Phygital Key is pre-audit: no outside security audit has been done yet. The Rust and JavaScript verifiers are checked against the same 123 shared test vectors, but treat them as unaudited code.
+> Phygital Key is pre-audit: no outside security audit has been done yet. The Rust and JavaScript verifiers are checked against the same 141 shared test vectors, but treat them as unaudited code.
 
 ## The request you check is the one you run
 
@@ -121,6 +121,8 @@ The approval is one base64url string of at most 16384 characters. Accept it in o
 |---|---|
 | HTTP header `Phygital-Approval: <approval>` | Your API takes the action's params as the body. The demo service reads this header. |
 | A JSON field `"approval": "<approval>"` next to the params | Headers are hard to set for your callers, or the call is not HTTP. |
+
+For an approval bound to the agent's key (`pka.2`), the agent also sends its proof in `Phygital-Proof` (see [agent-bound approvals](#agent-bound-approvals)).
 
 For a standing approval the agent sends two values: the person's standing approval in `Phygital-Approval` and the use token for this one action in `Phygital-Use` (or two JSON fields). The MCP tools of Phygital Key MCP tell agents to do exactly this.
 
@@ -244,6 +246,26 @@ phygital-key-mcp --origin https://approve.example.com verify \
 ```json
 {"approved_by":"alice (TEST ONLY)","exp":1792273462,"id":"IndRsb1x5UAclXKSU4dcnA","level":"high","ok":true}
 ```
+
+## Agent-bound approvals
+
+An agent that holds a P-256 key pair of its own can ask with its public key (`agent_key`, base64url SPKI DER). The approval is then `pka.2`: the person's passkey signs that key along with the request, and only the holder of the key can use it. A copy taken on its way is refused. Spec: [section 7d](spec.md#7d-agent-bound-approvals).
+
+**Your service** calls `verify_bound` instead of `verify`, with the proof from the `Phygital-Proof` header:
+
+```rust
+use phygital_key_verify::bound::Binding;
+let binding = Binding { proof: headers.get("phygital-proof").and_then(|h| h.to_str().ok()), required: false };
+let ok = verifier.verify_bound(&approval, binding, &request, Level::High)?;
+```
+
+```js
+const result = await verify(approval, expected, keyring, seen, config, now, { proof: req.headers["phygital-proof"], required: false });
+```
+
+Plain `verify` (or `verify` with no proof) refuses a `pka.2` approval with `PROOF_REQUIRED`, so a service that has not been updated fails closed. Set `required: true` to refuse `pka.1` approvals too. The id is spent only when the proof checks out.
+
+**The agent** makes the proof right before it acts: a compact JWS, header exactly `{"alg":"ES256","typ":"pka-proof+jwt"}`, payload the canonical form of `{"v": "pka.proof.1", "approval_id": <claims.id>, "aud": <claims.aud>, "request_hash": <claims.request_hash>, "iat": <now>}`, signed with ES256 (raw r||s). The JavaScript checker exports `signProof` for this; the Rust crate has `bound::sign_proof`. A proof is fresh for 30 s.
 
 ## Standing approvals
 

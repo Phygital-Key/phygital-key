@@ -24,13 +24,15 @@ The verifier runs its checks in a fixed order (spec section 7) and returns the c
 | `ASSURANCE_TOO_LOW` | 5, 8 | Level below what the service requires, or the presence or verification flag is missing | `verify`, `verify_use` |
 | `UNTRUSTED_KEY` | 6 | Signed by a key that is not in the keyring, or for a relying party the service does not allow | `verify`, `verify_use` |
 | `BAD_SIGNATURE` | 7 | The WebAuthn assertion or the use token signature does not check out | `verify`, `verify_use` |
-| `REPLAYED` | 9 | Already used | `verify`, `verify_use` |
+| `PROOF_REQUIRED` | 9 | An agent-bound approval (`pka.2`) came without the agent's proof, or the service requires binding and the approval is not bound | `verify`, `verify_bound` |
+| `BAD_PROOF` | 9 | The agent's proof does not check out | `verify_bound` |
+| `REPLAYED` | 10 | Already used | `verify`, `verify_use` |
 | `NOT_ALLOWED` | standing | Outside a standing approval's limits | `verify_use` |
 | `USED_UP` | standing | A standing approval has no uses left | `verify_use` |
 | `REVOKED` | standing | The person revoked this standing approval | `verify_use` |
 | `DENIED` | none | The person said no | reserved for gates; never returned by `verify` |
 
-All 13 are in `ErrorCode::ALL` (Rust). The JavaScript checker returns the same strings in `result.error`. Shared test vectors cover every code except `DENIED`.
+All 15 are in `ErrorCode::ALL` (Rust). The JavaScript checker returns the same strings in `result.error`. Shared test vectors cover every code except `DENIED`.
 
 ## What a service returns
 
@@ -175,6 +177,28 @@ Codes are safe to return to the agent: they name the failed check and carry noth
 | Service | Return the code. Keep the revocation: see [revocations](revocations.md). |
 | Agent | Stop using it. Ask the person before anything else. |
 | Vectors | standing: `revoked`, `revoked_among_others` (and three cases that must not revoke: `revocation_by_untrusted_key`, `revocation_for_other_service`, `revocation_of_other_standing`) |
+
+### `PROOF_REQUIRED`
+
+| | |
+|---|---|
+| Meaning | The approval is bound to the asking agent's key (`pka.2`), and no proof came with it. Or the service requires bound approvals and this one (`pka.1`) is not bound. |
+| Check | Step 9, after every other check: `verify_bound` with no proof, or plain `verify` on a `pka.2` approval; or `required` binding and a `pka.1` approval. |
+| Common causes | The agent forgot the `Phygital-Proof` header. Someone other than the agent is trying the approval (a copy from a log or a transcript). |
+| Service | Return the code. The id is not spent, so the real agent can still use it. |
+| Agent | Send the approval again with a proof signed with your key (see [integrate](integrate.md#agent-bound-approvals)). |
+| Vectors | `bound_without_proof`, `unbound_when_binding_required` |
+
+### `BAD_PROOF`
+
+| | |
+|---|---|
+| Meaning | The proof for an agent-bound approval does not check out. |
+| Check | Step 9: the proof must be a compact JWS with the exact header, signed by the key in `cnf.key`, naming this approval id, this service and this request hash, made within 30 s of now and before the approval's `exp`. |
+| Common causes | Signed with another key. Made for another approval, service or request. Made more than 30 s ago (a clock that is off). Not a JWS at all. |
+| Service | Return the code. The id is not spent. |
+| Agent | Make a fresh proof with the key you asked with, right before you act. |
+| Vectors | `bound_proof_by_another_key`, `bound_proof_for_another_approval`, `bound_proof_for_another_service`, `bound_proof_for_another_request`, `bound_proof_31s_old`, `bound_proof_unknown_version`, `bound_proof_flipped_bit`, `bound_proof_junk` |
 
 ### `DENIED`
 

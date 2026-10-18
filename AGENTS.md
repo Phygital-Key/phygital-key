@@ -19,7 +19,7 @@ This repository (`Phygital-Key/phygital-key`, renamed from `phygital-key-mcp`) i
 Four parts live here, all Apache-2.0:
 
 - **The format and its test vectors** (`docs/spec.md`, `test-vectors/`): format `pka.1`, canonical form RFC 8785 (JCS) over NFC text with integers only, challenge `SHA-256("phygital-key/approval/v1" || 0x00 || JCS(claims))`.
-- **Two verifiers that share no code:** Rust (`crates/phygital-key-verify`) and JavaScript (`verifier-js/`, WebCrypto only, no dependencies). Both must pass every shared vector (123: 55 approvals, 25 key histories, 43 standing approvals).
+- **Two verifiers that share no code:** Rust (`crates/phygital-key-verify`) and JavaScript (`verifier-js/`, WebCrypto only, no dependencies). Both must pass every shared vector (141: 73 approvals, 25 key histories, 43 standing approvals).
 - **The gate engine** (`crates/phygital-key-gate`, a library): the approval page, enrollment and the signed key history, one-time and standing approvals, revocations, receipts, the hash-chained audit log, the secure install, signed updates and the shared commands (`serve`, `stdio`, `demo`, `enroll`, `token`, `keys`, `verify`, `install-service`, `update` and others, [docs/reference.md](docs/reference.md)). A product gives it a `Product` (its name, program, port, repository and pinned release keys) and an `Adapter` (its agent protocol), then calls `phygital_key_gate::run`.
 - **The templates** every product publishes (`crates/phygital-key-gate/assets/*.sh`): the secure installer, the user installer, the secure-install CI test and the release scripts. A product writes its own copies with `<program> product-files --out .`.
 
@@ -57,6 +57,7 @@ crates/phygital-key-verify/        the Rust verifier library (pure: no network, 
   src/canonical.rs                 canonical form: NFC required (never rewritten), integers only, then JCS
   src/strict.rs                    strict JSON: duplicate keys and nesting deeper than 16 refused
   src/b64.rs                       base64url without padding, strict on decode
+  src/bound.rs                     agent-bound approvals (pka.2): the agent's proof, Binding, sign_proof
   src/webauthn.rs                  the small part of WebAuthn a verifier needs: one ES256 assertion
   src/history.rs                   signed key history: verify_history, verify_history_update, fingerprints
   src/standing.rs                  standing approvals, use tokens, revocations, verify_use
@@ -89,10 +90,11 @@ crates/phygital-key-gate/          the gate engine every product shares (a libra
   assets/brand/*.svg               logo marks used by the pages
   assets/install-service.sh        template: the secure installer (system user, launchd or systemd, daily signed update job, admin helper)
   assets/install.sh                template: the user installer (signed release list and SHA-256 checked, writes ~/.local/bin/<program>)
-  assets/secure-install-test.sh    template: the secure-install CI test (34 checks on Linux, 32 on macOS), published by a product as tests/secure-install.sh
+  assets/secure-install-test.sh    template: the secure-install CI test (36 checks on Linux, 32 on macOS), published by a product as tests/secure-install.sh
   assets/release-key.sh            template: one-time release key setup, published as scripts/release-key.sh
   assets/package-manifests.sh      template: Homebrew, Scoop and winget manifests, published as scripts/package-manifests.sh
   tests/release-lists.sh           the secure installer's release-list check against lists signed with a test key (22 checks)
+  tests/update-job.sh              the daily job's standing-approval wait, port takeover and gate-listener check, with stand-ins (21 checks)
 
 crates/phygital-key-testgen/       writes the shared test vectors
   Cargo.toml                       crate manifest
@@ -114,6 +116,7 @@ verifier-js/                       the independent JavaScript verifier (Node 20+
   src/canonical.js                 canonical form and SHA-256
   src/history.js                   signed key history
   src/standing.js                  standing approvals, use tokens, revocations
+  src/bound.js                     agent-bound approvals: the proof check and signProof
   test/vectors.test.js             9 tests: every shared vector, single use, strict parsing, and that async seen and use stores are awaited
   test/wycheproof.test.js          2 tests: every Wycheproof P-256 case through the checker's own signature handling
 
@@ -125,6 +128,7 @@ fuzz/                              cargo-fuzz targets (nightly)
   fuzz_targets/strict_json.rs      strict parser and canonical form
   fuzz_targets/keyring_history.rs  random keyrings
   fuzz_targets/standing.rs         random standing approvals and use tokens
+  fuzz_targets/proof.rs            random proofs for a bound approval
 
 examples/                          runnable services, each run against a product's demo (CI checks the code builds and the YAML parses)
   README.md                        what each example shows and how to run it

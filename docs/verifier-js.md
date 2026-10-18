@@ -115,6 +115,10 @@ Arguments:
 
 The checks and their order are the same as in Rust; see [verifier-rust](verifier-rust.md#verify) and [error codes](error-codes.md).
 
+### Agent-bound approvals
+
+`verify` takes an optional last argument, `{ proof, required }`: `proof` is the agent's proof (the `Phygital-Proof` header) for a `pka.2` approval, and `required: true` refuses approvals that are not bound. Without a proof, a `pka.2` approval is `PROOF_REQUIRED`. For agents, `signProof({ approvalId, aud, requestHash, iat }, privateKey)` makes the proof with a WebCrypto ECDSA P-256 key. See [integrate](integrate.md#agent-bound-approvals).
+
 ### Standing approvals
 
 | Export | Signature | Returns |
@@ -294,7 +298,7 @@ A check in a browser can show a person whether an approval is valid. It does not
 
 | Test | What it checks |
 |---|---|
-| every approval vector | All 55 cases in `test-vectors/vectors.json` give the expected result. |
+| every approval vector | All 73 cases in `test-vectors/vectors.json` give the expected result. |
 | every key-history vector | All 25 cases in `keyrings.json`, using `verifyHistoryUpdate` when a vector has an `accepted` copy. |
 | every standing-approval vector | All 43 cases in `standing.json`, with prior uses and revocations from each vector. |
 | an approval works once | The second `verify` of the same approval is `REPLAYED`. |
@@ -310,7 +314,7 @@ The level, byte-order mark and revocation-junk tests came from security reviews 
 ℹ tests 9
 ℹ pass 9
 ℹ fail 0
-``` The Rust verifier runs the same 123 vectors: [verifier-rust](verifier-rust.md#how-it-is-tested), [test vectors](../test-vectors/README.md).
+``` The Rust verifier runs the same 141 vectors: [verifier-rust](verifier-rust.md#how-it-is-tested), [test vectors](../test-vectors/README.md).
 
 ## Next
 

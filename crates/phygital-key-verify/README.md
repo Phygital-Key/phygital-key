@@ -51,7 +51,7 @@ In order, first failure wins: well formed (`APPROVAL_REQUIRED`, `MALFORMED`), au
 
 ## Tested
 
-It passes all 123 shared test vectors in `test-vectors/` (55 approvals, 25 key histories, 43 standing approvals), the same ones the independent [JavaScript verifier](../../verifier-js/README.md) passes, plus property tests (6 functions, 2000 cases each), unit tests and fuzz targets.
+It passes all 141 shared test vectors in `test-vectors/` (73 approvals, 25 key histories, 43 standing approvals), the same ones the independent [JavaScript verifier](../../verifier-js/README.md) passes, plus property tests (6 functions, 2000 cases each), unit tests and fuzz targets.
 
 ## Read more
 

@@ -26,7 +26,7 @@
 
 <p align="center">
 <a href="docs/webauthn.md"><img src="https://img.shields.io/badge/WebAuthn-ES256%20%C2%B7%20P--256-FF6B5A" alt="WebAuthn, ES256 on P-256"></a>
-<a href="docs/testing.md"><img src="https://img.shields.io/badge/test%20vectors-123%20shared-26D0F2" alt="123 shared test vectors"></a>
+<a href="docs/testing.md"><img src="https://img.shields.io/badge/test%20vectors-141%20shared-26D0F2" alt="141 shared test vectors"></a>
 <a href="docs/secure-install.md"><img src="https://img.shields.io/badge/secure%20install-macOS%20%C2%B7%20Linux-555" alt="Secure install on macOS and Linux"></a>
 <a href="docs/threat-model.md"><img src="https://img.shields.io/badge/status-pre--audit-FF6B5A" alt="Status: pre-audit"></a>
 <a href="#signed-automatic-updates"><img src="https://img.shields.io/badge/releases-signed-26D0F2" alt="Signed releases"></a>
@@ -47,7 +47,7 @@
 </p>
 
 > [!WARNING]
-> **Pre-audit.** No outside security firm has reviewed it yet. It has had eight independent AI security reviews with every finding fixed or documented as a limit, and it is tested on every change. Read the [threat model](docs/threat-model.md) before you rely on it.
+> **Pre-audit.** No outside security firm has reviewed it yet. It has had nine independent AI security reviews with every finding fixed or documented as a limit, and it is tested on every change. Read the [threat model](docs/threat-model.md) before you rely on it.
 
 <p align="center">
 <img src="docs/images/approve-dark-desktop.png" alt="The approval page in the dark theme: a deploy request for service api, version 2.4.1, environment production, with every field listed, the SHA-256 fingerprint of the exact text being signed, and Approve and Deny buttons" width="640">
@@ -87,7 +87,7 @@ This repository is the base both products are built on. It publishes no programs
 | JavaScript verifier | [`verifier-js/`](verifier-js) | An independent checker with no dependencies (Node 20+ and browsers) that passes the same vectors |
 | Gate engine | [`crates/phygital-key-gate`](crates/phygital-key-gate) | Everything the products share: approval page, keys, standing approvals, receipts, audit log, secure install, signed updates and the shared commands |
 | Open spec | [`docs/spec.md`](docs/spec.md) | The `pka.1` format and every check, so anyone can write another verifier |
-| Test vectors | [`test-vectors/`](test-vectors) | 123 cases every verifier must pass, made by [`crates/phygital-key-testgen`](crates/phygital-key-testgen) |
+| Test vectors | [`test-vectors/`](test-vectors) | 141 cases every verifier must pass, made by [`crates/phygital-key-testgen`](crates/phygital-key-testgen) |
 | Fuzzing | [`fuzz/`](fuzz) | 4 fuzz targets |
 | Examples | [`examples/`](examples) | Runnable services in Node and Rust, and a CI approval step |
 | Docs | [`docs/`](docs) | Every shared guide |
@@ -189,7 +189,7 @@ verifier.verify(&approval, &request, Level::High)?; // refuses on any doubt
 // ...now deploy.
 ```
 
-**JavaScript** (Node 20+ or a browser, no dependencies): the independent checker in [`verifier-js/`](verifier-js) passes the same 123 test vectors.
+**JavaScript** (Node 20+ or a browser, no dependencies): the independent checker in [`verifier-js/`](verifier-js) passes the same 141 test vectors.
 
 **Any language:** call the command line of an installed product and check the exit code (`phygital-key-a2a verify` takes the same options).
 
@@ -292,15 +292,15 @@ The secure install updates itself once a day, and installs a release only if all
 
 | Layer | Where | What |
 |---|---|---|
-| Shared test vectors | Base | 123 cases (55 approvals, 25 key histories, 43 standing approvals) that the Rust and JavaScript checkers must both pass |
+| Shared test vectors | Base | 141 cases (73 approvals, 25 key histories, 43 standing approvals) that the Rust and JavaScript checkers must both pass |
 | Wycheproof | Base | Google's known-hard cases: 746 for P-256 in both checkers, 210 for ML-DSA-65 |
 | Cross-check | Base | SimpleWebAuthn, an independent WebAuthn library, agrees on every approval vector |
 | Property tests | Base | 6 properties, 2000 random cases each |
 | Fuzzing | Base | 4 targets (verifier, strict parser, key history, standing), 60 s each in CI, 30 min each every week |
 | Mutation testing | Base | `cargo-mutants` on the verifier: 341 mutants, every real gap now caught by a test |
 | Supply chain | Base | `cargo-deny`: advisories and a licence allowlist; ShellCheck on the installers, zizmor on the workflows |
-| End to end | Each product | Phygital Key MCP: 111 checks with real Chromium, a virtual passkey and the official MCP SDK, including attacks; 16 more in Firefox and WebKit; 16 abuse checks (floods, huge and slow requests) |
-| Secure install | Each product | 34 checks on Linux, 32 on macOS: installed for real in the product's CI, then attacked as the user; update job (started by systemd and launchd), signature refusal, a planted `~/.curlrc` and `PATH`, switch-back and the sandbox score checked |
+| End to end | Each product | Phygital Key MCP: 124 checks with real Chromium, a virtual passkey and the official MCP SDK, including attacks; 16 more in Firefox and WebKit; 16 abuse checks (floods, huge and slow requests) |
+| Secure install | Each product | 36 checks on Linux, 32 on macOS: installed for real in the product's CI, then attacked as the user; update job (started by systemd and launchd), signature refusal, a planted `~/.curlrc` and `PATH`, switch-back and the sandbox score checked |
 
 The base CI runs on every push on Linux, macOS and Windows. Each product's CI runs its own checks on every push, and again after each daily base update. Details: [testing](docs/testing.md), [security reviews](docs/security-reviews.md), [threat model](docs/threat-model.md). Found a problem? [Report it privately](SECURITY.md).
 

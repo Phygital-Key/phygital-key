@@ -185,7 +185,7 @@ Signing in proves who you are for a session. An approval signs one exact request
 ## Audits, licence and cost
 
 **Has it been audited?**
-Not by an outside firm yet. Treat it as pre-audit. It has had eight independent internal security reviews (AI security auditor agents) and one round of outside test suites, with every finding fixed or documented as a limit, and it is tested on every change: 123 shared test vectors (55 approvals, 25 key histories, 43 standing approvals) in two independent checkers, Google's Wycheproof cases, a cross-check with SimpleWebAuthn, property tests, fuzzing, mutation testing, end-to-end checks in each product (111 in MCP, 167 in A2A) with a real browser and a virtual passkey, and a real secure install on macOS and Linux. See [security reviews](security-reviews.md) and [testing](testing.md).
+Not by an outside firm yet. Treat it as pre-audit. It has had nine independent internal security reviews (AI security auditor agents) and one round of outside test suites, with every finding fixed or documented as a limit, and it is tested on every change: 141 shared test vectors (73 approvals, 25 key histories, 43 standing approvals) in two independent checkers, Google's Wycheproof cases, a cross-check with SimpleWebAuthn, property tests, fuzzing, mutation testing, end-to-end checks in each product (124 in MCP, 172 in A2A) with a real browser and a virtual passkey, and a real secure install on macOS and Linux. See [security reviews](security-reviews.md) and [testing](testing.md).
 
 **What does it cost?**
 Nothing. It is free and open source, with no account, no subscription and no paid tier. If you run the gate on your own server, you pay for that server.

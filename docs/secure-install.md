@@ -38,7 +38,7 @@ Every name comes from the product's program name and its short id (`mcp` or `a2a
 | Data, Linux | `/var/lib/phygital-key-mcp` | `/var/lib/phygital-key-a2a` |
 | Gate log, macOS | `/Library/Logs/PhygitalKey/mcp/gate.log` | `/Library/Logs/PhygitalKey/a2a/gate.log` |
 | launchd labels | `io.phygitalkey.mcp.gate`, `io.phygitalkey.mcp.update` | `io.phygitalkey.a2a.gate`, `io.phygitalkey.a2a.update` |
-| systemd units | `phygital-key-mcp.service`, `phygital-key-mcp-update.service`, `phygital-key-mcp-update.timer` | `phygital-key-a2a.service`, `phygital-key-a2a-update.service`, `phygital-key-a2a-update.timer` |
+| systemd units | `phygital-key-mcp.socket` (the port, held by systemd), `phygital-key-mcp.service`, `phygital-key-mcp-update.service`, `phygital-key-mcp-update.timer` | `phygital-key-a2a.socket`, `phygital-key-a2a.service`, `phygital-key-a2a-update.service`, `phygital-key-a2a-update.timer` |
 
 What each one is, with `<id>` for the short id, `<program>` for the program name and `<prefix>` for the program folder:
 
@@ -296,7 +296,8 @@ Then [install](#install) the product and enroll your key again. Moving the old k
 - **It contacts GitHub daily** while automatic updates are on ([privacy](privacy.md#what-leaves-your-machine)). The gate itself makes no network calls.
 - **Automatic updates are new.** No product release has been installed by the daily job against GitHub yet. Until then, CI tests the parts on their own (below). Up to MCP 0.4.0 and A2A 0.1.0 the job did not start at all from launchd or systemd (no `HOME`); after the next release, run `<program>-admin update` once to get the fixed job.
 - **Restarts end standing approvals** and drop waiting requests (fail closed). An automatic update restarts the gate at the job's time.
-- **A moment with a free port.** While the gate restarts, its port is free for a moment. A program that takes it during an update is stopped, but a fast one could take it again (and is stopped again). Passing the open port from launchd or systemd to the gate is not built, because the gate forbids unsafe code.
+- **macOS: a moment with a free port.** While the gate restarts, its port is free for a moment. A program that takes it during an update is stopped, but a fast one could take it again (and is stopped again, 5 times at most, then the gate stops). On Linux this cannot happen: systemd holds the port (`<program>.socket`) while the gate restarts. launchd can hand over a port too, but only through code the project would have to mark unsafe.
+- **Linux with IPv6 turned off:** the socket unit cannot open `[::1]`, so the gate does not start (it fails closed). Turn IPv6 on for loopback, or run the gate under your own user.
 - **Changing the port** changes the approval page's address, which your keyring is tied to. Enroll a new keyring after such a change ([keys and devices](keys-and-devices.md#the-signed-key-history)).
 - **Pre-audit.** No outside security audit has happened yet ([security reviews](security-reviews.md)).
 
@@ -310,6 +311,8 @@ Each product's CI installs its gate for real, as a separate user, on macOS and o
 - [x] the gate answers
 - [x] only the gate user listens (IPv4 and IPv6)
 - [x] the gate may open 8192 files
+- [x] Linux: a program running as the user tries to take the port again and again through two restarts, and never gets it (systemd holds it)
+- [x] Linux: the gate answers on the sockets systemd hands it
 - [x] the program is owned by root
 - [x] this user cannot change the program
 - [x] this user cannot read the data folder
@@ -338,7 +341,7 @@ Each product's CI installs its gate for real, as a separate user, on macOS and o
 - [x] purge removes everything
 - [x] uninstall removes the update job
 
-That is 34 checks on Linux and 32 on macOS (the two sandbox scores are Linux only). Two of them have honest limits: the update job runs against GitHub, where no newer signed release exists, so it records `up to date`, `update check failed` or `update refused`; and the switch-back check installs a broken program with `--binary`, not through a real update. The base has no program, so it does not run this test itself. See [testing](testing.md) for the other suites.
+That is 36 checks on Linux and 32 on macOS (the sandbox scores and the two port checks are Linux only). Two of them have honest limits: the update job runs against GitHub, where no newer signed release exists, so it records `up to date`, `update check failed` or `update refused`; and the switch-back check installs a broken program with `--binary`, not through a real update. The base has no program, so it does not run this test itself. See [testing](testing.md) for the other suites.
 
 ## Troubleshooting
 
