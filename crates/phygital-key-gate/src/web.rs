@@ -437,13 +437,7 @@ pub async fn serve(gate: Shared, app: Router) -> Result<(), String> {
     // so one address is never left free while the other keeps serving.
     let mut tasks = tokio::task::JoinSet::new();
     for l in listeners {
-        let app = app.clone();
-        tasks.spawn(async move {
-            axum::serve(l, app.into_make_service())
-                .with_graceful_shutdown(shutdown_signal())
-                .await
-                .map_err(|e| e.to_string())
-        });
+        tasks.spawn(accept_loop(l, app.clone()));
     }
     let first = tasks.join_next().await;
     tasks.abort_all();
@@ -451,6 +445,41 @@ pub async fn serve(gate: Shared, app: Router) -> Result<(), String> {
         Some(Ok(r)) => r,
         Some(Err(e)) => Err(e.to_string()),
         None => Ok(()),
+    }
+}
+
+/// How long a connection may take to send a request's headers, and how long
+/// it may sit idle between requests. Without it, a program on this computer
+/// could hold every file the gate may open with idle connections and keep the
+/// approval page from loading.
+const HEADER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Accept connections until shutdown. Each one is served over HTTP/1.1 with
+/// [`HEADER_TIMEOUT`]; a failed accept (for example, out of open files) waits
+/// a moment and goes on.
+async fn accept_loop(listener: tokio::net::TcpListener, app: Router) -> Result<(), String> {
+    use hyper_util::rt::{TokioIo, TokioTimer};
+    use hyper_util::service::TowerToHyperService;
+    let mut shutdown = std::pin::pin!(shutdown_signal());
+    loop {
+        let stream = tokio::select! {
+            accepted = listener.accept() => match accepted {
+                Ok((stream, _)) => stream,
+                Err(_) => {
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            },
+            () = &mut shutdown => return Ok(()),
+        };
+        let service = TowerToHyperService::new(app.clone());
+        tokio::spawn(async move {
+            let mut http = hyper::server::conn::http1::Builder::new();
+            http.timer(TokioTimer::new())
+                .header_read_timeout(HEADER_TIMEOUT);
+            // A connection that ends badly (timeout, junk, reset) is just dropped.
+            let _ = http.serve_connection(TokioIo::new(stream), service).await;
+        });
     }
 }
 

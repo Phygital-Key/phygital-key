@@ -840,6 +840,8 @@ dependencies = [
  "base64",
  "clap",
  "getrandom",
+ "hyper",
+ "hyper-util",
  "p256",
  "phygital-key-verify",
  "serde",

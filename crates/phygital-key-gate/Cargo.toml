@@ -23,6 +23,9 @@ subtle.workspace = true
 p256.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-std"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query"] }
+# Already under axum: used directly to serve each connection with a header timeout.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "service"] }
 clap = { version = "4", features = ["derive", "env"] }
 url = "2"
 

@@ -440,6 +440,8 @@ if [ "$OS" = mac ]; then
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <key>SoftResourceLimits</key>
+  <dict><key>NumberOfFiles</key><integer>8192</integer></dict>
   <key>Umask</key><integer>63</integer>
   <key>StandardOutPath</key><string>$LOGS/gate.log</string>
   <key>StandardErrorPath</key><string>$LOGS/gate.log</string>
@@ -468,6 +470,7 @@ Group=$SVC_USER
 ExecStart=$BIN --home $DATA --port $PORT serve
 Restart=on-failure
 UMask=0077
+LimitNOFILE=8192
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

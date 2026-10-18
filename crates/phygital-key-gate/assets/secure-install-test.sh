@@ -61,6 +61,13 @@ for p in $(sudo lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t | sort -u); do
   [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] || fail "a listener is not the gate user"
 done
 pass "only the gate user listens (IPv4 and IPv6)"
+# Room for many connections: idle ones are dropped after 10 s, and the limit is
+# high enough that a program cannot fill it with idle connections in that time.
+GPID=$(sudo lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t | head -1)
+if [ "$(uname -s)" = Linux ]; then nofile=$(sudo cat "/proc/$GPID/limits" | awk '/Max open files/ {print $4}')
+else nofile=$(sudo plutil -extract SoftResourceLimits.NumberOfFiles raw "/Library/LaunchDaemons/io.phygitalkey.$P_ID.gate.plist" 2>/dev/null); fi
+echo "      open file limit: ${nofile:-unknown}"
+[ "${nofile:-0}" -ge 8192 ] 2>/dev/null && pass "the gate may open 8192 files" || fail "the gate's open file limit is ${nofile:-unknown}, want 8192"
 owner() { if [ "$(uname -s)" = Darwin ]; then stat -f %Su "$1"; else stat -c %U "$1"; fi; }
 [ "$(owner "$PREFIX/bin/$P_BIN")" = root ] && pass "program owned by root" || fail "program owned by root"
 if touch "$PREFIX/bin/$P_BIN" 2>/dev/null; then fail "this user can change the program"; else pass "this user cannot change the program"; fi
