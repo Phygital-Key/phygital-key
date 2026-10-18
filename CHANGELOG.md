@@ -12,7 +12,7 @@
 - **An independent JavaScript verifier** (`verifier-js/`, no dependencies, Node 20+ and browsers) that passes every shared test vector, in CI.
 - **Two more independent security reviews**, every finding fixed: the gate now holds both localhost addresses (IPv4 and IPv6) and refuses to start if either is taken, and in `mcp` mode the page and MCP stop together, so no other program can serve a look-alike approval page; the secure install downloads and checks the official release itself (never runs or installs a file you could have changed), uses root-only folders, and refuses whenever another program listens on the gate's port; revocations can always be signed and retried and cannot be used to flood the gate; `serve` never writes secrets to its log; clean exit on SIGTERM; JavaScript checker fixes (built-in names as levels, byte-order marks, junk in revocation lists).
 - **Docs:** a complete documentation set (guides for people, agents and services, internals, security and testing, use cases, runnable examples).
-- **Credit:** `NOTICE` now reads "Created by s17sh70x2jfl031ag" and must travel with every copy (Apache-2.0, section 4(d)).
+- **Credit:** `NOTICE` now reads "Created by Phygital-Key" and must travel with every copy (Apache-2.0, section 4(d)).
 
 ## 0.2.0 (2026-10-17)
 

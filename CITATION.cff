@@ -4,7 +4,7 @@ title: "Phygital Key"
 abstract: "A person's signed yes, for one exact request, that anyone can check. A person approves exact AI actions with a passkey or hardware key."
 type: software
 authors:
-  - alias: "s17sh70x2jfl031ag"
+  - name: "Phygital-Key"
 repository-code: "https://github.com/Phygital-Key/phygital-key-mcp"
 license: Apache-2.0
 version: 0.3.0

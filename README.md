@@ -363,7 +363,7 @@ The gate keeps its data in one folder (`~/.phygital-key`, or a root-only folder 
 
 Phygital Key is free and open source under the [Apache-2.0](LICENSE) license. You can use it at home or at work, change it, ship it in a product and sell that product. You can read every line that handles your approvals, and check the release you run against its published SHA-256.
 
-The one thing to keep: the [`NOTICE`](NOTICE) file, with the line "Created by s17sh70x2jfl031ag", in every copy or changed version (Apache-2.0, section 4(d)).
+The one thing to keep: the [`NOTICE`](NOTICE) file, with the line "Created by Phygital-Key", in every copy or changed version (Apache-2.0, section 4(d)).
 
 Contributions are welcome under the same license: see [CONTRIBUTING.md](CONTRIBUTING.md). The format is an open spec ([`pka.1`](docs/spec.md)), so anyone can write another verifier and test it against the shared vectors.
 
@@ -373,4 +373,4 @@ Provided "as is", without warranty of any kind, as the [license](LICENSE) says. 
 
 ## License
 
-[Apache-2.0](LICENSE). Created by s17sh70x2jfl031ag.
+[Apache-2.0](LICENSE). Created by Phygital-Key.

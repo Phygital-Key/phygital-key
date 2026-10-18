@@ -191,7 +191,7 @@ Nothing. It is free and open source, with no account, no subscription and no pai
 Yes. Everything (spec, test vectors, both checkers, the gate) is Apache-2.0. You may use it, change it, sell it and build on it.
 
 **What do I have to keep?**
-The `NOTICE` file, with any copy or changed version. It carries the line "Created by s17sh70x2jfl031ag", and Apache-2.0 section 4(d) makes it travel with every copy. See [CONTRIBUTING.md](../CONTRIBUTING.md) to help.
+The `NOTICE` file, with any copy or changed version. It carries the line "Created by Phygital-Key", and Apache-2.0 section 4(d) makes it travel with every copy. See [CONTRIBUTING.md](../CONTRIBUTING.md) to help.
 
 ## Next
 

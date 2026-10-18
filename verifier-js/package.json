@@ -30,5 +30,5 @@
   "scripts": {
     "test": "node --test test/vectors.test.js"
   },
-  "author": "s17sh70x2jfl031ag"
+  "author": "Phygital-Key"
 }

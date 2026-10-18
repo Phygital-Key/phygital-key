@@ -24,7 +24,7 @@ Cargo.toml                         workspace: three crates, shared dependency ve
 Cargo.lock                         locked dependency versions (CI builds with --locked)
 deny.toml                          cargo-deny: allowed licences, advisories, bans, sources
 LICENSE                            Apache-2.0
-NOTICE                             the credit line "Created by s17sh70x2jfl031ag" (must stay)
+NOTICE                             the credit line "Created by Phygital-Key" (must stay)
 README.md                          front page
 CHANGELOG.md                       release notes
 CONTRIBUTING.md                    ground rules and the commands to run
@@ -148,7 +148,7 @@ These are the product. A change that weakens one is a security bug.
 9. **The verifier decides.** Audience, the exact request and the level are set by the service, never taken from the requester. Keep `verify` pure: no network, no clock reads, no global state except the seen store.
 10. **Reserved names stay reserved.** Request types `standing` and `revoke`, and the audience `phygital-key:keyring:<origin>`, are made only by the gate.
 11. **The release signing key lives only in the GitHub environment secret.** It is `RELEASE_SIGNING_KEY` of the environment `release`, which GitHub gives only to a release run from a `v*` tag that the repository owner approved. Never put a private key in the repository: not in a commit, a workflow, an issue, a test or a log. Only the public half is in the repository, in the `# BEGIN RELEASE KEYS` blocks of `crates/phygital-key/assets/install-service.sh` and `install.sh`. Never run `scripts/release-key.sh` (it refuses to run without a terminal), never approve a release run or a deployment, never push a `v*` tag unless the owner asked, and never add another secret, job or step that could sign, or read the key outside the approved `publish` job.
-12. **Keep the credit.** `NOTICE` and `verifier-js/NOTICE` keep the line "Created by s17sh70x2jfl031ag". Never write any real person's name anywhere, and add no AI attribution lines to docs, commits or release notes.
+12. **Keep the credit.** `NOTICE` and `verifier-js/NOTICE` keep the line "Created by Phygital-Key". Never write any real person's name anywhere, and add no AI attribution lines to docs, commits or release notes.
 13. **Docs in plain words, no em dashes.** Not one em dash in any doc, page text or tool message. Follow the existing voice: short sentences, exact facts, every command one you ran. Say "pre-audit" until an outside security review exists. Relative links must resolve.
 
 ## Build and test
