@@ -385,7 +385,7 @@ The messages below are taken from the code (`crates/phygital-key/src/update.rs`)
 | Homebrew | `phygital-key: installed with Homebrew: run  brew upgrade phygital-key` |
 | Windows | `phygital-key: on Windows, update with your package manager: scoop update phygital-key, or winget upgrade` |
 
-The release list is `release.txt`, checked line by line before anything is downloaded: line 1 `phygital-key release manifest v1`, line 2 `version vX.Y.Z`, then one `<64 lowercase hex>  phygital-key-vX.Y.Z-<target>.tar.gz` (or `.zip`) line per file, LF line ends and a final LF, at most 8192 bytes. `release.txt.sig` is an ECDSA P-256 / SHA-256 signature (DER) made with the release key, which only a release run approved by the repository owner can use. The program and both install scripts pin the same public release keys.
+The release list is `release.txt`, checked line by line before anything is downloaded: line 1 `phygital-key release manifest v1`, line 2 `version vX.Y.Z`, then one `<64 lowercase hex>  phygital-key-vX.Y.Z-<target>.tar.gz` (or `.zip`) line per file, LF line ends and a final LF, at most 8192 bytes. `release.txt.sig` is an ECDSA P-256 / SHA-256 signature (DER) made with the release key, which only a release run from a `v*` tag can use (only repository admins can push those tags). The program and both install scripts pin the same public release keys.
 
 It contacts GitHub only when you run it (`curl -q` over HTTPS, TLS 1.2 or later; `-q` means no `.curlrc` is read). Until a signed release is published, it stops at the first download:
 

@@ -14,7 +14,7 @@ With the secure install:
 
 It does this with ordinary operating-system rules, no new mechanism:
 
-- the program is the official release, whose file list and SHA-256 sums are signed with the project's release key, used only in release runs the repository owner approved ([the signed release list](updates.md#the-signed-release-list)), owned by root, in folders only root can change;
+- the program is the official release, whose file list and SHA-256 sums are signed with the project's release key, used only in release runs from `v*` tags, which only repository admins can push ([the signed release list](updates.md#the-signed-release-list)), owned by root, in folders only root can change;
 - the gate runs as a separate user with no login and no shell;
 - its data folder (keyring, audit log, MCP token) is mode 0700 and owned by that user, so your account cannot even list it;
 - every admin action goes through `sudo`, so it needs your administrator password.
@@ -258,7 +258,7 @@ sudo /Library/PhygitalKey/bin/phygital-key install-service --uninstall --purge  
 - **This machine only.** The service serves `http://localhost:<port>` and, on Linux, may only talk to this machine. To approve from other devices over https, see [own server](own-server.md) (without the secure install's protections for now).
 - **The token is readable by the AI.** The MCP token ends up in your AI app's settings. It keeps other programs out, not the agent; the agent can only ask anyway.
 - **Root and the machine are trusted.** Whoever is root (or controls the machine) controls the gate and the page it serves. So does malware running as root.
-- **The release keys are trusted.** Updates install whatever a pinned release key signed. The keys come from the installer you first ran. The release key is held by GitHub, so whoever controls the repository owner's GitHub account can approve a release run and ship a signed update ([the update channel](threat-model.md#the-update-channel)).
+- **The release keys are trusted.** Updates install whatever a pinned release key signed. The keys come from the installer you first ran. The release key is held by GitHub, so whoever controls the repository owner's GitHub account (or a token with admin rights) can push a `v*` tag and ship a signed update, with no approval step for now ([the update channel](threat-model.md#the-update-channel)).
 - **It contacts GitHub daily** while automatic updates are on ([privacy](privacy.md#what-leaves-your-machine)). The gate itself makes no network calls.
 - **Automatic updates are new.** The first real automatic update against GitHub happens with the release after v0.3.0. Until then, CI tests the parts on their own (below).
 - **Restarts end standing approvals** and drop waiting requests (fail closed). An automatic update restarts the gate at the job's time.

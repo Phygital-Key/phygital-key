@@ -55,7 +55,7 @@ phygital-key --origin https://approve.example.com mcp-token
 
 ## Run it in a container
 
-From v0.3.0 each release also ships a container image, `ghcr.io/phygital-key/phygital-key` (Linux, amd64 and arm64). The release workflow builds it from the same Linux binaries the signed release contains, after the owner's approval, and publishes a build provenance record for it. It runs as an unprivileged user (uid 65532) on a distroless base, with the data folder at `/data`.
+From v0.3.0 each release also ships a container image, `ghcr.io/phygital-key/phygital-key` (Linux, amd64 and arm64). The release workflow builds it from the same Linux binaries the signed release contains, after the signing job, and publishes a build provenance record for it. It runs as an unprivileged user (uid 65532) on a distroless base, with the data folder at `/data`.
 
 ```bash
 docker run -d --name phygital-key --restart unless-stopped \

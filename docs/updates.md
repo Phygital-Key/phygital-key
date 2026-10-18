@@ -215,26 +215,25 @@ Every release carries two extra files:
 
   $$\text{release.txt.sig} = \mathrm{ECDSA\text{-}P256}_{\text{release key}}\big(\mathrm{SHA256}(\texttt{release.txt})\big)$$
 
-The private release key is a secret of the GitHub environment `release` (named `RELEASE_SIGNING_KEY`). GitHub hands that secret only to a release run started by a `v*` tag, and only after the repository owner approved that run on its page ("Review deployments", then Approve). No copy is kept anywhere else: `scripts/release-key.sh` makes the key in a temporary folder, stores it in GitHub and deletes the local copy. The public key is pinned in a `# BEGIN RELEASE KEYS` block in the secure installer (`crates/phygital-key/assets/install-service.sh`) and in `install.sh`, and a test checks that the two blocks match. `phygital-key update` reads the same block, built into the program.
+The private release key is a secret of the GitHub environment `release` (named `RELEASE_SIGNING_KEY`). GitHub hands that secret only to a release run started by a `v*` tag, and a repository ruleset ("Release tags: owner only") lets only repository admins create, update or delete `v*` tags. For now the environment has no required reviewer: the run signs and publishes by itself as soon as the owner pushes the tag (decision 36 in [decisions](decisions.md)). No copy is kept anywhere else: `scripts/release-key.sh` makes the key in a temporary folder, stores it in GitHub and deletes the local copy. The public key is pinned in a `# BEGIN RELEASE KEYS` block in the secure installer (`crates/phygital-key/assets/install-service.sh`) and in `install.sh`, and a test checks that the two blocks match. `phygital-key update` reads the same block, built into the program.
 
 ```mermaid
 flowchart LR
     Tag["Owner pushes tag vX.Y.Z"] --> Build["build job: tests, 5 archives, a build record for each"]
-    Build --> Wait["publish job waits for the owner's approval"]
-    Wait --> Sign["After approval: computes every SHA-256, writes and signs release.txt, checks it against the pinned key"]
+    Build --> Sign["publish job (environment release): computes every SHA-256, writes and signs release.txt, checks it against the pinned key"]
     Sign --> Pub["Published release with release.txt and release.txt.sig"]
     Pub --> Check["Installer, update job or phygital-key update: checks the signature with the pinned keys, then the SHA-256"]
 ```
 
 1. A pushed tag `vX.Y.Z` starts `.github/workflows/release.yml`. Its build job runs `cargo test --workspace --locked` and builds the archives (and their `.sha256` files) for the 5 targets, and publishes a build provenance attestation for each archive (`actions/attest-build-provenance`: a record signed through Sigstore of which workflow built which file from which commit).
-2. The `publish` job uses the environment `release`, so it waits until the owner presses "Review deployments" and approves. Only then does it get the key. It computes the SHA-256 of every archive itself, writes `release.txt`, signs it, checks the signature against the keys pinned in that commit's `install-service.sh` (it stops if none matches), and publishes the release with every file plus `release.txt` and `release.txt.sig`.
+2. The `publish` job uses the environment `release`, so it gets the key only in a run from a `v*` tag. It does not wait for an approval click while the required reviewer is off. It computes the SHA-256 of every archive itself, writes `release.txt`, signs it, checks the signature against the keys pinned in that commit's `install-service.sh` (it stops if none matches), and publishes the release with every file plus `release.txt` and `release.txt.sig`.
 3. Every installer and updater checks the signature first and takes the SHA-256 only from the signed list.
 
 The parser in `crates/phygital-key/src/update.rs` refuses anything that is not exactly this form: another header, a version line without `v` or with leading zeros, uppercase hex, one space instead of two, CRLF line ends, a file name for another version, a path, a duplicate file, or a list with no files.
 
-What this protects: someone who swaps a release file on GitHub, runs a download mirror or sits between you and GitHub cannot make an update that installs, because they cannot sign. A stolen workflow token or a pull request cannot read the key either: GitHub gives the environment secret only to approved runs from `v*` tags.
+What this protects: someone who swaps a release file on GitHub, runs a download mirror or sits between you and GitHub cannot make an update that installs, because they cannot sign. A stolen workflow token or a pull request cannot read the key either: GitHub gives the environment secret only to runs from `v*` tags, and only repository admins can push those tags.
 
-What it does not protect: whoever controls the owner's GitHub account (or is a repository admin) can push a tag, approve the run and get a signed release, and the secure install with automatic updates installs it within about a day. What still limits that: the owner's GitHub sign-in (two-factor, ideally a passkey), the build record that shows afterwards which workflow built each file from which commit, the version check (no older version installs), and your choice to turn automatic updates off. Your first install also trusts the installer script you download (pinned to the `v0.3.0` tag over https), and the keys in it are the root of trust from then on. See [the update channel](threat-model.md#the-update-channel).
+What it does not protect: whoever can push a `v*` tag with an admin account (the owner, or anything holding the owner's GitHub sign-in or token) gets a signed release with no second step, and the secure install with automatic updates installs it within about a day. Before, an approval click on the run was also needed; the owner plans to turn it back on as the project grows (Settings, Environments, release, Required reviewers). What still limits that: the owner's GitHub sign-in (two-factor, ideally a passkey), the build record that shows afterwards which workflow built each file from which commit, the version check (no older version installs), and your choice to turn automatic updates off. Your first install also trusts the installer script you download (pinned to the `v0.3.0` tag over https), and the keys in it are the root of trust from then on. See [the update channel](threat-model.md#the-update-channel).
 
 ## After updating
 
@@ -295,7 +294,7 @@ On Windows (PowerShell), compare the hash it prints with the first word of the `
 (Get-FileHash .\phygital-key-v0.3.0-x86_64-pc-windows-msvc.zip -Algorithm SHA256).Hash.ToLower()
 ```
 
-A matching `.sha256` shows only that the file is the one published next to it on GitHub. The signed `release.txt` also shows that a release run the owner approved signed it.
+A matching `.sha256` shows only that the file is the one published next to it on GitHub. The signed `release.txt` also shows that a release run from a `v*` tag in the project's repository signed it.
 
 **Check the build record (who built it).** With the GitHub CLI (`gh`), check that the release workflow built the archive, and from which commit:
 
@@ -306,7 +305,7 @@ gh attestation verify phygital-key-v0.3.0-aarch64-apple-darwin.tar.gz --repo Phy
 ## Limits
 
 - **Not tested against GitHub yet.** Signed release lists start with v0.3.0, so the first real automatic update (download, check, swap and restart against a newer signed release on GitHub) happens with the release after v0.3.0. CI tests the parts on their own, on macOS and Linux, on every push to `main` and every pull request (`tests/secure-install.sh`): the update job is installed and root-owned, it is on by default, a release list signed by an unknown key is refused, the job leaves the gate running unless a newer signed release exists and records its result, a new program that does not start is switched back to the previous one, `--no-auto-update` removes the job, the off choice is kept on later installs, `--auto-update` turns it back on, uninstall removes the job, and root ignores a planted `~/.curlrc` and a fake `curl` early in the user's `PATH`. The unit tests in `update.rs` cover the signature check, the strict format, version order, reading the pinned keys, and that both installers pin the same keys.
-- **The owner's GitHub account can ship an update.** The release key lives in GitHub, so whoever controls the owner's account can approve a release run and get a signed update ([what this protects](#the-signed-release-list)). Turn automatic updates off if you want to install each release yourself.
+- **The owner's GitHub account can ship an update.** The release key lives in GitHub, so whoever controls the owner's account (or holds a token with admin rights) can push a `v*` tag and get a signed update, with no approval step for now ([what this protects](#the-signed-release-list)). Turn automatic updates off if you want to install each release yourself.
 - **One trust root.** Everything rests on the pinned release keys, the owner's GitHub account, and the first installer you ran.
 - **A moment with a free port.** During an update restart the gate's port is free for a moment. A program that takes it is stopped and the gate started again, but a fast program could win that moment again (and is stopped again). Handing the open port from launchd or systemd to the gate, so it is never free, is not built: the gate forbids unsafe code.
 - **No expiry on the signed list.** Someone who controls the GitHub account or a download mirror could keep serving an old, validly signed `release.txt`. The job then reports `up to date` and never sees the newer release (a freeze). Compare the version in `status` with the [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) page now and then.

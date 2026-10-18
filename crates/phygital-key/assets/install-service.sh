@@ -19,7 +19,7 @@
 # Why: an AI agent runs as you. If the gate also ran as you, the agent could edit
 # the gate's program, keys and log. Here the gate runs as a separate user. Its
 # program is the official release, whose file list and SHA-256 sums are signed with
-# the project's release key (used only in release runs the owner approved), and it
+# the project's release key (used only in release runs for owner-only v* tags), and it
 # is kept in folders only an administrator can change. Its data folder is closed to everyone else. Nothing that you (or an agent acting as you) could have edited is
 # ever run as root or installed.
 set -euo pipefail

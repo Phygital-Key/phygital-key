@@ -64,8 +64,9 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    # The "release" environment holds the release signing key and waits until the
-    # repository owner approves this run on GitHub ("Review deployments").
+    # The "release" environment holds the release signing key and runs only for v*
+    # tags, which only repository admins can push. (It can also be set to wait for
+    # the owner's approval: Settings, Environments, release, Required reviewers.)
     environment: release
     permissions:
       contents: write

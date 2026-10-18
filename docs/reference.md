@@ -228,7 +228,7 @@ From v0.3.0. Setup with a TLS proxy, enrollment and updates: [run it in a contai
 | Default command | `--bind 0.0.0.0 serve` (listens on all addresses inside the container, so Docker can forward to it) |
 | Data folder | `/data`, a volume; `PHYGITAL_KEY_HOME=/data` |
 | Port | `7468` (publish it as `-p 127.0.0.1:7468:7468`) |
-| Built by | The `container` job of `.github/workflows/release.yml`, after the owner approves the release, from the same Linux binaries whose archives are listed in the signed `release.txt` |
+| Built by | The `container` job of `.github/workflows/release.yml`, after the `publish` job signs the release, from the same Linux binaries whose archives are listed in the signed `release.txt` |
 | Provenance | A build provenance attestation pushed with the image: `gh attestation verify oci://ghcr.io/phygital-key/phygital-key:v0.3.0 --repo Phygital-Key/phygital-key-mcp` |
 | Not inside | Automatic updates and `phygital-key update` |
 
@@ -271,7 +271,7 @@ Commands in a running container go through `docker exec`, for example `docker ex
 | Use tokens | ES256 JWS signed by a per-standing-approval P-256 key the gate makes and holds only in memory |
 | Receipts | ES256 JWS signed by the service's own P-256 key |
 | Audit log | SHA-256 hash chain |
-| Release list | ECDSA P-256 / SHA-256 signature (DER) by the release key, a GitHub environment secret used only in release runs the repository owner approved |
+| Release list | ECDSA P-256 / SHA-256 signature (DER) by the release key, a GitHub environment secret used only in release runs from `v*` tags, which only repository admins can push |
 
 Approvals are signed and verified, not encrypted: anyone who holds one can read the request in it. Use HTTPS for any origin other than localhost. Formats and checks in detail: [spec](spec.md).
 

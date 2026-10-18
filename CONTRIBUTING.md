@@ -117,14 +117,12 @@ docker run --rm pk-ci --version
 
 ## Releasing
 
-Only the repository owner can make a release that installs, because only a release run the owner approved can use the release key. Installers and the secure install's daily update job accept a release only if its file list (`release.txt`) is signed by a key pinned in `crates/phygital-key/assets/install-service.sh` and `install.sh` (decision 36 in [decisions](docs/decisions.md)). The private key is the secret `RELEASE_SIGNING_KEY` of the GitHub environment `release`, and nowhere else.
+Only the repository owner can make a release that installs: only a release run from a `v*` tag can use the release key, and a repository ruleset ("Release tags: owner only") lets only repository admins create, update or delete `v*` tags. For now there is no approval step, so pushing the tag is the release: the run signs and publishes by itself. Installers and the secure install's daily update job accept a release only if its file list (`release.txt`) is signed by a key pinned in `crates/phygital-key/assets/install-service.sh` and `install.sh` (decision 36 in [decisions](docs/decisions.md)). The private key is the secret `RELEASE_SIGNING_KEY` of the GitHub environment `release`, and nowhere else.
 
 ```mermaid
 flowchart LR
   T["Push tag vX.Y.Z"] --> CI["build job: test, build 5 targets, build records"]
-  CI --> W["publish job waits"]
-  W --> A["Owner: Review deployments, Approve"]
-  A --> P["CI hashes, signs release.txt, checks it, publishes the release"]
+  CI --> P["publish job: hashes, signs release.txt, checks it, publishes the release"]
   P --> C["container job: builds and pushes the image with a build record"]
 ```
 
@@ -132,21 +130,22 @@ Once, before the first signed release, the owner:
 
 - [ ] Runs `scripts/release-key.sh` in a terminal (it refuses to run without one), with the GitHub CLI `gh` signed in as the owner and `openssl` installed. It makes one P-256 key in a temporary folder, creates the GitHub environment `release` (the owner as required reviewer, deployments only from tags `v*`), stores the private key as the environment secret `RELEASE_SIGNING_KEY`, deletes the local copy, and pins the public key in the two installers. It refuses if a key is already pinned.
 - [ ] Commits the two changed installers.
-- [ ] Protects the GitHub account with two-factor sign-in, ideally a passkey: whoever controls it can approve a release.
+- [ ] Protects the GitHub account with two-factor sign-in, ideally a passkey: whoever controls it can push a `v*` tag and ship a signed release.
+- [ ] Keeps the rulesets "Release tags: owner only" (only admins create, update or delete `v*` tags) and "Protect main" (no deleting or force-pushing `main`). The required reviewer that `scripts/release-key.sh` sets is turned off for now (decision 36); to turn it back on: Settings, Environments, release, Required reviewers.
 
 For each release:
 
 1. Update the version (`Cargo.toml`, `verifier-js/package.json`, `CITATION.cff`, the default `VERSION` in `crates/phygital-key/assets/install-service.sh`) and add a `CHANGELOG.md` entry. CI must be green on `main`.
 2. Push the tag `vX.Y.Z`. In `.github/workflows/release.yml`, the build job runs `cargo test` on each runner, builds the five targets, writes a `.sha256` for each archive and publishes a build provenance attestation (build record) for each archive with `actions/attest-build-provenance`.
-3. Open the run in GitHub Actions. The `publish` job waits for the environment `release`. Press "Review deployments", then Approve.
-4. The approved job computes the SHA-256 of every archive, writes and signs `release.txt`, checks the signature against the keys pinned in that commit's `install-service.sh` (it stops if none matches), and publishes the release with all files, `release.txt` and `release.txt.sig`. Nothing is published before the approval.
+3. The `publish` job runs in the environment `release`, which hands it the key. It does not wait for an approval while the required reviewer is off.
+4. The job computes the SHA-256 of every archive, writes and signs `release.txt`, checks the signature against the keys pinned in that commit's `install-service.sh` (it stops if none matches), and publishes the release with all files, `release.txt` and `release.txt.sig`. Nothing is published before that check passes.
 5. The `container` job then builds the container image from the two Linux archives of this release (amd64 and arm64), pushes it to `ghcr.io/phygital-key/phygital-key` as `vX.Y.Z` and `latest`, and publishes a build provenance attestation for it. Check it with `gh attestation verify oci://ghcr.io/phygital-key/phygital-key:vX.Y.Z --repo Phygital-Key/phygital-key-mcp`.
 6. Write the package manifests with `scripts/package-manifests.sh vX.Y.Z` (Homebrew formula, Scoop manifest, winget manifests).
 
 To replace the key, pin the new public key next to the old one in a release signed with the old key, then remove the old key in a later release.
 
 > [!CAUTION]
-> Never put the release key in the repository, a workflow file or anywhere else: it lives only in the environment secret. Approve a run only for a tag you pushed yourself. AI agents never run `scripts/release-key.sh` and never approve a release run.
+> Never put the release key in the repository, a workflow file or anywhere else: it lives only in the environment secret. Push a `v*` tag only for a commit you have checked: with no approval step, the push alone ships a signed release. AI agents never run `scripts/release-key.sh`, never push a `v*` tag unless the owner asked, and never approve a release run.
 
 ## Docs style
 

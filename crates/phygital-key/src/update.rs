@@ -3,11 +3,11 @@
 //! Every release carries `release.txt`, a short list of the release's files and
 //! their SHA-256, and `release.txt.sig`, an ECDSA P-256 (SHA-256) signature over
 //! it. The release key is a secret of the GitHub environment "release": the
-//! release workflow can use it only on a tag, and only after the repository owner
-//! approves that run. The public release keys are pinned in
-//! `assets/install-service.sh` (one source for the shell installer and this
-//! program), so a download mirror, a swapped file or anyone without the owner's
-//! approval cannot make an update that installs.
+//! release workflow can use it only for `v*` tags, which only repository admins
+//! can push. The public release keys are pinned in `assets/install-service.sh`
+//! (one source for the shell installer and this program), so a download mirror,
+//! a swapped file or anyone who cannot push a release tag cannot make an update
+//! that installs.
 //!
 //! `release.txt` is exact, line by line (LF, final LF):
 //!

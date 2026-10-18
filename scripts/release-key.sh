@@ -5,15 +5,16 @@
 #
 # What it does:
 #   1. Makes a P-256 release signing key in a temporary folder.
-#   2. Creates the GitHub environment "release", which only tags v* can use and
-#      which waits for YOUR approval on every run ("Review deployments").
+#   2. Creates the GitHub environment "release", which only tags v* can use.
+#      (To also wait for your approval on every run: Settings, Environments,
+#      release, Required reviewers.)
 #   3. Stores the private key as the environment secret RELEASE_SIGNING_KEY. Only a
-#      release run you approved can read it. Then it deletes the local copy.
+#      release run for a v* tag can read it. Then it deletes the local copy.
 #   4. Pins the public key in both installers of this repo (commit that change).
 # From then on, only releases signed by that key install or update.
 #
 # Protect your GitHub account well (two-factor sign-in, ideally a passkey): whoever
-# controls it can approve a release.
+# controls it can push a release tag.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO=Phygital-Key/phygital-key-mcp
@@ -30,10 +31,9 @@ umask 077
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$T/key.pem" 2>/dev/null
 openssl pkey -in "$T/key.pem" -pubout -out "$T/pub.pem"
 
-me=$(gh api user --jq .id)
-echo "Creating the GitHub environment \"release\" (waits for your approval, tags v* only)"
+echo "Creating the GitHub environment \"release\" (tags v* only)"
 gh api -X PUT "repos/$REPO/environments/release" --input - >/dev/null <<JSON
-{"reviewers": [{"type": "User", "id": $me}], "prevent_self_review": false,
+{"reviewers": [],
  "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
 JSON
 gh api -X POST "repos/$REPO/environments/release/deployment-branch-policies" \
@@ -59,6 +59,5 @@ Done.
     The local copy is deleted.
   - The public key is pinned in crates/phygital-key/assets/install-service.sh and install.sh.
     Commit them.
-  - Each release: push a tag vX.Y.Z, open the run on GitHub (Actions), press
-    "Review deployments", then Approve. CI signs and publishes it.
+  - Each release: push a tag vX.Y.Z. CI builds, signs and publishes it.
 DONE
