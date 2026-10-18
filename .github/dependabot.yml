@@ -13,6 +13,15 @@ updates:
     groups:
       rust:
         patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /crosscheck
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      crosscheck:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -1,0 +1,12 @@
+{
+  "name": "phygital-key-crosscheck",
+  "private": true,
+  "type": "module",
+  "description": "Cross-check: an independent WebAuthn library (SimpleWebAuthn) must agree with our verifiers on the passkey part of every shared approval vector.",
+  "scripts": {
+    "test": "node --test simplewebauthn.test.mjs"
+  },
+  "devDependencies": {
+    "@simplewebauthn/server": "14.0.3"
+  }
+}
