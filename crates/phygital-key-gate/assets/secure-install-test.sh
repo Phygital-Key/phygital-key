@@ -105,12 +105,23 @@ before=$("$BIN" --version)
 sudo "$BIN" install-service --auto-update-run >/dev/null 2>&1 || true
 [ "$("$BIN" --version)" = "$before" ] && curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "update job leaves the gate running unless a newer signed release exists" || fail "update job leaves the gate running unless a newer signed release exists"
 sudo cat "$PREFIX/update-status" | grep -Eq "up to date|update check failed|update refused" && pass "update job records its result" || fail "no update result recorded"
+# The daily job itself, started the way the timer starts it (not just the command
+# with sudo, which brings its own environment), runs to the end.
+sudo rm -f "$PREFIX/update-status"
 if [ "$(uname -s)" = Linux ]; then
-  # The sandboxed daily job itself (not just the command) still runs to the end.
-  sudo rm -f "$PREFIX/update-status"
   sudo systemctl start "$P_BIN-update.service" || true
-  sudo cat "$PREFIX/update-status" 2>/dev/null | grep -Eq "up to date|update check failed|update refused" &&
-    curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "the sandboxed update service runs" || fail "the sandboxed update service did not run"
+else
+  sudo launchctl kickstart "system/$UPD_LABEL" || true
+  for _ in $(seq 1 60); do sudo test -f "$PREFIX/update-status" && break; sleep 1; done
+fi
+if sudo cat "$PREFIX/update-status" 2>/dev/null | grep -Eq "up to date|update check failed|update refused" &&
+  curl -fsS "http://localhost:$PORT/api/status" >/dev/null; then
+  pass "the daily update job runs from its service manager"
+else
+  sudo journalctl -u "$P_BIN-update.service" -n 20 --no-pager 2>/dev/null || sudo tail -n 20 "/Library/Logs/PhygitalKey/$P_ID-update/update.log" 2>/dev/null || true
+  fail "the daily update job did not run from its service manager"
+fi
+if [ "$(uname -s)" = Linux ]; then
   # systemd's own sandbox score: 0 is fully locked, 10 is open.
   for u in "$P_BIN.service" "$P_BIN-update.service"; do
     score=$(systemd-analyze security "$u" --no-pager 2>/dev/null | awk '/Overall exposure level/ {print $(NF-1)}')
