@@ -447,8 +447,12 @@ impl Gate {
                 "\"revoke\" is reserved: revoke a standing approval on its approval page".into(),
             );
         }
-        if aud == self.settings.keyring_aud() && matches!(kind, Kind::Action | Kind::Standing(_)) {
-            return Err("this audience is reserved for the gate itself".into());
+        // Every gate's key-list audience is reserved, not only this gate's own: two
+        // products on one machine share the passkey site name `localhost`.
+        if aud.starts_with("phygital-key:keyring:")
+            && matches!(kind, Kind::Action | Kind::Standing(_))
+        {
+            return Err("this audience is reserved for Phygital Key gates themselves".into());
         }
         let request_hash =
             canonical::hash_b64(&request).map_err(|_| "request: no canonical form".to_string())?;

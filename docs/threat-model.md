@@ -236,6 +236,8 @@ The guarantees hold only if **the agent cannot change the gate's program, the ga
 
 ## Known limits
 
+- Two products on one computer (MCP on port 7468, A2A on 7478) both use the passkey site name `localhost`. A page on one port can ask for a signature from the other product's key. A service is safe as long as it checks each gate separately: one `Verifier`, one keyring, one origin per gate ([integrate](integrate.md)). Each gate also refuses requests aimed at any gate's key-list audience (`phygital-key:keyring:...`).
+
 - **Signed, not encrypted.** Whoever holds an approval can read the request. Keep secrets out of requests. Encrypted requests are not built, by decision 33 in [decisions](decisions.md): the page is served by the gate, so encrypting against the gate helps only with a separately served, pinned page.
 - **A bearer for its life.** A stolen approval works once, only for that request and audience, until it expires (60 s by default, at most 300 s). Binding it to the requester's key is not built.
 - **Revocation lag.** Until a service picks up the signed revocation, use tokens already handed out work for up to 60 s. An agent that collected every remaining use right before the revoke could spend them all in that window.

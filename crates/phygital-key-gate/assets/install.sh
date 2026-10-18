@@ -2,7 +2,7 @@
 # Install a Phygital Key product on macOS or Linux (the PRODUCT block below says
 # which). Generated from the template in Phygital-Key/phygital-key.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<product repo>/main/install.sh | sh
+#   curl -fsSL https://github.com/<product repo>/releases/latest/download/install.sh | sh
 #
 # Downloads the latest release for this machine from GitHub, checks that its
 # release list is signed by a pinned release key and that the SHA-256 matches, and puts the program in ~/.local/bin (or $PHYGITAL_KEY_BIN_DIR).

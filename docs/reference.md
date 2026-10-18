@@ -221,7 +221,7 @@ For Phygital Key MCP. Each product publishes the same set from its own repositor
 | Method | Command | Runs as | Updates |
 |---|---|---|---|
 | Secure install (macOS, Linux) | `curl -q -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.4.0/install-service.sh \| sudo bash` | Its own system user | Daily, signed releases only (`--no-auto-update` turns it off) |
-| Install script (macOS, Linux) | `curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh \| sh` | You | `phygital-key-mcp update` |
+| Install script (macOS, Linux) | `curl -fsSL https://github.com/Phygital-Key/phygital-key-mcp/releases/latest/download/install.sh \| sh` | You | `phygital-key-mcp update` |
 | Homebrew (macOS, Linux) | `brew install phygital-key/tap/phygital-key-mcp` | You | `brew upgrade phygital-key-mcp` |
 | Scoop (Windows) | `scoop bucket add phygital-key-mcp https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key-mcp` | You | `scoop update phygital-key-mcp` |
 | cargo | `cargo install --locked --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key-mcp` | You | `phygital-key-mcp update`, or build again |

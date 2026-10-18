@@ -41,7 +41,9 @@ P_REPO=Phygital-Key/phygital-key
 P_PORT=7468
 P_VERSION=v0.0.0
 # END PRODUCT
-[[ "$P_ID" =~ ^[a-z0-9]+$ ]] && [[ "$P_BIN" =~ ^[a-z0-9-]+$ ]] || { echo "bad product block" >&2; exit 1; }
+[[ "$P_ID" =~ ^[a-z0-9]+$ ]] && [[ "$P_BIN" =~ ^[a-z0-9-]+$ ]] && [[ "$P_REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]] &&
+  [[ "$P_NAME" =~ ^[A-Za-z0-9\ ]+$ ]] && [[ "$P_PORT" =~ ^[0-9]{1,5}$ ]] && [[ "$P_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+  { echo "bad product block" >&2; exit 1; }
 REPO="$P_REPO"
 VERSION="${PKA_VERSION:-$P_VERSION}"
 PORT="${PKA_PORT:-$P_PORT}"
@@ -274,6 +276,15 @@ if [ "$AUTO_RUN" = yes ]; then
   VERSION="$LATEST"
 fi
 
+# A Phygital Key 0.3 install (one program for everything) shares the parent folders
+# and the port, and its uninstall removes /Library/PhygitalKey. Remove it first.
+if [ "$P_BIN" != phygital-key ]; then
+  for old in /Library/PhygitalKey/bin/phygital-key /Library/LaunchDaemons/io.phygitalkey.gate.plist \
+             /usr/lib/phygital-key/bin/phygital-key /etc/systemd/system/phygital-key.service; do
+    [ -e "$old" ] && die "an older Phygital Key 0.3 secure install is here ($old). Remove it first: sudo /Library/PhygitalKey/bin/phygital-key install-service --uninstall --purge (Linux: sudo /usr/lib/phygital-key/bin/phygital-key install-service --uninstall --purge)"
+  done
+fi
+
 # 1. Get the program: the official signed release, checked, or a binary root already owns.
 if [ -n "$BINARY" ]; then
   root_only "$BINARY" || die "$BINARY is not safe to run as root: it (or a folder above it) is not owned by root only."
@@ -324,6 +335,15 @@ else
 fi
 
 # 3. Folders: program and helper only root can change; data only the gate user can open.
+#    Every folder above them must be root's alone: a folder another user owns could
+#    be renamed or swapped (for example for a link where root writes a log).
+for d in "$(dirname "$PREFIX")" "$(dirname "$DATA")" ${LOGS:+"$(dirname "$LOGS")"} ${UPD_LOGS:+"$(dirname "$UPD_LOGS")"}; do
+  if [ -e "$d" ] && ! root_only "$d"; then
+    die "$d is not owned by root only (perhaps left by an older install). Refusing to continue."
+  fi
+  install -d -m 0755 -o root "$d"
+  root_only "$d" || die "$d is not owned by root only. Refusing to continue."
+done
 install -d -m 0755 -o root "$PREFIX" "$PREFIX/bin"
 root_only "$PREFIX/bin" || die "$PREFIX/bin is not owned by root only. Refusing to continue."
 install -d -m 0700 -o "$SVC_USER" "$DATA"

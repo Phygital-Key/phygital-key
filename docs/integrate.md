@@ -335,7 +335,7 @@ On refusal, return the error code and do nothing else. The demo service answers 
 - [ ] In JavaScript, plain or `async` store methods both work; make each one a single atomic step, return exactly `true` only for a new id, and let errors throw.
 - [ ] Pass the current time in Unix seconds, from a clock kept in sync (NTP).
 - [ ] Load the keyring from a source you trust; check its signed history against the person's fingerprint and keep the last accepted copy.
-- [ ] Set `origins` and `rp_ids` to the gate's approval page origin and host, nothing else.
+- [ ] Set `origins` and `rp_ids` to the gate's approval page origin and host, nothing else. Use one `Verifier` (and one keyring) per gate: Phygital Key MCP and Phygital Key A2A on one computer both sign for the site name `localhost`, so a config that lists both origins with one shared keyring would accept a signature made on the other gate.
 - [ ] Standing approvals: count uses in a durable, shared use store; fetch revocations often, merge, never drop accepted ones.
 - [ ] Spend the approval before acting, and ask for a new one if the action fails.
 - [ ] Log `id`, `request_hash`, approver and result. Return the error code on refusal.

@@ -1,0 +1,4 @@
+# Shell scripts and templates must keep Unix line endings on every system.
+*.sh text eol=lf
+*.pem text eol=lf
+crates/phygital-key-gate/assets/* text eol=lf

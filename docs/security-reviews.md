@@ -1,9 +1,9 @@
 # Security reviews
 
-This page lists every security review of Phygital Key so far, what each one found, and what was changed. It is for anyone judging how far to trust the project, and for researchers who want to know what has already been looked at. All seven reviews looked at the single program `phygital-key`, before the split into the base and the products in 0.4.0; file names, commands and e2e check names below are as they were then. The reviewed gate code now lives in `crates/phygital-key-gate` and is the same in every product; the MCP tools moved to Phygital Key MCP. The split itself has not had a security review yet.
+This page lists every security review of Phygital Key so far, what each one found, and what was changed. It is for anyone judging how far to trust the project, and for researchers who want to know what has already been looked at. Reviews 1 to 7 looked at the single program `phygital-key`, before the split into the base and the products in 0.4.0; file names, commands and e2e check names in them are as they were then. The reviewed gate code now lives in `crates/phygital-key-gate` and is the same in every product; the MCP tools moved to Phygital Key MCP. Review 8 covers the split and the A2A adapter.
 
 > [!IMPORTANT]
-> Phygital Key is **pre-audit**. The seven reviews below were done by AI security-auditor agents, not by a paid third-party audit firm. They found real problems, and every confirmed finding was fixed or, where a fix is not built, documented as a limit. They are no substitute for an outside audit.
+> Phygital Key is **pre-audit**. The eight reviews below were done by AI security-auditor agents, not by a paid third-party audit firm. They found real problems, and every confirmed finding was fixed or, where a fix is not built, documented as a limit. They are no substitute for an outside audit.
 
 **On this page**
 
@@ -122,6 +122,19 @@ Scope: the signed automatic updates and the release process, the async seen stor
 | I | INFO | No release key was pinned yet, so every install and update was refused (fails closed). | The owner makes the key with `scripts/release-key.sh` before the first signed release; a test fails while the key block is empty. | `installer_pins_at_least_one_release_key` |
 | I | INFO | High-S ECDSA signatures are accepted. | No change: no security effect. | |
 | I | INFO | A freeze (an old signed list served forever) cannot be seen, because the signed list has no expiry. | Documented limit ([threat model](threat-model.md#the-update-channel)). | |
+
+## Review 8: the base and product split, the A2A adapter, the sync workflow
+
+Scope: the split into the shared base and the two products, the new A2A 1.0 adapter, the installer and release scripts made from base templates, two products on one computer, and the daily base sync. Live tests with a real passkey on both products. Result: 0 critical, 0 high, 2 medium, 3 low and 4 informational findings. No way found to forge, replay, redirect or self-approve a yes through A2A, and an A2A task never reaches COMPLETED without the gate's approval string.
+
+| ID | Severity | Finding | Fix |
+|---|---|---|---|
+| M1 | MEDIUM | The daily sync could commit any file the new base wrote into the product, with a write token present while the base's code ran; the quick installer was served from `main`. | The sync now builds and tests in a read-only job with no stored credentials; a second job saves only `Cargo.lock` and the five template files, refuses any other change and any change to `release-keys.pem`. `install.sh` and `install-service.sh` are attached to each signed release, and the docs install from `releases/latest/download`. |
+| M2 | MEDIUM | An agent holding the A2A token could grow task histories, clone them in `ListTasks` and open hundreds of streams, until the gate ran out of memory (a restart ends standing approvals). | Follow-up messages keep only their text, capped; per-task and store-wide history caps; `ListTasks` copies only the page and omits history unless asked; at most 32 open streams. |
+| L1 | LOW | With `--no-token`, any local program could list A2A tasks and read approvals. | The A2A release build refuses `--no-token`; the help text says what an open endpoint allows. |
+| L2 | LOW | The installer did not check the folders above the data and log folders; a leftover 0.3 install could own them. | Every parent folder must be root's alone, and the installer refuses to run next to a 0.3 secure install, with the command to remove it. |
+| L3 | LOW | Both products sign for the site name `localhost`. | Documented: one verifier, one keyring, one origin per gate. Every gate now refuses any `phygital-key:keyring:` audience, not only its own. |
+| I1 to I4 | INFO | Product values not checked; public routes not enforced as read-only; a `tck` build could be mistaken for a release; one release key for both products would let one sign the other's lists. | Product values are checked at start and in the installers; public routes answer only GET and HEAD; the `tck` feature is never built for releases; each product makes its own release key. |
 
 ## The documentation review
 

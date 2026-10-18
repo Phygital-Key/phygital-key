@@ -26,7 +26,7 @@ struct Cli {
     /// Public origin of the approval page, e.g. https://approve.example.com [default: http://localhost:<port>]
     #[arg(long, global = true)]
     origin: Option<String>,
-    /// Serve the agent endpoint without an access token (anyone on this machine could then create requests).
+    /// Serve the agent endpoint without an access token (anyone on this machine could then create requests, read approvals and use standing approvals).
     #[arg(long, global = true)]
     no_token: bool,
     /// Approval life in seconds (max 300).
@@ -245,11 +245,24 @@ fn prune_every_minute(gate: &Arc<Gate>) {
     });
 }
 
+async fn read_only(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if req.method() == axum::http::Method::GET || req.method() == axum::http::Method::HEAD {
+        next.run(req).await
+    } else {
+        axum::http::StatusCode::METHOD_NOT_ALLOWED.into_response()
+    }
+}
+
 /// The approval page plus the adapter's routes, for serve and demo.
 fn app(gate: &Arc<Gate>, adapter: &Arc<dyn Adapter>) -> axum::Router {
     let mut extra = adapter.router(gate.clone());
     if let Some(public) = adapter.public_router(gate.clone()) {
-        extra = extra.merge(public);
+        // Public routes are for reading only (they skip the access token).
+        extra = extra.merge(public.layer(axum::middleware::from_fn(read_only)));
     }
     web::router(gate.clone(), Some(extra))
 }
@@ -621,6 +634,10 @@ fn leak(s: String) -> &'static str {
 
 /// Run the product: parse the command line and do it. Never returns.
 pub fn run(p: &'static Product, adapter: impl Adapter) -> ! {
+    if !p.is_valid() {
+        eprintln!("this program was built with unsafe product values");
+        std::process::exit(1);
+    }
     product::set(p);
     let adapter: Arc<dyn Adapter> = Arc::new(adapter);
     let mut cmd = Cli::command()

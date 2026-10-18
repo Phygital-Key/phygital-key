@@ -35,6 +35,24 @@ pub struct Product {
 }
 
 impl Product {
+    /// True when every field is safe to write into the installers and units
+    /// (letters, digits and a few separators; no quotes, `$`, newlines).
+    pub fn is_valid(&self) -> bool {
+        let only = |s: &str, ok: fn(char) -> bool| !s.is_empty() && s.chars().all(ok);
+        only(self.name, |c| c.is_ascii_alphanumeric() || c == ' ')
+            && only(self.bin, |c| {
+                c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'
+            })
+            && only(self.id, |c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            && self.repo.split_once('/').is_some_and(|(o, n)| {
+                only(o, |c| c.is_ascii_alphanumeric() || c == '-')
+                    && only(n, |c| {
+                        c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')
+                    })
+            })
+            && crate::update::Version::parse(self.version).is_some()
+    }
+
     /// The environment variable for one setting, e.g. `PHYGITAL_KEY_MCP_PORT`.
     pub fn env(&self, what: &str) -> String {
         format!("{}_{what}", self.bin.to_ascii_uppercase().replace('-', "_"))
@@ -204,6 +222,23 @@ mod tests {
             assert!(s.contains("RELEASE_KEYS='\n-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n'\n# END RELEASE KEYS"));
             assert_eq!(s.matches("# BEGIN PRODUCT").count(), 1);
         }
+    }
+
+    #[test]
+    fn unsafe_product_values_are_refused() {
+        assert!(P.is_valid());
+        for bad in ["a\"b", "a$b", "a`b", "a\nb", ""] {
+            assert!(!Product { name: bad, ..P }.is_valid(), "{bad:?}");
+            assert!(!Product { bin: bad, ..P }.is_valid(), "{bad:?}");
+        }
+        assert!(!Product { repo: "a/b/c", ..P }.is_valid());
+        assert!(
+            !Product {
+                version: "1.2",
+                ..P
+            }
+            .is_valid()
+        );
     }
 
     #[test]
