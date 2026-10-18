@@ -600,8 +600,24 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=$BIN --port $PORT install-service --auto-update-run
+# Root, because it replaces the program and restarts the gate, so the files it
+# may write stay open. Everything else it never needs is closed.
 PrivateTmp=yes
 ProtectHome=yes
+NoNewPrivileges=yes
+PrivateDevices=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
 UNITFILE
     cat > "$WORK/timer" <<UNITFILE
 [Unit]

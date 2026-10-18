@@ -104,6 +104,20 @@ before=$("$BIN" --version)
 sudo "$BIN" install-service --auto-update-run >/dev/null 2>&1 || true
 [ "$("$BIN" --version)" = "$before" ] && curl -fsS http://localhost:$PORT/api/status >/dev/null && pass "update job leaves the gate running unless a newer signed release exists" || fail "update job leaves the gate running unless a newer signed release exists"
 sudo cat "$PREFIX/update-status" | grep -Eq "up to date|update check failed|update refused" && pass "update job records its result" || fail "no update result recorded"
+if [ "$(uname -s)" = Linux ]; then
+  # The sandboxed daily job itself (not just the command) still runs to the end.
+  sudo rm -f "$PREFIX/update-status"
+  sudo systemctl start "$P_BIN-update.service" || true
+  sudo cat "$PREFIX/update-status" 2>/dev/null | grep -Eq "up to date|update check failed|update refused" &&
+    curl -fsS http://localhost:$PORT/api/status >/dev/null && pass "the sandboxed update service runs" || fail "the sandboxed update service did not run"
+  # systemd's own sandbox score: 0 is fully locked, 10 is open.
+  for u in "$P_BIN.service" "$P_BIN-update.service"; do
+    score=$(systemd-analyze security "$u" --no-pager 2>/dev/null | awk '/Overall exposure level/ {print $(NF-1)}')
+    echo "      $u exposure $score"
+    case "$u" in *-update.service) max=6.5 ;; *) max=2.5 ;; esac
+    awk -v s="$score" -v m="$max" 'BEGIN { exit !(s != "" && s + 0 <= m) }' && pass "$u sandbox score $score (at most $max)" || fail "$u sandbox score $score, want at most $max"
+  done
+fi
 
 # Root never takes the caller's environment: a planted ~/.curlrc (sudo keeps HOME on
 # macOS) or a fake curl early in PATH must not run or write anything as root.
