@@ -413,6 +413,8 @@ flowchart TD
 
 `.github/workflows/scorecard.yml` runs the [OpenSSF Scorecard](https://scorecard.dev) on every push to `main` and once a week: an outside tool that scores the repository's security practices (pinned actions, token permissions, branch protection, signed releases and more). It publishes the result to scorecard.dev, where the README badge reads it, and uploads the details to GitHub code scanning.
 
+`.github/workflows/codeql.yml` runs GitHub CodeQL (static analysis) on the Rust code, the JavaScript (approval page and checker) and the workflows, on every push, every pull request and once a week. `.github/dependabot.yml` checks Rust crates, the end-to-end test's npm packages and the pinned GitHub Actions every week; each update arrives as a pull request and must pass the full CI.
+
 ## The owner's hand test
 
 Automated tests use a virtual passkey. On 2026-10-17 the owner also tested by hand with Touch ID on macOS: a deploy was approved once, then reusing the approval and changing the version were both refused.
