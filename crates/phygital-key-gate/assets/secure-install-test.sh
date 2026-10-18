@@ -59,8 +59,12 @@ sleep 1
 curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "gate answers" || fail "gate answers"
 GPID=""
 for p in $(sudo lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t | sort -u); do
-  # Linux: systemd (pid 1) holds the port for the gate (socket activation).
-  [ "$p" = 1 ] && [ "$(uname -s)" = Linux ] && continue
+  # Linux: systemd holds the port for the gate (socket activation), and its
+  # helper holds it for a moment while it starts the gate: both in the gate's units.
+  if [ "$(uname -s)" = Linux ] && { [ "$p" = 1 ] || sudo grep -qE "/$P_BIN\.(service|socket)\$" "/proc/$p/cgroup"; }; then
+    [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] && GPID=$p
+    continue
+  fi
   [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] || fail "a listener is not the gate user"
   GPID=$p
 done

@@ -131,6 +131,15 @@ root_only() {
   done
 }
 
+# Linux: is this process part of the gate's own systemd units? systemd (pid 1)
+# holds the port, and systemd's helper briefly holds it while it starts the gate;
+# both live in the gate's control groups, where no other program can be.
+ours() {
+  [ "$OS" = linux ] || return 1
+  [ "$1" = 1 ] && return 0
+  grep -qE "/$P_BIN\.(service|socket)\$" "/proc/$1/cgroup" 2>/dev/null
+}
+
 # Process ids listening on a TCP port (IPv4 and IPv6).
 listener_pids() {
   if command -v lsof >/dev/null 2>&1; then
@@ -449,8 +458,12 @@ listeners_ok() {
   [ -n "\$pids" ] || return 1
   local want gate=0; want=\$(id -u "$SVC_USER")
   for p in \$pids; do
-    # Linux: systemd (pid 1) holds the port for the gate between restarts.
-    [ "\$p" = 1 ] && [ "$OS" = linux ] && continue
+    # Linux: systemd holds the port for the gate (socket activation), and its
+    # helper holds it for a moment while it starts the gate.
+    if [ "$OS" = linux ] && { [ "\$p" = 1 ] || grep -qE "/$P_BIN\\.(service|socket)\\$" "/proc/\$p/cgroup" 2>/dev/null; }; then
+      [ "\$(ps -o uid= -p "\$p" | tr -d ' ')" = "\$want" ] && gate=1
+      continue
+    fi
     [ "\$(ps -o uid= -p "\$p" | tr -d ' ')" = "\$want" ] || return 1
     gate=1
   done
@@ -485,8 +498,8 @@ SVC_UID=$(id -u "$SVC_USER")
 foreign_listener() {
   local p u
   for p in $(listener_pids "$PORT" || true); do
-    # Linux: systemd (pid 1) holds the port for the gate (socket activation).
-    [ "$p" = 1 ] && [ "$OS" = linux ] && continue
+    # Linux: systemd holds the port for the gate (socket activation).
+    ours "$p" && continue
     u=$(ps -o uid= -p "$p" | tr -d ' ')
     [ "$u" = "$SVC_UID" ] || { echo "uid $u, pid $p"; return 0; }
   done
@@ -495,7 +508,7 @@ foreign_listener() {
 foreign_pids() {
   local p u
   for p in $(listener_pids "$PORT" || true); do
-    [ "$p" = 1 ] && [ "$OS" = linux ] && continue
+    ours "$p" && continue
     u=$(ps -o uid= -p "$p" | tr -d ' ')
     [ "$u" = "$SVC_UID" ] || echo "$p"
   done
