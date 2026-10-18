@@ -31,6 +31,7 @@ The project is one Rust workspace with three crates, plus a JavaScript verifier.
 | State | `src/state.rs` | The `Gate` struct: pending requests, the keyring, the enrollment session, the audit log, the use keys of standing approvals. One mutex guards it (receipt keys pinned for this run sit behind their own). |
 | Audit log | `src/audit.rs` | Append-only, hash-chained JSON lines. See [audit log](audit-log.md). |
 | Updates | `src/update.rs`, `assets/install-service.sh` | The signed release list, `phygital-key update`, the hidden `release-check` command, and the secure installer with its daily update job. See [Signed releases and updates](#signed-releases-and-updates). |
+| Container image | `packaging/container/Dockerfile` | The release binary on a distroless nonroot base, published as `ghcr.io/phygital-key/phygital-key` by the release workflow. See [Signed only after approval](#signed-only-after-approval). |
 | Seen store | `src/seen.rs` | `FileSeenStore`, used by `phygital-key verify` so each approval works once across processes. |
 | Approval page | `assets/approve.html`, `assets/app.js`, `assets/style.css`, `assets/fonts.css` | Plain HTML and JavaScript, compiled into the binary with `include_str!`. See [approval page](approval-page.md). |
 | Verifier library | `crates/phygital-key-verify` | Pure checks: [canonical form](canonical-form.md), strict JSON, [WebAuthn](webauthn.md) assertion, `verify`, key history, standing approvals, receipts. No network, no clock reads. The gate uses the same library to check signatures before it stores them. |
@@ -308,7 +309,7 @@ A crash leaves either the old file or the new one, never half of one. If the sav
 
 ## Signed releases and updates
 
-The secure install updates itself once a day, on by default ([decision 36](decisions.md)). An update runs new code as root, so a SHA-256 published next to the file is not enough: whoever can change the release files could replace both. Each release therefore carries a file list signed with a release key, and every installer and updater checks that signature against public keys pinned in its own source. The key is a secret of the GitHub environment `release`, which GitHub hands only to a release run from a `v*` tag that the repository owner approved. So a swapped file, a mirror or a stolen workflow token cannot make an update that installs, but whoever controls the owner's GitHub account can ([the update channel](threat-model.md#the-update-channel)). The code is `src/update.rs`, `assets/install-service.sh`, `install.sh`, `scripts/release-key.sh` and `.github/workflows/release.yml`.
+The secure install updates itself once a day, on by default ([decision 36](decisions.md)). An update runs new code as root, so a SHA-256 published next to the file is not enough: whoever can change the release files could replace both. Each release therefore carries a file list signed with a release key, and every installer and updater checks that signature against public keys pinned in its own source. The key is a secret of the GitHub environment `release`, which GitHub hands only to a release run from a `v*` tag that the repository owner approved. So a swapped file, a mirror or a stolen workflow token cannot make an update that installs, but whoever controls the owner's GitHub account can ([the update channel](threat-model.md#the-update-channel)). The code is `src/update.rs`, `assets/install-service.sh`, `install.sh`, `scripts/release-key.sh`, `.github/workflows/release.yml` and, for the container image, `packaging/container/Dockerfile`.
 
 ```mermaid
 flowchart TD
@@ -316,6 +317,7 @@ flowchart TD
     B --> A["publish job waits: the owner approves the run on GitHub"]
     A --> S["publish job: hashes every archive, writes and signs release.txt, checks it against the pinned key"]
     S --> P["Release published with release.txt and release.txt.sig"]
+    P --> IMG["container job: image built from the Linux archives, pushed to ghcr.io with a build record"]
     P --> F["Daily job fetches the latest release.txt and its signature"]
     F --> K{"Signed by a pinned release key?"}
     K -- no --> R1["Refused: nothing changes"]
@@ -373,6 +375,7 @@ Both installers hold the public keys between `# BEGIN RELEASE KEYS` and `# END R
 2. Each build job publishes a build provenance attestation for its archive (`actions/attest-build-provenance`, signed through Sigstore): GitHub's record of which workflow built which file from which commit. Anyone can check it with `gh attestation verify <file> --repo Phygital-Key/phygital-key-mcp`.
 3. The `publish` job runs in the environment `release`, so it waits until the owner opens the run, presses "Review deployments" and approves. Only an approved run gets `RELEASE_SIGNING_KEY`. Nothing is published before that.
 4. After approval the job checks that the tag is exactly `vX.Y.Z`, computes the SHA-256 of every archive itself, writes `release.txt`, signs it with `openssl dgst -sha256 -sign`, and checks the signature against every key pinned in that commit's `install-service.sh`. If none matches it stops with `the signature does not match a key pinned in install-service.sh`. Then it publishes the release (not a draft) with every archive, its `.sha256`, `release.txt` and `release.txt.sig`.
+5. The `container` job (`needs: publish`) unpacks the two Linux archives of the release (x86_64 and aarch64) into `packaging/container/bin/amd64` and `bin/arm64`, builds `packaging/container/Dockerfile` for `linux/amd64` and `linux/arm64` (distroless `cc-debian12:nonroot` base pinned by digest, user `65532:65532`, `PHYGITAL_KEY_HOME=/data`, default command `--bind 0.0.0.0 serve`), pushes it to `ghcr.io/phygital-key/phygital-key` as `vX.Y.Z` and `latest`, and publishes a build provenance attestation for the image digest. The image is not in `release.txt`. A container updates only when its image is pulled again: the daily job and `phygital-key update` do not run in it ([run it in a container](own-server.md#run-it-in-a-container)).
 
 ### The daily job
 

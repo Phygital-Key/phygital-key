@@ -21,6 +21,7 @@ Install the program (pick one):
 | macOS, Linux (script) | `curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh \| sh` |
 | Windows (Scoop) | `scoop bucket add phygital-key https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key` |
 | Anywhere with Rust | `cargo install --locked --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key` |
+| Linux server (Docker) | `docker run -d --name phygital-key -p 127.0.0.1:7468:7468 -v phygital-key:/data ghcr.io/phygital-key/phygital-key:latest` ([run it in a container](own-server.md#run-it-in-a-container)) |
 | By hand | Download from [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases). Each release has a signed list of SHA-256 sums, `release.txt` ([how to check it](updates.md#check-a-download-yourself)). |
 
 The script downloads the latest release list (`release.txt`), checks that it is signed by a release key pinned in the script, downloads the archive for your machine, compares its SHA-256 with the signed list and writes one file, `~/.local/bin/phygital-key`. Nothing else is touched. It needs `curl`, `tar` and `openssl`. Later, `phygital-key update` installs newer signed releases ([updates](updates.md)).
@@ -88,6 +89,8 @@ There are two ways to run the gate for real use. Both give the AI the same six t
 | AI app connects over | stdio (the app starts it) | HTTP, `http://localhost:7468/mcp` with an access token |
 | Updates | You run `phygital-key update`, `brew upgrade` or `scoop update` | By itself, daily, signed releases only (can be turned off) |
 | Good for | Trying it, low-stakes work | Anything that matters |
+
+On a Linux server you can also run the gate from the container image `ghcr.io/phygital-key/phygital-key`: it runs as `serve` inside it, keeps its data in a volume, and you add a key with `docker exec -it phygital-key phygital-key enroll`. It updates when you pull a new image. On your own computer it does not keep the gate out of the AI's reach, because an agent acting as you can run `docker` too, so use the secure install there. Setup, the TLS proxy and updates: [run it in a container](own-server.md#run-it-in-a-container).
 
 ### Quick install
 

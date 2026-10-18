@@ -12,6 +12,7 @@ This page lists every layer of tests in Phygital Key, with real counts and the c
 - [Mutation testing](#mutation-testing)
 - [End-to-end and red team](#end-to-end-and-red-team)
 - [Secure install test](#secure-install-test)
+- [Container image test](#container-image-test)
 - [JavaScript checker tests](#javascript-checker-tests)
 - [Supply chain](#supply-chain)
 - [CI](#ci)
@@ -28,6 +29,7 @@ This page lists every layer of tests in Phygital Key, with real counts and the c
 | Mutation testing | cargo-mutants on the verifier | by hand | No |
 | End-to-end and red team | 108 checks | `tests/e2e/run.mjs` | Yes, Linux |
 | Secure install | 30 checks | `tests/secure-install.sh` | Yes, macOS and Linux |
+| Container image | 5 checks | `container` job in `.github/workflows/ci.yml` | Yes, Linux (amd64) |
 | JavaScript checker | 9 tests (3 of them run every vector) | `verifier-js/test/` | Yes, Linux |
 | Supply chain | cargo-deny: advisories, licences, bans, sources | `deny.toml` | Yes |
 
@@ -342,6 +344,20 @@ How the update checks work: check 18 signs a made-up `release.txt` with a fresh 
 > [!WARNING]
 > The release for a version does not exist yet when CI runs, so the test installs a root-owned copy of the fresh build with `--binary`. Downloading a published release, checking its signed `release.txt` and its SHA-256, and a real automatic update are not exercised by this test. They can run for real only once signed releases exist (the first real test is the release after v0.3.0).
 
+## Container image test
+
+The CI job "container image (build and start)" builds the image from `packaging/container/Dockerfile` on every push and pull request. There is no release yet when it runs, so it uses a fresh `cargo build --release --locked -p phygital-key` as the amd64 binary, then:
+
+| # | Check | How |
+|---|---|---|
+| 1 | The image builds | `docker build --platform linux/amd64` |
+| 2 | The program in it runs | `docker run --rm pk-ci --version` |
+| 3 | The gate starts and answers | Container started on `127.0.0.1:7468`, then `curl -fsS http://localhost:7468/api/status` (up to 30 tries, one second apart) |
+| 4 | It runs as the nonroot user | `docker inspect --format '{{.Config.User}}'` must print `65532:65532` |
+| 5 | Enrollment works inside it | `docker exec pk phygital-key enroll` must print an `http://localhost:7468/enroll#token=` link |
+
+Not checked here: the arm64 image, the published image on `ghcr.io`, and its attestation. Those come from the release workflow's `container` job ([CI](#ci)).
+
 ## JavaScript checker tests
 
 `verifier-js/test/vectors.test.js` has 9 tests, run with Node's built-in test runner (`node --test`). The checker has no dependencies.
@@ -381,7 +397,7 @@ cargo deny check
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push to `main` and on every pull request. The seven jobs run side by side; in the jobs that run on several operating systems, a failure on one does not cancel the others (`fail-fast: false`).
+`.github/workflows/ci.yml` runs on every push to `main` and on every pull request. The eight jobs run side by side; in the jobs that run on several operating systems, a failure on one does not cancel the others (`fail-fast: false`).
 
 ```mermaid
 flowchart TD
@@ -389,6 +405,7 @@ flowchart TD
   T --> J2["secure install: Linux, macOS"]
   T --> J3["JavaScript checker: Linux, Node 24"]
   T --> J7["examples: build and syntax"]
+  T --> J8["container image: build and start"]
   T --> J4["end-to-end and red team: Linux, Node 24, Chromium"]
   T --> J5["fuzz: Linux, nightly, 4 targets x 60 s"]
   T --> J6["licenses and advisories: cargo-deny"]
@@ -397,6 +414,7 @@ flowchart TD
   RB --> RD["each file with .sha256 and a build record"]
   RD --> SG["publish job waits for the owner's approval"]
   SG --> RP["release.txt signed and checked, release published"]
+  RP --> RC["container job: image for amd64 and arm64, pushed with a build record"]
 ```
 
 | Job | Runs on | Steps |
@@ -405,11 +423,12 @@ flowchart TD
 | secure install | `ubuntu-latest`, `macos-latest` | Release build, then `tests/secure-install.sh` |
 | JavaScript checker | `ubuntu-latest`, Node 24 | `npm test` in `verifier-js` |
 | examples | `ubuntu-latest`, Node 24 | `node --check examples/node-service/server.mjs`; `cargo build` of `examples/rust-service`; YAML check of `examples/ci-approval/example-deploy.yml` |
+| container image (build and start) | `ubuntu-latest` | Release build, `docker build` of `packaging/container`, then the [5 checks above](#container-image-test) |
 | end-to-end and red team | `ubuntu-latest`, Node 24 | Release build, `npm ci`, `npx playwright install --with-deps chromium`, `node run.mjs` |
 | fuzz | `ubuntu-latest`, nightly Rust | `cargo install --locked cargo-fuzz`, then each of the 4 targets for 60 s |
 | licenses and advisories | `ubuntu-latest` | cargo-deny |
 
-`.github/workflows/release.yml` runs on a `v*` tag. It builds for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, runs `cargo test --workspace --locked` on each runner first, packages the program with `README.md`, `LICENSE` and `NOTICE`, writes a `.sha256` for each archive, publishes a build provenance attestation for each archive (`actions/attest-build-provenance`). Its `publish` job uses the environment `release` and waits until the repository owner approves the run on GitHub. Then it computes each SHA-256 itself, writes and signs `release.txt` with the environment secret `RELEASE_SIGNING_KEY`, checks the signature against the keys pinned in that commit's `install-service.sh`, and publishes the release with `release.txt` and `release.txt.sig`. The signing step runs only at a real release, not in CI on push. See [contributing](../CONTRIBUTING.md#releasing).
+`.github/workflows/release.yml` runs on a `v*` tag. It builds for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, runs `cargo test --workspace --locked` on each runner first, packages the program with `README.md`, `LICENSE` and `NOTICE`, writes a `.sha256` for each archive, publishes a build provenance attestation for each archive (`actions/attest-build-provenance`). Its `publish` job uses the environment `release` and waits until the repository owner approves the run on GitHub. Then it computes each SHA-256 itself, writes and signs `release.txt` with the environment secret `RELEASE_SIGNING_KEY`, checks the signature against the keys pinned in that commit's `install-service.sh`, and publishes the release with `release.txt` and `release.txt.sig`. Its last job, `container`, runs only after `publish`: it unpacks the two Linux archives of that release (x86_64 and aarch64), builds the image for `linux/amd64` and `linux/arm64`, pushes it to `ghcr.io/phygital-key/phygital-key` as `vX.Y.Z` and `latest`, and publishes a build provenance attestation for the image. The signing step and the image push run only at a real release, not in CI on push. See [contributing](../CONTRIBUTING.md#releasing).
 
 `.github/workflows/scorecard.yml` runs the [OpenSSF Scorecard](https://scorecard.dev) on every push to `main` and once a week: an outside tool that scores the repository's security practices (pinned actions, token permissions, branch protection, signed releases and more). It publishes the result to scorecard.dev, where the README badge reads it, and uploads the details to GitHub code scanning.
 

@@ -162,6 +162,20 @@ Limits of the update channel, plainly:
 - **An update restarts the gate.** Requests still waiting are lost (they live in memory), and so are standing approvals. Approvals already signed are not affected.
 - **The secure install contacts github.com once a day** for `release.txt` (and the archive when updating). The gate itself makes no network calls. `install.sh` and `phygital-key update` contact GitHub only when you run them. See [privacy](privacy.md).
 
+### The container image
+
+From v0.3.0 each release also publishes `ghcr.io/phygital-key/phygital-key` (tags `vX.Y.Z` and `latest`, `linux/amd64` and `linux/arm64`). The release workflow's `container` job runs only after the approved `publish` job. It unpacks the two Linux archives of that release, the same files whose SHA-256 the signed `release.txt` lists, copies the program into a `gcr.io/distroless/cc-debian12:nonroot` base pinned by digest, and pushes the image with a build provenance attestation. Check where an image came from:
+
+```bash
+gh attestation verify oci://ghcr.io/phygital-key/phygital-key:v0.3.0 --repo Phygital-Key/phygital-key-mcp
+```
+
+What that does and does not cover:
+
+- **The image is not signed with the release key**, and it is not in `release.txt`. Its record of origin is the attestation: which workflow built which image digest from which commit. Trust in it rests on the owner's GitHub account and the approval step, as for the release itself.
+- **Nothing updates a container by itself.** A new release, good or bad, reaches a container only when you pull a new image and start it. Pin a `vX.Y.Z` tag to choose when.
+- **Inside the container** the gate runs as uid 65532 on a base with no shell, and its data is in the `/data` volume. Whoever controls the Docker daemon on that machine controls the container and the volume ([where to run it](#where-to-run-it)).
+
 ## Attackers, defences and the tests that prove them
 
 Names in the last column are real: vectors from `test-vectors/` (shared by both verifiers), checks from `tests/e2e/run.mjs` (in quotes), checks from `tests/secure-install.sh`, and Rust or JavaScript test functions. See [testing](testing.md) for how to run them.
@@ -213,6 +227,8 @@ The guarantees hold only if **the agent cannot change the gate's program, the ga
 | Gate on [another machine](own-server.md) that the agent cannot reach as an administrator | Real use | Same separation, by a machine boundary. Remote origins need HTTPS. |
 | `phygital-key demo` or `phygital-key mcp` under your own user | Trying it | Shows the flow, but an agent with full shell access as you could edit the files |
 | Windows | Trying it | There is no secure install for Windows yet |
+| [Container image](own-server.md#run-it-in-a-container) on a server where agents do not run | Real use | The machine boundary separates the gate from the agent. Publish the port on `127.0.0.1` behind a TLS proxy |
+| Container image on your own computer, where your user can run `docker` | Trying it | Docker access is administrator access: an agent acting as you can stop the container, read or replace the `/data` volume, or run another image on the port. It does not give the secure install's guarantee |
 
 > [!WARNING]
 > The MCP access token ends up in your AI app's settings, which the agent can read. It keeps other programs out of the gate's HTTP endpoint, not the agent. The agent still can only ask; it cannot approve.
@@ -228,6 +244,7 @@ The guarantees hold only if **the agent cannot change the gate's program, the ga
 - **Used ids on one machine.** The command-line verifier's `seen-ids.jsonl` serves one machine. Several instances need a shared store (use the library).
 - **Memory only.** Pending requests and standing approvals live in the gate's memory. A restart ends them all (the answer becomes no), and an automatic update is a restart.
 - **Updates trust the release key and the owner's GitHub account.** A signed release that starts is installed; the owner's approval is the only review, and the signed list has no expiry. See [the update channel](#the-update-channel).
+- **A container on a desktop is not a boundary.** If your user can run `docker`, so can an agent acting as you, and it can then control the container. Use the secure install on a desktop and the container on servers.
 - **Look-alike highlighting is a help.** The real protection is that exact bytes are signed and compared.
 - **Request limits are a nuisance limit, not a fatigue cure.** A person can still be asked many times.
 - **Pre-audit.** Seven internal reviews by AI security-auditor agents, every finding fixed or documented; no paid third-party audit. See [security reviews](security-reviews.md).

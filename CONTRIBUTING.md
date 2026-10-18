@@ -94,6 +94,17 @@ node --check examples/node-service/server.mjs
 cargo build --manifest-path examples/rust-service/Cargo.toml
 ```
 
+CI builds the container image from `packaging/container/Dockerfile` and starts the gate in it (job "container image (build and start)"). If you change the Dockerfile, run the same steps on Linux (x86_64) with Docker. The files copied into `packaging/container/` are gitignored:
+
+```bash
+cargo build --release --locked -p phygital-key
+mkdir -p packaging/container/bin/amd64 packaging/container/data
+install -m 0755 target/release/phygital-key packaging/container/bin/amd64/phygital-key
+cp NOTICE LICENSE packaging/container/
+docker build --platform linux/amd64 -t pk-ci packaging/container
+docker run --rm pk-ci --version
+```
+
 ## Changing the spec
 
 1. Write the new rule in [docs/spec.md](docs/spec.md), with MUST or MUST NOT.
@@ -114,6 +125,7 @@ flowchart LR
   CI --> W["publish job waits"]
   W --> A["Owner: Review deployments, Approve"]
   A --> P["CI hashes, signs release.txt, checks it, publishes the release"]
+  P --> C["container job: builds and pushes the image with a build record"]
 ```
 
 Once, before the first signed release, the owner:
@@ -128,7 +140,8 @@ For each release:
 2. Push the tag `vX.Y.Z`. In `.github/workflows/release.yml`, the build job runs `cargo test` on each runner, builds the five targets, writes a `.sha256` for each archive and publishes a build provenance attestation (build record) for each archive with `actions/attest-build-provenance`.
 3. Open the run in GitHub Actions. The `publish` job waits for the environment `release`. Press "Review deployments", then Approve.
 4. The approved job computes the SHA-256 of every archive, writes and signs `release.txt`, checks the signature against the keys pinned in that commit's `install-service.sh` (it stops if none matches), and publishes the release with all files, `release.txt` and `release.txt.sig`. Nothing is published before the approval.
-5. Write the package manifests with `scripts/package-manifests.sh vX.Y.Z` (Homebrew formula, Scoop manifest, winget manifests).
+5. The `container` job then builds the container image from the two Linux archives of this release (amd64 and arm64), pushes it to `ghcr.io/phygital-key/phygital-key` as `vX.Y.Z` and `latest`, and publishes a build provenance attestation for it. Check it with `gh attestation verify oci://ghcr.io/phygital-key/phygital-key:vX.Y.Z --repo Phygital-Key/phygital-key-mcp`.
+6. Write the package manifests with `scripts/package-manifests.sh vX.Y.Z` (Homebrew formula, Scoop manifest, winget manifests).
 
 To replace the key, pin the new public key next to the old one in a release signed with the old key, then remove the old key in a later release.
 

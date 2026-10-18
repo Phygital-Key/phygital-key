@@ -15,6 +15,8 @@ On this page:
 - [HTTP endpoints of the demo service](#http-endpoints-of-the-demo-service)
 - [Files in the data folder](#files-in-the-data-folder)
 - [Files of the secure install](#files-of-the-secure-install)
+- [Install methods](#install-methods)
+- [The container image](#the-container-image)
 - [Limits](#limits)
 - [Cryptography](#cryptography)
 
@@ -71,7 +73,7 @@ Every command accepts these, before or after the command name. Commands that do 
 
 | Variable | Used by | Meaning |
 |---|---|---|
-| `PHYGITAL_KEY_HOME` | `phygital-key` | Data folder when `--home` is not given. |
+| `PHYGITAL_KEY_HOME` | `phygital-key` | Data folder when `--home` is not given. The container image sets it to `/data`. |
 | `PHYGITAL_KEY_PORT` | `phygital-key` | Default for `--port`. |
 | `PHYGITAL_KEY_BIND` | `phygital-key` | Default for `--bind`. |
 | `PHYGITAL_KEY_ORIGIN` | `phygital-key` | Default for `--origin`. |
@@ -196,6 +198,41 @@ Files are written to a `.tmp` file first, flushed and renamed into place. Waitin
 | Update log | `/Library/Logs/PhygitalKeyUpdate/update.log` (root-only folder) | `journalctl -u phygital-key-update` |
 
 The daily job fetches `https://github.com/Phygital-Key/phygital-key-mcp/releases/latest/download/release.txt` and its `.sig`, so the secure install contacts github.com once a day (and downloads the release file when it updates). The gate itself makes no network calls. Details: [secure install](secure-install.md).
+
+## Install methods
+
+| Method | Command | Runs as | Updates |
+|---|---|---|---|
+| Secure install (macOS, Linux) | `curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.3.0/crates/phygital-key/assets/install-service.sh \| sudo bash` | Its own system user | Daily, signed releases only (`--no-auto-update` turns it off) |
+| Install script (macOS, Linux) | `curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh \| sh` | You | `phygital-key update` |
+| Homebrew (macOS, Linux) | `brew install phygital-key/tap/phygital-key` | You | `brew upgrade phygital-key` |
+| Scoop (Windows) | `scoop bucket add phygital-key https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key` | You | `scoop update phygital-key` |
+| cargo | `cargo install --locked --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key` | You | `phygital-key update`, or build again |
+| Container (Linux servers) | `docker run -d --name phygital-key -p 127.0.0.1:7468:7468 -v phygital-key:/data ghcr.io/phygital-key/phygital-key:latest` | uid 65532 inside the container | Pull a new image, start a new container on the same volume |
+| By hand | Download from [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases), [check it](updates.md#check-a-download-yourself) | You | Download again |
+
+Each method in detail: [updates](updates.md#update-by-install-method).
+
+## The container image
+
+From v0.3.0. Setup with a TLS proxy, enrollment and updates: [run it in a container](own-server.md#run-it-in-a-container).
+
+| Fact | Value |
+|---|---|
+| Image | `ghcr.io/phygital-key/phygital-key`, public (pulling needs no login) |
+| Tags | `vX.Y.Z` (one release) and `latest` |
+| Platforms | `linux/amd64`, `linux/arm64` |
+| Base | `gcr.io/distroless/cc-debian12:nonroot`, pinned by digest in `packaging/container/Dockerfile` |
+| User | `65532:65532` (nonroot) |
+| Program | `/usr/local/bin/phygital-key` (the entrypoint) |
+| Default command | `--bind 0.0.0.0 serve` (listens on all addresses inside the container, so Docker can forward to it) |
+| Data folder | `/data`, a volume; `PHYGITAL_KEY_HOME=/data` |
+| Port | `7468` (publish it as `-p 127.0.0.1:7468:7468`) |
+| Built by | The `container` job of `.github/workflows/release.yml`, after the owner approves the release, from the same Linux binaries whose archives are listed in the signed `release.txt` |
+| Provenance | A build provenance attestation pushed with the image: `gh attestation verify oci://ghcr.io/phygital-key/phygital-key:v0.3.0 --repo Phygital-Key/phygital-key-mcp` |
+| Not inside | Automatic updates and `phygital-key update` |
+
+Commands in a running container go through `docker exec`, for example `docker exec -it phygital-key phygital-key enroll` and `docker exec -it phygital-key phygital-key mcp-token`. On a desktop where your user can run `docker`, an agent acting as you can control the container, so it does not give the [secure install](secure-install.md)'s guarantee.
 
 ## Limits
 

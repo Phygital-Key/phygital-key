@@ -21,6 +21,7 @@ How fixes reach you:
 | `install.sh` or `cargo install` | `phygital-key update` (checks the same signature) |
 | Homebrew | `brew upgrade phygital-key` |
 | Scoop (Windows) | `scoop update phygital-key` |
+| Container (`ghcr.io/phygital-key/phygital-key`) | Pull the new image (`docker pull ghcr.io/phygital-key/phygital-key:latest`, or the new `vX.Y.Z` tag) and start a new container on the same volume. Nothing inside the container updates it ([how](docs/own-server.md#run-it-in-a-container)). |
 
 Automatic updates and `phygital-key update` arrived in 0.3.0, so the first release they can install is the one after 0.3.0.
 
@@ -29,6 +30,7 @@ Automatic updates and `phygital-key update` arrived in 0.3.0, so the first relea
 1. The repository owner pushes a tag `vX.Y.Z`. CI runs the tests, builds every archive and publishes a build record for each (a build provenance attestation: which workflow built which file from which commit). Anyone can check one with `gh attestation verify <file> --repo Phygital-Key/phygital-key-mcp`.
 2. The `publish` job waits until the owner opens the run on GitHub, presses "Review deployments" and approves. Only then does GitHub give it the release key, the secret `RELEASE_SIGNING_KEY` of the environment `release`, which only runs from `v*` tags can use.
 3. The job computes every SHA-256 itself, signs `release.txt`, checks the signature against the key pinned in that commit's installer, and publishes the release with `release.txt` and `release.txt.sig`.
+4. After that, the `container` job builds the container image from the two Linux archives of the same release, pushes it as `vX.Y.Z` and `latest`, and publishes a build provenance attestation for it: `gh attestation verify oci://ghcr.io/phygital-key/phygital-key:vX.Y.Z --repo Phygital-Key/phygital-key-mcp`. The image itself is not in `release.txt` and is not signed with the release key.
 
 The release key exists only as that GitHub secret: no copy on any computer, no passphrase. So a swapped file, a mirror, a stolen workflow token or a pull request cannot make an update that installs. Someone who takes over the owner's GitHub account can: the owner's GitHub sign-in (two-factor) is what stands in the way, and you can turn automatic updates off. See [docs/updates.md](docs/updates.md), and [the update channel](docs/threat-model.md#the-update-channel) for what the signature protects and what it does not.
 
@@ -43,7 +45,7 @@ There is no email contact. Use private reporting.
 
 ## What to include
 
-- The version (`phygital-key --version`) and how you run it: `mcp`, `serve`, `demo`, the secure install on macOS or Linux (with automatic updates on or off), or Windows.
+- The version (`phygital-key --version`) and how you run it: `mcp`, `serve`, `demo`, the secure install on macOS or Linux (with automatic updates on or off), the container image (with its tag), or Windows.
 - Your operating system, and your AI app if it matters.
 - What you found, and which part it is in if you know: the verifier (`crates/phygital-key-verify`), the JavaScript checker (`verifier-js`), the gate and approval page (`crates/phygital-key`), the secure install, the spec or the test vectors.
 - Steps to reproduce it.

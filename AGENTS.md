@@ -13,7 +13,7 @@ Three parts live here, all Apache-2.0:
 
 - **The format and its test vectors** (`docs/spec.md`, `test-vectors/`): format `pka.1`, canonical form RFC 8785 (JCS) over NFC text with integers only, challenge `SHA-256("phygital-key/approval/v1" || 0x00 || JCS(claims))`.
 - **Two verifiers that share no code:** Rust (`crates/phygital-key-verify`) and JavaScript (`verifier-js/`, WebCrypto only, no dependencies). Both must pass every shared vector (123: 55 approvals, 25 key histories, 43 standing approvals).
-- **The gate** (`crates/phygital-key`, the program `phygital-key`): an MCP server (stdio, or Streamable HTTP at `/mcp` with a bearer token) plus the approval page, one binary. Six MCP tools; none can approve. It also has `serve`, `demo`, `verify`, `keys`, `enroll`, `install-service`, `update` and other commands ([docs/reference.md](docs/reference.md)). Releases are signed: installers and updates check `release.txt` against pinned release keys ([docs/updates.md](docs/updates.md)).
+- **The gate** (`crates/phygital-key`, the program `phygital-key`): an MCP server (stdio, or Streamable HTTP at `/mcp` with a bearer token) plus the approval page, one binary. Six MCP tools; none can approve. It also has `serve`, `demo`, `verify`, `keys`, `enroll`, `install-service`, `update` and other commands ([docs/reference.md](docs/reference.md)). Releases are signed: installers and updates check `release.txt` against pinned release keys ([docs/updates.md](docs/updates.md)). Each release also ships a container image for servers ([docs/own-server.md](docs/own-server.md#run-it-in-a-container)).
 
 Free and open source under Apache-2.0. Status: pre-audit. No outside paid audit yet; internal security reviews only ([docs/security-reviews.md](docs/security-reviews.md)).
 
@@ -33,9 +33,11 @@ CITATION.cff                       how to cite the project
 install.sh                         user install script: downloads a release, checks the signed release list (needs openssl) and the SHA-256, writes ~/.local/bin/phygital-key; holds a copy of the pinned release keys
 bucket/phygital-key.json           Scoop manifest
 packaging/winget/0.2.0/*.yaml      winget manifests (installer, locale, version), generated, not submitted
+packaging/container/Dockerfile     container image ghcr.io/phygital-key/phygital-key: release binary on distroless cc-debian12:nonroot (pinned by digest), uid 65532, data in /data; built by release.yml, checked by the CI container job
+packaging/container/bin/, data/    build context the workflows fill (binaries per arch, empty data folder, NOTICE and LICENSE copies); gitignored, never committed
 scripts/package-manifests.sh       writes the Homebrew, Scoop and winget manifests for a published release
 scripts/release-key.sh             repository owner only, once, in the owner's own terminal: makes the release signing key, creates the GitHub environment "release" (owner approval, v* tags only), stores the key as its secret RELEASE_SIGNING_KEY, deletes the local copy, pins the public key in the two installers
-.gitignore                         build output, node_modules, test results, logs
+.gitignore                         build output, node_modules, test results, logs, the container build context
 .github/workflows/ci.yml           CI on every push to main and every pull request (jobs listed below)
 .github/workflows/release.yml      on a v* tag: tests, builds the binaries for 5 targets, publishes a build record (attestation) per archive; then the publish job waits for the owner's approval (environment "release"), signs release.txt with the environment secret, checks it and publishes the release
 .github/ISSUE_TEMPLATE/*.yml       issue forms (bug, feature, question) and their config
@@ -195,13 +197,14 @@ CI (`.github/workflows/ci.yml`) runs on every push to `main` and every pull requ
 | secure install (Linux, macOS) | builds the release binary and runs `tests/secure-install.sh` (real system user, real launchd or systemd) |
 | JavaScript checker | `npm test` in `verifier-js` on Node 24 |
 | examples (build and syntax) | `node --check examples/node-service/server.mjs`, `cargo build --manifest-path examples/rust-service/Cargo.toml`, parses `examples/ci-approval/example-deploy.yml` |
+| container image (build and start) | release build, `docker build` of `packaging/container` for amd64, then `--version`, start on `127.0.0.1:7468` and `/api/status`, image user `65532:65532`, `phygital-key enroll` inside prints a localhost enroll link |
 | end-to-end and red team | release build, `npm ci --no-fund --no-audit`, `npx playwright install --with-deps chromium`, `node run.mjs` |
 | fuzz | each of the 4 targets for 60 seconds on nightly |
 | licenses and advisories | `cargo-deny` |
 
 Do not run `tests/secure-install.sh` on your own machine: it needs password-less sudo and installs a system service. Third-party actions are pinned to a commit; keep them pinned.
 
-The release workflow (`.github/workflows/release.yml`) runs `cargo test --workspace --locked` on each of the 5 targets, builds the binaries with a `.sha256` file each, publishes a build provenance attestation per archive (`actions/attest-build-provenance`, which needs `id-token: write` and `attestations: write` in that job), Its `publish` job uses the environment `release`, so it waits until the owner approves the run ("Review deployments", then Approve). Then it computes every SHA-256, writes and signs `release.txt` with `RELEASE_SIGNING_KEY`, checks the signature against the keys pinned in that commit's `install-service.sh`, and publishes the release (not a draft). The Rust test `installer_pins_at_least_one_release_key` (in `src/update.rs`) fails until `scripts/release-key.sh` has pinned the release key.
+The release workflow (`.github/workflows/release.yml`) runs `cargo test --workspace --locked` on each of the 5 targets, builds the binaries with a `.sha256` file each, publishes a build provenance attestation per archive (`actions/attest-build-provenance`, which needs `id-token: write` and `attestations: write` in that job). Its `publish` job uses the environment `release`, so it waits until the owner approves the run ("Review deployments", then Approve). Then it computes every SHA-256, writes and signs `release.txt` with `RELEASE_SIGNING_KEY`, checks the signature against the keys pinned in that commit's `install-service.sh`, and publishes the release (not a draft). Its last job, `container`, runs after `publish`: it builds the image from that release's two Linux archives for `linux/amd64` and `linux/arm64`, pushes `ghcr.io/phygital-key/phygital-key:vX.Y.Z` and `:latest` (`packages: write`), and publishes a build provenance attestation for it. The Rust test `installer_pins_at_least_one_release_key` (in `src/update.rs`) fails until `scripts/release-key.sh` has pinned the release key.
 
 ## Changing the spec safely
 
