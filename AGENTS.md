@@ -94,7 +94,7 @@ crates/phygital-key-gate/          the gate engine every product shares (a libra
   assets/release-key.sh            template: one-time release key setup, published as scripts/release-key.sh
   assets/package-manifests.sh      template: Homebrew, Scoop and winget manifests, published as scripts/package-manifests.sh
   tests/release-lists.sh           the secure installer's release-list check against lists signed with a test key (22 checks)
-  tests/update-job.sh              the daily job's standing-approval wait, port takeover and gate-listener check, with stand-ins (21 checks)
+  tests/update-job.sh              the daily job's standing-approval wait, port takeover and gate-listener check, with stand-ins (22 checks)
 
 crates/phygital-key-testgen/       writes the shared test vectors
   Cargo.toml                       crate manifest
