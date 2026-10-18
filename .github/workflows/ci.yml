@@ -102,6 +102,8 @@ jobs:
       - run: shellcheck -S warning crates/phygital-key-gate/assets/*.sh crates/phygital-key-gate/tests/*.sh
       # The secure installer's release-list check, against lists signed with a test key.
       - run: crates/phygital-key-gate/tests/release-lists.sh
+      # The daily job's standing-approval wait and its port takeover, with stand-ins.
+      - run: crates/phygital-key-gate/tests/update-job.sh
       # Unsafe patterns in GitHub Actions: leaked tokens, injection, broad permissions.
       - run: pipx run zizmor==1.31.1 --offline .
 

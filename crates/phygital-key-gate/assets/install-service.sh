@@ -241,6 +241,30 @@ remember_signed() {
   fi
 }
 
+# A restart ends every standing approval (their use keys live only in memory).
+# So the daily job waits while any is active, for up to 7 days after the first
+# wait on the installed version $HAVE (a newer release does not restart the
+# clock). Waiting requests do not count: an agent can make one at any time.
+# Succeeds (and records why) when the update should wait; fails when it may go on.
+standing_hold() {
+  local latest="$1" st a since nowts
+  [ "$FORCE" = yes ] && return 1
+  st=$(curl -q --max-time 5 -fsS "http://localhost:$PORT/api/status" 2>/dev/null || true)
+  a=$(printf '%s' "$st" | sed -n 's/.*"standing_active": *\([0-9][0-9]*\).*/\1/p')
+  [ "${a:-0}" -gt 0 ] || return 1
+  since=$(awk -v v="$HAVE" '$2 == v && $1 ~ /^[0-9]+$/ { print $1 }' "$PREFIX/update-postponed" 2>/dev/null || true)
+  nowts=$(date +%s)
+  if [ -z "$since" ]; then
+    since=$nowts
+    printf '%s %s\n' "$since" "$HAVE" > "$PREFIX/update-postponed.new" && mv -f "$PREFIX/update-postponed.new" "$PREFIX/update-postponed"
+  fi
+  if [ $(( nowts - since )) -lt $(( 7 * 86400 )) ]; then
+    note "waiting to install $latest: ${a} standing approval(s) active. It installs once they end, after 7 days at the latest, or now with: $P_BIN-admin update --now"
+    return 0
+  fi
+  return 1
+}
+
 # The daily update job's last result, for <program>-admin status (root-only folder).
 note() {
   [ -n "${PREFIX:-}" ] && [ -d "$PREFIX" ] || return 0
@@ -312,26 +336,7 @@ if [ "$AUTO_RUN" = yes ]; then
   if ! newer "$LATEST" "$HAVE"; then
     note "up to date ($HAVE; latest signed release $LATEST)"; exit 0
   fi
-  # A restart ends every standing approval (their use keys live only in memory).
-  # Wait while any is active, for up to 7 days after the first wait on this
-  # installed version (a newer release does not restart the clock). Waiting
-  # requests do not count: an agent can make one at any time.
-  if [ "$FORCE" != yes ]; then
-    st=$(curl -q --max-time 5 -fsS "http://localhost:$PORT/api/status" 2>/dev/null || true)
-    a=$(printf '%s' "$st" | sed -n 's/.*"standing_active": *\([0-9][0-9]*\).*/\1/p')
-    if [ "${a:-0}" -gt 0 ]; then
-      since=$(awk -v v="$HAVE" '$2 == v && $1 ~ /^[0-9]+$/ { print $1 }' "$PREFIX/update-postponed" 2>/dev/null || true)
-      nowts=$(date +%s)
-      if [ -z "$since" ]; then
-        since=$nowts
-        printf '%s %s\n' "$since" "$HAVE" > "$PREFIX/update-postponed.new" && mv -f "$PREFIX/update-postponed.new" "$PREFIX/update-postponed"
-      fi
-      if [ $(( nowts - since )) -lt $(( 7 * 86400 )) ]; then
-        note "waiting to install $LATEST: ${a} standing approval(s) active. It installs once they end, after 7 days at the latest, or now with: $P_BIN-admin update --now"
-        exit 0
-      fi
-    fi
-  fi
+  if standing_hold "$LATEST"; then exit 0; fi
   rm -f "$PREFIX/update-postponed"
   say "Updating from $HAVE to the signed release $LATEST"
   VERSION="$LATEST"

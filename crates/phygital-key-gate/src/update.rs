@@ -510,23 +510,8 @@ pub fn update(check_only: bool) -> Result<(), String> {
             return Err("the release does not contain the program".into());
         }
         // Swap in place: write next to this program, then rename over it.
-        // A fresh file (never one that was there before, or a link someone placed).
         let staged = exe.with_file_name(format!(".{bin}.update"));
-        let _ = std::fs::remove_file(&staged);
-        let mut opts = std::fs::OpenOptions::new();
-        opts.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            opts.mode(0o755);
-        }
-        let mut out = opts
-            .open(&staged)
-            .map_err(|e| format!("{}: {e}", staged.display()))?;
-        let mut src = std::fs::File::open(&new).map_err(|e| e.to_string())?;
-        std::io::copy(&mut src, &mut out).map_err(|e| format!("{}: {e}", staged.display()))?;
-        out.sync_all().map_err(|e| e.to_string())?;
-        drop(out);
+        stage(&new, &staged)?;
         std::fs::rename(&staged, &exe).map_err(|e| {
             let _ = std::fs::remove_file(&staged);
             format!("{}: {e}", exe.display())
@@ -541,6 +526,26 @@ pub fn update(check_only: bool) -> Result<(), String> {
     })();
     let _ = std::fs::remove_dir_all(&dir);
     result
+}
+
+/// Copy `src` to `staged` as a fresh file (mode 0755 on Unix): whatever was at
+/// `staged` before, a file or a link someone placed, is removed, never written
+/// through (review 7, L2).
+fn stage(src: &Path, staged: &Path) -> Result<(), String> {
+    let _ = std::fs::remove_file(staged);
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o755);
+    }
+    let mut out = opts
+        .open(staged)
+        .map_err(|e| format!("{}: {e}", staged.display()))?;
+    let mut from = std::fs::File::open(src).map_err(|e| e.to_string())?;
+    std::io::copy(&mut from, &mut out).map_err(|e| format!("{}: {e}", staged.display()))?;
+    out.sync_all().map_err(|e| e.to_string())
 }
 
 /// `<program> release-check`: used by the secure installer. A v1 list prints its
@@ -867,6 +872,28 @@ mod tests {
         }
         assert_eq!(count, doc["numberOfTests"].as_i64().unwrap_or(-1));
         assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    /// Review 7, L2: a link planted at the staging path is replaced, never
+    /// written through, and the staged file is a fresh copy.
+    #[cfg(unix)]
+    #[test]
+    fn staging_never_writes_through_a_planted_link() {
+        let dir = std::env::temp_dir().join(format!("pka-stage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap_or_else(|e| unreachable!("{e}"));
+        let (src, victim, staged) = (dir.join("new"), dir.join("victim"), dir.join(".staged"));
+        std::fs::write(&src, b"new program").unwrap_or_else(|e| unreachable!("{e}"));
+        std::fs::write(&victim, b"keep me").unwrap_or_else(|e| unreachable!("{e}"));
+        std::os::unix::fs::symlink(&victim, &staged).unwrap_or_else(|e| unreachable!("{e}"));
+        assert!(stage(&src, &staged).is_ok());
+        assert_eq!(std::fs::read(&victim).unwrap_or_default(), b"keep me");
+        let meta = std::fs::symlink_metadata(&staged).unwrap_or_else(|e| unreachable!("{e}"));
+        assert!(meta.file_type().is_file(), "a plain file, not the link");
+        assert_eq!(std::fs::read(&staged).unwrap_or_default(), b"new program");
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(meta.permissions().mode() & 0o777, 0o755);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
