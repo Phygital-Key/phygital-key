@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phygital Key banners</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  :root {
+    --ground: #0B0D12; --card: #161A22; --recess: #07080C; --text: #F1EDE4; --muted: #A7A39A;
+    --line: #2A303C; --cyan: #26D0F2; --cyan-ui: #26D0F2; --coral: #FF6B5A; --coral-ui: #FF6B5A;
+    --cyan-tint: #0E2B33; --coral-tint: #3A1A17;
+  }
+  .light {
+    --ground: #F4F6F9; --card: #FFFFFF; --recess: #E6EAF0; --text: #0B0D12; --muted: #4A5160;
+    --line: #D5DAE3; --cyan-ui: #087593; --coral-ui: #B53323; --cyan-tint: #E3F6FB; --coral-tint: #FFE9E5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 480px; background: var(--ground); overflow: hidden; }
+  body { color: var(--text); font-family: 'Hanken Grotesk', sans-serif; -webkit-font-smoothing: antialiased; }
+  section { display: none; width: 1280px; height: 480px; padding: 52px 64px; }
+  section.on { display: grid; }
+  .kicker { font-family: 'JetBrains Mono'; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  h2 { font-family: 'Anybody'; font-weight: 800; font-stretch: 118%; text-transform: uppercase; font-size: 46px; line-height: 1; margin-top: 14px; }
+  h2 em { font-style: normal; color: var(--cyan-ui); }
+  .sub { margin-top: 18px; font-size: 18px; line-height: 1.45; color: var(--muted); max-width: 34ch; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  .mono { font-family: 'JetBrains Mono'; }
+  .stamp { font-family: 'JetBrains Mono'; font-size: 11.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 4px 9px; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
+  .ok { color: var(--cyan-ui); background: var(--cyan-tint); }
+  .no { color: var(--coral-ui); background: var(--coral-tint); }
+  .wk-light { display: none; } .light .wk-light { display: inline; } .light .wk-dark { display: none; }
+
+  /* 1. How it works: four roles on one wire */
+  #how { grid-template-rows: auto 1fr; }
+  #how .head { display: flex; justify-content: space-between; align-items: end; }
+  #how .head .sub { margin-top: 0; text-align: right; max-width: 30ch; }
+  #how h2 { font-size: 40px; }
+  #how { padding-bottom: 64px; }
+  #how .row { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; align-self: center; }
+  #how .wire { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: var(--line); }
+  #how .wire::before, #how .wire::after { content: ""; position: absolute; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--coral); }
+  #how .wire::before { left: -6px; } #how .wire::after { right: -6px; }
+  #how .step { position: relative; padding: 20px 20px 18px; display: flex; flex-direction: column; gap: 10px; min-height: 176px; }
+  #how .n { font-family: 'Anybody'; font-weight: 800; font-stretch: 125%; font-size: 13px; letter-spacing: .1em; color: var(--muted); }
+  #how .role { font-family: 'Anybody'; font-weight: 700; font-stretch: 118%; font-size: 24px; }
+  #how .what { font-size: 15.5px; line-height: 1.4; color: var(--muted); }
+  #how .tag { margin-top: auto; align-self: flex-start; font-family: 'JetBrains Mono'; font-size: 12.5px; background: var(--recess); border-radius: 4px; padding: 5px 8px; }
+  #how .you { border-color: var(--cyan-ui); }
+  #how .you .role { color: var(--cyan-ui); }
+
+  /* 2. Out of the AI's reach */
+  #reach { grid-template-columns: 1fr 560px; gap: 48px; align-items: center; }
+  #reach .zones { display: flex; flex-direction: column; gap: 0; }
+  #reach .outside { padding: 16px 20px; border: 1px dashed var(--line); border-radius: 10px 10px 0 0; border-bottom: none; display: flex; justify-content: space-between; align-items: center; }
+  #reach .outside b { font-weight: 600; }
+  #reach .gatebar { display: flex; align-items: center; gap: 12px; padding: 9px 20px; background: var(--recess); border-left: 1px solid var(--line); border-right: 1px solid var(--line); font-family: 'JetBrains Mono'; font-size: 12px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+  #reach .inside { border-radius: 0 0 10px 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+  #reach .inside .who { display: flex; align-items: center; gap: 10px; font-family: 'JetBrains Mono'; font-size: 14px; }
+  #reach .inside .who img { width: 22px; height: 22px; }
+  #reach .r { display: grid; grid-template-columns: 1fr auto; align-items: center; font-family: 'JetBrains Mono'; font-size: 13.5px; padding: 9px 12px; background: var(--recess); border-radius: 4px; }
+  #reach .r span:first-child { color: var(--text); }
+
+  /* 3. Standing approvals */
+  #standing { grid-template-columns: 1fr 540px; gap: 56px; align-items: center; }
+  #standing .card { padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 18px 40px rgba(11, 13, 18, .10); }
+  #standing .top { display: flex; justify-content: space-between; align-items: center; }
+  #standing .ttl { font-family: 'Anybody'; font-weight: 700; font-stretch: 118%; font-size: 22px; }
+  #standing table { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-family: 'JetBrains Mono'; font-size: 13px; }
+  #standing td { padding: 7px 10px; background: var(--recess); }
+  #standing td:first-child { border-radius: 4px 0 0 4px; color: var(--muted); width: 38%; }
+  #standing td:last-child { border-radius: 0 4px 4px 0; }
+  #standing .meter { display: flex; align-items: center; gap: 12px; font-family: 'JetBrains Mono'; font-size: 13px; }
+  #standing .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--recess); display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; overflow: hidden; }
+  #standing .bar i { background: var(--line); } #standing .bar i.u { background: var(--cyan); }
+  #standing .refused { display: flex; justify-content: space-between; align-items: center; background: var(--coral-tint); border-radius: 4px; padding: 9px 12px; font-family: 'JetBrains Mono'; font-size: 12.5px; }
+  #standing .refused b { color: var(--coral-ui); }
+
+  /* 4. Check it anywhere */
+  #check { grid-template-rows: auto 1fr; gap: 26px; }
+  #check .head { display: flex; justify-content: space-between; align-items: end; }
+  #check .head .sub { margin-top: 0; text-align: right; max-width: 44ch; }
+  #check .cols { align-self: center; }
+  #check pre { flex: none; }
+  #check .cols { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 18px; }
+  #check .col { padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+  #check .lang { display: flex; justify-content: space-between; font-family: 'JetBrains Mono'; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  #check pre { flex: 1; background: var(--recess); border-radius: 4px; padding: 11px 12px; font-family: 'JetBrains Mono'; font-size: 12px; line-height: 1.55; white-space: pre; overflow: hidden; }
+  #check .c { color: var(--muted); } #check .y { color: var(--cyan-ui); } #check .x { color: var(--coral-ui); }
+
+  /* product: generic two-column */
+  .two { grid-template-columns: 1fr 560px; gap: 48px; align-items: center; }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  .stack .card { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .stack pre, .codebox { background: var(--recess); border-radius: 4px; padding: 10px 12px; font-family: 'JetBrains Mono'; font-size: 12.5px; line-height: 1.55; white-space: pre; overflow: hidden; }
+  .lbl { display: flex; justify-content: space-between; font-family: 'JetBrains Mono'; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .y { color: var(--cyan-ui); } .x { color: var(--coral-ui); } .c { color: var(--muted); }
+  /* tools grid */
+  .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tool { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .tool b { font-family: 'JetBrains Mono'; font-size: 14px; color: var(--cyan-ui); font-weight: 600; }
+  .tool span { font-size: 14.5px; color: var(--muted); line-height: 1.35; }
+  .tool.never { border-style: dashed; }
+  .tool.never b { color: var(--coral-ui); }
+  /* states */
+  #a2a-states { grid-template-rows: auto 1fr; gap: 30px; }
+  #a2a-states h2 { font-size: 40px; }
+  #a2a-states .head { display: flex; justify-content: space-between; align-items: end; }
+  #a2a-states .head .sub { margin-top: 0; text-align: right; max-width: 36ch; }
+  .flow { display: grid; grid-template-columns: 1fr 34px 1.25fr 34px 1.6fr; align-items: center; }
+  .st { padding: 16px; display: flex; flex-direction: column; gap: 8px; min-height: 120px; }
+  .st code { font-family: 'JetBrains Mono'; font-size: 13px; font-weight: 600; }
+  .st span { font-size: 14px; color: var(--muted); line-height: 1.35; }
+  .arrow { text-align: center; font-family: 'JetBrains Mono'; color: var(--muted); font-size: 20px; }
+  .ends { display: flex; flex-direction: column; gap: 8px; }
+  .end { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; font-family: 'JetBrains Mono'; font-size: 12.5px; }
+  .end.ok { border-color: var(--cyan-ui); }
+</style>
+</head>
+<body>
+
+<section id="how">
+  <div class="head">
+    <div><div class="kicker">How it works</div><h2>Four roles. <em>One signed yes.</em></h2></div>
+    <p class="sub">Each role has its own authority. None of them can do another's job.</p>
+  </div>
+  <div class="row">
+    <div class="wire"></div>
+    <div class="step card"><span class="n">01</span><span class="role">The agent</span><span class="what">Asks for one exact request, for one service.</span><span class="tag">MCP &middot; A2A</span></div>
+    <div class="step card"><span class="n">02</span><span class="role">The gate</span><span class="what">Shows every field. Has no key, so it can never approve.</span><span class="tag">approval page</span></div>
+    <div class="step card you"><span class="n">03</span><span class="role">You</span><span class="what">Approve with your fingerprint, face, PIN or key.</span><span class="tag">ES256 signature</span></div>
+    <div class="step card"><span class="n">04</span><span class="role">The service</span><span class="what">Checks the signed yes itself, offline, then acts.</span><span class="tag">verify() &rarr; ok</span></div>
+  </div>
+</section>
+
+<section id="reach">
+  <div>
+    <div class="kicker">Secure install &middot; macOS and Linux</div>
+    <h2>Out of the<br><em>AI's reach.</em></h2>
+    <p class="sub">The gate runs as its own locked-down system user. An agent acting as you cannot touch it. Only your administrator password can.</p>
+  </div>
+  <div class="zones">
+    <div class="outside"><span><b>You</b>, and any AI acting as you</span><span class="mono" style="font-size:12.5px;color:var(--muted)">your account</span></div>
+    <div class="gatebar">&#x25CF; administrator password required</div>
+    <div class="inside card">
+      <div class="who"><img class="wk-dark" src="phygital-key-wired-cyan.svg" alt=""><img class="wk-light" src="phygital-key-wired-ink.svg" alt="">the gate's own system user</div>
+      <div class="r"><span>change its program</span><span class="stamp no">&#x2715; Refused</span></div>
+      <div class="r"><span>read its data</span><span class="stamp no">&#x2715; Refused</span></div>
+      <div class="r"><span>write its keys</span><span class="stamp no">&#x2715; Refused</span></div>
+      <div class="r"><span>serve a fake page on its port</span><span class="stamp no">&#x2715; Refused</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="standing">
+  <div>
+    <div class="kicker">Standing approvals</div>
+    <h2>Say yes once.<br><em>With limits.</em></h2>
+    <p class="sub">For small repeated actions. Every use is checked against what you signed, and you can revoke it at any time.</p>
+  </div>
+  <div class="card">
+    <div class="top"><span class="ttl">payment</span><span class="stamp ok">&#x2713; Signed &middot; active</span></div>
+    <table>
+      <tr><td>to</td><td>ACME Ltd</td></tr>
+      <tr><td>currency</td><td>EUR</td></tr>
+      <tr><td>amount_cents</td><td>1 to 2000</td></tr>
+      <tr><td>uses &middot; ends</td><td>at most 5 &middot; in 7 days</td></tr>
+    </table>
+    <div class="meter"><span>Used 2 of 5</span><span class="bar"><i class="u"></i><i class="u"></i><i></i><i></i><i></i></span></div>
+    <div class="refused"><span>amount_cents 5000</span><b>&#x2715; NOT_ALLOWED</b></div>
+  </div>
+</section>
+
+<section id="check">
+  <div class="head">
+    <div><div class="kicker">For services</div><h2>Check it <em>anywhere.</em></h2></div>
+    <p class="sub">Rust, JavaScript or any language through the command line. Same 123 shared test vectors.</p>
+  </div>
+  <div class="cols">
+    <div class="col card"><div class="lang"><span>Rust</span><span>phygital-key-verify</span></div>
+<pre><span class="c">// the request YOU are about to run</span>
+let request = json!({"type": "deploy",
+  "params": {"service": "api",
+    "env": "production", "version": "2.4.1"}});
+verifier.verify(&amp;approval, &amp;request,
+  Level::High)?; <span class="c">// refuses on any doubt</span></pre></div>
+    <div class="col card"><div class="lang"><span>JavaScript</span><span>0 dependencies</span></div>
+<pre>const r = await verify(approval,
+  { aud, request, level: "high" },
+  keyring, seen, config, now);
+<span class="y">r.ok</span>     <span class="c">// true: act</span>
+<span class="x">r.error</span>  <span class="c">// "REPLAYED"</span></pre></div>
+    <div class="col card"><div class="lang"><span>Command line</span><span>exit code</span></div>
+<pre>$ phygital-key-mcp verify \
+    --approval "$A" --request @req.json \
+    --aud https://deploy.example.com
+<span class="y">{"ok": true, ...}</span>      <span class="c">exit 0</span>
+<span class="x">{"error": "REPLAYED"}</span>  <span class="c">exit 1</span>
+<span class="c"># same in phygital-key-a2a</span></pre></div>
+  </div>
+</section>
+
+<section id="mcp-connect" class="two">
+  <div>
+    <div class="kicker">Phygital Key MCP</div>
+    <h2>Plug into<br><em>any MCP app.</em></h2>
+    <p class="sub">Claude Code, Claude Desktop, Cursor and any app that speaks MCP. Over stdio with no token, or over HTTP with an access token.</p>
+  </div>
+  <div class="stack">
+    <div class="card"><div class="lbl"><span>Claude Code</span><span>stdio</span></div>
+<pre>$ claude mcp add phygital-key-mcp -- phygital-key-mcp stdio</pre></div>
+    <div class="card"><div class="lbl"><span>Any MCP app</span><span>config JSON</span></div>
+<pre>{ "mcpServers": { "phygital-key-mcp": {
+    "command": "phygital-key-mcp", "args": ["stdio"] } } }</pre></div>
+    <div class="card"><div class="lbl"><span>Over HTTP</span><span>phygital-key-mcp token</span></div>
+<pre>http://localhost:7468/mcp
+<span class="c">Authorization:</span> <span class="y">Bearer &lt;token&gt;</span></pre></div>
+  </div>
+</section>
+
+<section id="mcp-tools" class="two">
+  <div>
+    <div class="kicker">The agent's tools</div>
+    <h2>Six tools.<br><em>None can approve.</em></h2>
+    <p class="sub">The agent can ask, wait, cancel, use a standing approval and pass back a receipt. Only your key signs.</p>
+  </div>
+  <div class="tools">
+    <div class="tool card"><b>request_approval</b><span>Ask for one exact request, for one service</span></div>
+    <div class="tool card"><b>get_approval</b><span>Wait for your answer and get the signed yes</span></div>
+    <div class="tool card"><b>cancel_approval</b><span>Withdraw a request, or revoke a standing one</span></div>
+    <div class="tool card"><b>request_standing_approval</b><span>Ask for a limited, repeated permission</span></div>
+    <div class="tool card"><b>use_standing_approval</b><span>A one-minute use token, inside the limits</span></div>
+    <div class="tool card"><b>record_receipt</b><span>Pass back the service's signed "done"</span></div>
+  </div>
+</section>
+
+<section id="a2a-states">
+  <div class="head">
+    <div><div class="kicker">Phygital Key A2A &middot; A2A 1.0</div><h2>A task that <em>waits for you.</em></h2></div>
+    <p class="sub">Another agent sends a task. It waits while you decide on the approval page, then ends one of four ways.</p>
+  </div>
+  <div class="flow">
+    <div class="st card"><code>SendMessage</code><span>A data part with the exact request, the service and the level</span></div>
+    <div class="arrow">&rarr;</div>
+    <div class="st card"><code>TASK_STATE_AUTH_REQUIRED</code><span>The approval link is in the status. You approve or deny on the page.</span></div>
+    <div class="arrow">&rarr;</div>
+    <div class="ends">
+      <div class="end card ok"><span>TASK_STATE_COMPLETED</span><span class="stamp ok">&#x2713; Signed</span></div>
+      <div class="end card"><span>TASK_STATE_REJECTED</span><span class="stamp no">&#x2715; Refused</span></div>
+      <div class="end card"><span>TASK_STATE_CANCELED</span><span class="stamp no">&#x2715; Cancelled</span></div>
+      <div class="end card"><span>TASK_STATE_FAILED</span><span class="stamp no">&#x2715; Expired</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="a2a-card" class="two">
+  <div>
+    <div class="kicker">Discovery</div>
+    <h2>Found like<br><em>any agent.</em></h2>
+    <p class="sub">An agent card at the standard address, a JSON-RPC endpoint, a bearer token. Streaming included. Tested with the official A2A client and conformance kit.</p>
+  </div>
+  <div class="stack">
+    <div class="card"><div class="lbl"><span>Agent card</span><span>no token needed</span></div>
+<pre>GET /.well-known/agent-card.json
+{ "name": "Phygital Key A2A",
+  "supportedInterfaces": [{ "protocolBinding": "JSONRPC",
+                            "protocolVersion": "1.0" }],
+  "capabilities": { <span class="y">"streaming": true</span> } }</pre></div>
+    <div class="card"><div class="lbl"><span>Skills</span><span>5</span></div>
+<pre>request_approval  request_standing_approval
+use_standing_approval  record_receipt
+revoke_standing_approval</pre></div>
+  </div>
+</section>
+
+</body>
+</html>

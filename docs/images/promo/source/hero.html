@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phygital Key hero</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  :root {
+    --ground: #0B0D12; --card: #161A22; --recess: #07080C; --text: #F1EDE4; --muted: #A7A39A;
+    --line: #2A303C; --cyan: #26D0F2; --cyan-ui: #26D0F2; --coral-ui: #FF6B5A;
+    --cyan-tint: #0E2B33; --coral-tint: #3A1A17;
+  }
+  .light {
+    --ground: #F4F6F9; --card: #FFFFFF; --recess: #E6EAF0; --text: #0B0D12; --muted: #4A5160;
+    --line: #D5DAE3; --cyan-ui: #087593; --coral-ui: #B53323; --cyan-tint: #E3F6FB; --coral-tint: #FFE9E5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 640px; background: var(--ground); }
+  body { color: var(--text); font-family: 'Hanken Grotesk', sans-serif; -webkit-font-smoothing: antialiased; }
+  .frame { width: 1280px; height: 640px; padding: 60px 64px; display: grid; grid-template-columns: 1fr 470px; gap: 56px; }
+
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand img { width: 44px; height: 44px; }
+  .brand span { font-family: 'Anybody'; font-weight: 800; font-stretch: 125%; font-size: 19px; letter-spacing: .06em; text-transform: uppercase; }
+  .left { display: flex; flex-direction: column; }
+  h1 { margin-top: 58px; font-family: 'Anybody'; font-weight: 800; font-stretch: 118%; text-transform: uppercase;
+       font-size: 62px; line-height: .98; letter-spacing: -.005em; }
+  h1 em { font-style: normal; color: var(--cyan-ui); }
+  .sub { margin-top: 26px; font-size: 21px; line-height: 1.42; color: var(--muted); max-width: 36ch; }
+  .foot { margin-top: auto; display: flex; gap: 22px; font-family: 'JetBrains Mono'; font-size: 13.5px; color: var(--muted); }
+  .foot b { color: var(--text); font-weight: 600; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; display: flex; flex-direction: column; gap: 15px; align-self: center; }
+  .label { font-family: 'JetBrains Mono'; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+  pre { background: var(--recess); border-radius: 4px; padding: 11px 13px; font-family: 'JetBrains Mono'; font-size: 13px; line-height: 1.5; color: var(--text); }
+  pre .k { color: var(--muted); }
+  .you { display: flex; align-items: center; justify-content: space-between; font-family: 'JetBrains Mono'; font-size: 13.5px; }
+  .you .who { display: flex; align-items: center; gap: 10px; }
+  .you img { width: 22px; height: 22px; }
+  .wk-light { display: none; } .light .wk-light { display: inline; } .light .wk-dark { display: none; }
+  .stamp { font-family: 'JetBrains Mono'; font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+           padding: 4px 9px; border-radius: 4px; border: 1px solid currentColor; }
+  .ok { color: var(--cyan-ui); background: var(--cyan-tint); }
+  .no { color: var(--coral-ui); background: var(--coral-tint); }
+  .hr { height: 1px; background: var(--line); }
+  ul { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 7px 18px; font-family: 'JetBrains Mono'; font-size: 13px; }
+  li::before { content: "\2713"; color: var(--cyan-ui); margin-right: 9px; font-weight: 700; }
+  .refused { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--coral-tint); border-radius: 4px; padding: 10px 12px; font-family: 'JetBrains Mono'; font-size: 12.5px; }
+  .refused span { color: var(--text); }
+  .refused b { color: var(--coral-ui); font-weight: 700; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+<!--
+THESIS: the hero shows the yes being checked: an agent's exact request, a person's signature, a service's checks and one refusal. Refuses the logo-plus-slogan banner.
+OWN-WORLD: Night Signal brand: #0B0D12 ground, #161A22 card with hairline, cyan = signed, coral = refused, word plus glyph, Anybody expanded caps, Hanken text, JetBrains Mono data.
+STORY: the reader learns the AI asks, a person approves with a key, and the service refuses any change.
+FIRST VIEWPORT: left headline at 62px over a two-line subhead; right a 470px verifier card: request, approval, seven checks, one coral refusal.
+FORM: candidate 7 (the verifier's view), seed 1895a002.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+<div class="frame">
+  <div class="left">
+    <div class="brand"><img src="phygital-key-mark.svg" alt=""><span>Phygital Key</span></div>
+    <h1>The AI can ask.<br><em>Only you</em> can<br>approve.</h1>
+    <p class="sub">Approve one exact action with your passkey, fingerprint or security key. The service checks your signed yes itself, offline.</p>
+    <div class="foot"><span><b>Open source</b> · Apache-2.0</span><span>github.com/Phygital-Key</span></div>
+  </div>
+
+  <div class="card">
+    <div class="label"><span>The agent asks</span><span>request_approval</span></div>
+<pre>{ "type": "deploy",
+  "params": { "service": "api", "env": "production",
+              "version": "2.4.1" } }</pre>
+    <div class="label"><span>You approve</span><span>ES256 · P-256</span></div>
+    <div class="you">
+      <span class="who"><img class="wk-dark" src="phygital-key-wired-cyan.svg" alt=""><img class="wk-light" src="phygital-key-wired-ink.svg" alt="">Fingerprint on My laptop</span>
+      <span class="stamp ok">&#x2713; Signed</span>
+    </div>
+    <div class="hr"></div>
+    <div class="label"><span>The service checks, offline</span><span>deploy.example.com</span></div>
+    <ul>
+      <li>right service</li><li>exact request</li>
+      <li>in time (60 s)</li><li>level: high</li>
+      <li>your key</li><li>signature</li>
+      <li>first use</li><li>right site</li>
+    </ul>
+    <div class="refused"><span>Agent resends with "2.4.2"</span><b>&#x2715; REQUEST_MISMATCH</b></div>
+  </div>
+</div>
+</body>
+</html>
