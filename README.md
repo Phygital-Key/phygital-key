@@ -11,6 +11,9 @@
 <a href="https://github.com/Phygital-Key/phygital-key-mcp/releases/latest"><img src="https://img.shields.io/github/v/release/Phygital-Key/phygital-key-mcp" alt="Latest release"></a>
 <a href="Cargo.toml"><img src="https://img.shields.io/badge/rust-1.89%2B-orange" alt="Rust 1.89+"></a>
 <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-server-black" alt="MCP server"></a>
+<a href="https://github.com/Phygital-Key/phygital-key-mcp/stargazers"><img src="https://img.shields.io/github/stars/Phygital-Key/phygital-key-mcp?style=flat" alt="GitHub stars"></a>
+<a href="https://github.com/Phygital-Key/phygital-key-mcp/commits/main"><img src="https://img.shields.io/github/last-commit/Phygital-Key/phygital-key-mcp" alt="Last commit"></a>
+<a href="https://scorecard.dev/viewer/?uri=github.com/Phygital-Key/phygital-key-mcp"><img src="https://api.scorecard.dev/projects/github.com/Phygital-Key/phygital-key-mcp/badge" alt="OpenSSF Scorecard"></a>
 </p>
 
 <p align="center">
@@ -18,6 +21,15 @@
 <a href="docs/testing.md"><img src="https://img.shields.io/badge/test%20vectors-123%20shared-26D0F2" alt="123 shared test vectors"></a>
 <a href="docs/secure-install.md"><img src="https://img.shields.io/badge/secure%20install-macOS%20%C2%B7%20Linux-555" alt="Secure install on macOS and Linux"></a>
 <a href="docs/threat-model.md"><img src="https://img.shields.io/badge/status-pre--audit-FF6B5A" alt="Status: pre-audit"></a>
+</p>
+
+<p align="center">
+<a href="#signed-automatic-updates"><img src="https://img.shields.io/badge/releases-signed-26D0F2" alt="Signed releases"></a>
+<a href="Cargo.toml"><img src="https://img.shields.io/badge/%23!%5Bforbid(unsafe__code)%5D-yes-555" alt="#![forbid(unsafe_code)]"></a>
+<a href="docs/privacy.md"><img src="https://img.shields.io/badge/telemetry-none-555" alt="No telemetry"></a>
+<a href="docs/connect-your-ai.md"><img src="https://img.shields.io/badge/works%20with-any%20MCP%20app-black" alt="Works with any MCP app"></a>
+<a href="docs/keys-and-devices.md"><img src="https://img.shields.io/badge/FIDO2-passkeys%20%C2%B7%20security%20keys-FF6B5A" alt="FIDO2: passkeys and security keys"></a>
+<a href="docs/ap2.md"><img src="https://img.shields.io/badge/AP2-mapped-26D0F2" alt="AP2: mapped"></a>
 </p>
 
 <p align="center"><b>Free and open source under the Apache-2.0 license.</b> Use it, change it, sell it, build on it. Keep the <code>NOTICE</code> file. See <a href="#open-source-and-credit">Open source and credit</a>.</p>
