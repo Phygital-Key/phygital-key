@@ -1,13 +1,13 @@
 {
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Approve exact AI actions with a passkey or hardware key (MCP gate + verifier)",
     "homepage": "https://github.com/Phygital-Key/phygital-key-mcp",
     "license": "Apache-2.0",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/Phygital-Key/phygital-key-mcp/releases/download/v0.2.0/phygital-key-v0.2.0-x86_64-pc-windows-msvc.zip",
-            "hash": "ebb050962b6c469137cc794b29cb7600fc67ab793ed3f50fa0aca5c612d8cb0e",
-            "extract_dir": "phygital-key-v0.2.0-x86_64-pc-windows-msvc"
+            "url": "https://github.com/Phygital-Key/phygital-key-mcp/releases/download/v0.3.0/phygital-key-v0.3.0-x86_64-pc-windows-msvc.zip",
+            "hash": "a4b2e08b76eecf0dd62e5bdb3b4c8a83673e2556a55d75bba466137ebae8fd9b",
+            "extract_dir": "phygital-key-v0.3.0-x86_64-pc-windows-msvc"
         }
     },
     "bin": "phygital-key.exe",

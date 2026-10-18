@@ -1,0 +1,13 @@
+PackageIdentifier: PhygitalKey.PhygitalKey
+PackageVersion: 0.3.0
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: phygital-key-v0.3.0-x86_64-pc-windows-msvc\phygital-key.exe
+    PortableCommandAlias: phygital-key
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/Phygital-Key/phygital-key-mcp/releases/download/v0.3.0/phygital-key-v0.3.0-x86_64-pc-windows-msvc.zip
+    InstallerSha256: A4B2E08B76EECF0DD62E5BDB3B4C8A83673E2556A55D75BBA466137EBAE8FD9B
+ManifestType: installer
+ManifestVersion: 1.9.0
