@@ -46,15 +46,17 @@ for p in $(sudo lsof -nP -iTCP:7468 -sTCP:LISTEN -t | sort -u); do
   [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] || fail "a listener is not the gate user"
 done
 pass "only the gate user listens (IPv4 and IPv6)"
-[ "$(stat -f %Su "$PREFIX/bin/phygital-key" 2>/dev/null || stat -c %U "$PREFIX/bin/phygital-key")" = root ] && pass "program owned by root" || fail "program owned by root"
+owner() { if [ "$(uname -s)" = Darwin ]; then stat -f %Su "$1"; else stat -c %U "$1"; fi; }
+[ "$(owner "$PREFIX/bin/phygital-key")" = root ] && pass "program owned by root" || fail "program owned by root"
 if touch "$PREFIX/bin/phygital-key" 2>/dev/null; then fail "this user can change the program"; else pass "this user cannot change the program"; fi
 if ls "$DATA" >/dev/null 2>&1; then fail "this user can read the data folder"; else pass "this user cannot read the data folder"; fi
 if echo x > "$DATA/keyring.json" 2>/dev/null; then fail "this user can write the keyring"; else pass "this user cannot write the keyring"; fi
 ADMIN="$PREFIX/bin/phygital-key-admin"
-"$ADMIN" status | grep -q "only the gate" && pass "admin status confirms the listener" || fail "admin status confirms the listener"
+status_out=$("$ADMIN" status) && grep -q "only the gate" <<< "$status_out" && pass "admin status confirms the listener" || fail "admin status confirms the listener"
 link=$("$ADMIN" enroll | grep -o 'http://localhost:7468/enroll#token=[A-Za-z0-9_-]*')
 [ -n "$link" ] && pass "admin helper makes an enrollment link" || fail "admin helper makes an enrollment link"
-if "$ADMIN" logs 2>/dev/null | grep -q "token="; then fail "a secret is in the gate log"; else pass "no enrollment link or token in the gate log"; fi
+logs_out=$("$ADMIN" logs 2>/dev/null || true)
+if grep -q "token=" <<< "$logs_out"; then fail "a secret is in the gate log"; else pass "no enrollment link or token in the gate log"; fi
 tok=$("$ADMIN" token | grep -o 'Bearer [A-Za-z0-9_-]*' | head -1 | cut -d' ' -f2)
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' http://localhost:7468/mcp -d '{}')
 [ "$code" = 401 ] && pass "MCP refuses calls without the token" || fail "MCP without token gave $code"
@@ -70,11 +72,11 @@ BIN="$PREFIX/bin/phygital-key"
 updates_on() {
   if [ "$(uname -s)" = Darwin ]; then
     sudo test -f /Library/LaunchDaemons/io.phygitalkey.update.plist &&
-      [ "$(stat -f %Su /Library/LaunchDaemons/io.phygitalkey.update.plist)" = root ] &&
+      [ "$(owner /Library/LaunchDaemons/io.phygitalkey.update.plist)" = root ] &&
       sudo launchctl print system/io.phygitalkey.update >/dev/null 2>&1
   else
     systemctl is-enabled phygital-key-update.timer >/dev/null 2>&1 &&
-      [ "$(stat -c %U /etc/systemd/system/phygital-key-update.service)" = root ]
+      [ "$(owner /etc/systemd/system/phygital-key-update.service)" = root ]
   fi
 }
 updates_on && pass "daily update job installed, owned by root" || fail "no daily update job"

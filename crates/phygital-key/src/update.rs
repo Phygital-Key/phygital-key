@@ -247,6 +247,7 @@ fn private_dir() -> Result<PathBuf, String> {
         "phygital-key-update-{}",
         phygital_key_verify::b64::encode(rnd)
     ));
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut b = std::fs::DirBuilder::new();
     #[cfg(unix)]
     {
