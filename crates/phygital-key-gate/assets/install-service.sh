@@ -146,10 +146,12 @@ newer() {
   (( 10#$a1 > 10#$b1 || (10#$a1 == 10#$b1 && (10#$a2 > 10#$b2 || (10#$a2 == 10#$b2 && 10#$a3 > 10#$b3))) ))
 }
 
-# Check $1/release.txt against $1/release.txt.sig with the pinned keys.
-# Prints the signed version. Fails on any doubt.
+# Check the release list in $1 (release2.txt, or release.txt for an older release)
+# with the pinned keys. Prints "<version>" for release.txt, "<version> <signed>
+# <expires>" for release2.txt. Says why on stderr. Fails on any doubt.
 verify_release() {
-  local d="$1" n=0 ok=no v
+  local d="$1" n=0 ok=no v list first=3 signed_at="" expires="" now pq out help
+  if [ -f "$d/release2.txt" ]; then list=release2.txt; first=5; else list=release.txt; fi
   if command -v openssl >/dev/null 2>&1; then
     printf '%s\n' "$RELEASE_KEYS" | awk -v dir="$d" '
       /-----BEGIN PUBLIC KEY-----/ { n++; f = dir "/key-" n ".pem" }
@@ -158,33 +160,85 @@ verify_release() {
     for k in "$d"/key-*.pem; do
       [ -f "$k" ] || continue
       n=$((n + 1))
-      if openssl dgst -sha256 -verify "$k" -signature "$d/release.txt.sig" "$d/release.txt" >/dev/null 2>&1; then ok=yes; fi
+      if openssl dgst -sha256 -verify "$k" -signature "$d/$list.sig" "$d/$list" >/dev/null 2>&1; then ok=yes; fi
     done
-    [ "$n" -gt 0 ] || { echo "  no release key is pinned in this installer" >&2; return 1; }
-    [ "$ok" = yes ] || { echo "  release.txt is not signed by a pinned release key" >&2; return 1; }
-    [ "$(sed -n 1p "$d/release.txt")" = "phygital-key release manifest v1" ] || return 1
-    v=$(sed -n 2p "$d/release.txt" | sed -n 's/^version \(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p')
+    [ "$n" -gt 0 ] || { echo "no release key is pinned in this installer" >&2; return 1; }
+    [ "$ok" = yes ] || { echo "the release list is not signed by a pinned release key" >&2; return 1; }
+    if [ "$list" = release2.txt ]; then
+      [ "$(sed -n 1p "$d/$list")" = "phygital-key release manifest v2" ] || return 1
+      signed_at=$(sed -n 3p "$d/$list" | sed -n 's/^signed \([1-9][0-9]\{0,11\}\)$/\1/p')
+      expires=$(sed -n 4p "$d/$list" | sed -n 's/^expires \([1-9][0-9]\{0,11\}\)$/\1/p')
+      [ -n "$signed_at" ] && [ -n "$expires" ] || return 1
+      (( expires > signed_at && expires - signed_at <= 400 * 86400 )) || return 1
+      now=$(date +%s)
+      (( signed_at <= now + 86400 )) || { echo "the release list says it was signed in the future (check this machine's clock)" >&2; return 1; }
+      (( now < expires )) || { echo "the latest signed release list expired on $(date -u -r "$expires" +%F 2>/dev/null || date -u -d "@$expires" +%F): no newer one was found" >&2; return 1; }
+    else
+      [ "$(sed -n 1p "$d/$list")" = "phygital-key release manifest v1" ] || return 1
+    fi
+    v=$(sed -n 2p "$d/$list" | sed -n 's/^version \(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p')
     [ -n "$v" ] || return 1
     # The same strict format the program checks: LF only, a final LF, at least one
     # file, every file line exact, no name twice.
-    [ -z "$(tail -c 1 "$d/release.txt")" ] || return 1
-    ! LC_ALL=C grep -q "$(printf '\r')" "$d/release.txt" || return 1
-    [ "$(sed -n '3,$p' "$d/release.txt" | wc -l | tr -d ' ')" -ge 1 ] || return 1
-    [ "$(sed -n '3,$p' "$d/release.txt" | LC_ALL=C grep -cvE "^[0-9a-f]{64}  ${P_BIN}-${v//./\\.}-[A-Za-z0-9._-]+\.(tar\.gz|zip)\$" || true)" = 0 ] || return 1
-    [ -z "$(sed -n '3,$p' "$d/release.txt" | awk '{ print $2 }' | sort | uniq -d)" ] || return 1
-  elif [ -x "$BIN" ] && root_only "$BIN" 2>/dev/null; then
-    # The installed, root-owned program checks it with the same pinned keys.
-    v=$("$BIN" release-check --file "$d/release.txt" --sig "$d/release.txt.sig") || return 1
-  else
+    [ -z "$(tail -c 1 "$d/$list")" ] || return 1
+    ! LC_ALL=C grep -q "$(printf '\r')" "$d/$list" || return 1
+    [ "$(sed -n "$first,\$p" "$d/$list" | wc -l | tr -d ' ')" -ge 1 ] || return 1
+    [ "$(sed -n "$first,\$p" "$d/$list" | LC_ALL=C grep -cvE "^[0-9a-f]{64}  ${P_BIN}-${v//./\\.}-[A-Za-z0-9._-]+\.(tar\.gz|zip)\$" || true)" = 0 ] || return 1
+    [ -z "$(sed -n "$first,\$p" "$d/$list" | awk '{ print $2 }' | sort | uniq -d)" ] || return 1
+  elif ! { [ -x "$BIN" ] && root_only "$BIN" 2>/dev/null; }; then
     die "needs openssl to check the release signature. Install openssl, then run this again."
   fi
+  # The installed, root-owned program checks the list too: with no openssl it is
+  # the only check, and for release2.txt it also checks the ML-DSA signature when
+  # one is pinned. A first install has no such program yet: there, the P-256
+  # signature above is the check.
+  if [ -x "$BIN" ] && root_only "$BIN" 2>/dev/null &&
+     { [ "$ok" != yes ] || [ "$list" = release2.txt ]; }; then
+    pq=()
+    [ -f "$d/$list.mldsa" ] && pq=(--pq-sig "$d/$list.mldsa")
+    if ! out=$("$BIN" release-check --file "$d/$list" --sig "$d/$list.sig" ${pq[@]+"${pq[@]}"} 2>&1); then
+      # An older installed program knows only release.txt; the P-256 check above stands.
+      # (Read the help into a variable first: grep -q in a pipe could end it early.)
+      help=$("$BIN" release-check --help 2>/dev/null || true)
+      if [ "$ok" = yes ] && [ "$list" = release2.txt ] && ! grep -q -- --pq-sig <<< "$help"; then
+        :
+      else
+        echo "$out" >&2; return 1
+      fi
+    elif [ "$ok" != yes ]; then
+      read -r v signed_at expires <<< "$out"
+    fi
+  elif [ "$list" = release2.txt ] && printf '%s' "$RELEASE_KEYS" | grep -q "BEGIN ML-DSA-65 PUBLIC KEY"; then
+    echo "note: the ML-DSA signature is checked from the next update on (no installed program yet)" >&2
+  fi
   [[ "$v" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
-  printf '%s\n' "$v"
+  printf '%s\n' "$v${signed_at:+ $signed_at $expires}"
 }
 
-fetch_release_list() { # $1 = base URL, $2 = folder
-  curl -q --proto '=https' --tlsv1.2 --max-time 120 -fsSL "$1/release.txt" -o "$2/release.txt" &&
-  curl -q --proto '=https' --tlsv1.2 --max-time 120 -fsSL "$1/release.txt.sig" -o "$2/release.txt.sig"
+fetch_release_list() { # $1 = base URL, $2 = folder, $3 = "v1" to fall back to release.txt
+  local c=(curl -q --proto '=https' --tlsv1.2 --max-time 120 -fsSL)
+  rm -f "$2/release2.txt" "$2/release2.txt.sig" "$2/release2.txt.mldsa" "$2/release.txt" "$2/release.txt.sig"
+  if "${c[@]}" "$1/release2.txt" -o "$2/release2.txt" 2>/dev/null; then
+    "${c[@]}" "$1/release2.txt.sig" -o "$2/release2.txt.sig" || return 1
+    "${c[@]}" "$1/release2.txt.mldsa" -o "$2/release2.txt.mldsa" 2>/dev/null || rm -f "$2/release2.txt.mldsa"
+  else
+    rm -f "$2/release2.txt"
+    [ "${3:-}" = v1 ] || return 1
+    "${c[@]}" "$1/release.txt" -o "$2/release.txt" &&
+    "${c[@]}" "$1/release.txt.sig" -o "$2/release.txt.sig"
+  fi
+}
+
+# The newest "signed" time of any release list accepted here: a list signed
+# earlier is refused, so an old list cannot be served again (a rollback).
+seen_signed() { sed -n '1s/^\([0-9][0-9]*\)$/\1/p' "$PREFIX/release-seen" 2>/dev/null || true; }
+remember_signed() {
+  [ -n "${1:-}" ] && [ -d "$PREFIX" ] || return 0
+  local was; was=$(seen_signed)
+  if [ -z "$was" ] || (( $1 > was )); then
+    printf '%s\n' "$1" > "$PREFIX/release-seen.new" && chmod 0644 "$PREFIX/release-seen.new" &&
+      mv -f "$PREFIX/release-seen.new" "$PREFIX/release-seen"
+  fi
 }
 
 # The daily update job's last result, for <program>-admin status (root-only folder).
@@ -244,11 +298,17 @@ if [ "$AUTO_RUN" = yes ]; then
   [ -z "$BINARY" ] || die "--auto-update-run downloads the release itself."
   [[ "$HAVE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "the secure install is not here: $BIN"
   if ! fetch_release_list "https://github.com/$REPO/releases/latest/download" "$REL"; then
-    note "update check failed: could not download the latest signed release list from GitHub (still on $HAVE)"; exit 1
+    note "update check failed: could not download the latest signed release list (release2.txt) from GitHub (still on $HAVE)"; exit 1
   fi
-  if ! LATEST=$(verify_release "$REL"); then
-    note "update refused: the latest release list is not signed by a pinned release key (still on $HAVE)"; exit 1
+  if ! checked=$(verify_release "$REL" 2>"$WORK/why"); then
+    note "update refused: $(head -1 "$WORK/why" | tr -d '\r' | cut -c1-200) (still on $HAVE)"; exit 1
   fi
+  read -r LATEST SIGNED _ <<< "$checked"
+  was=$(seen_signed)
+  if [ -n "$was" ] && (( SIGNED < was )); then
+    note "update refused: the latest release list is older than one this machine saw before (a rollback; still on $HAVE)"; exit 1
+  fi
+  remember_signed "$SIGNED"
   if ! newer "$LATEST" "$HAVE"; then
     note "up to date ($HAVE; latest signed release $LATEST)"; exit 0
   fi
@@ -296,11 +356,14 @@ else
   BASE="https://github.com/$REPO/releases/download/$VERSION"
   URL="$BASE/$NAME.tar.gz"
   if [ "$AUTO_RUN" != yes ]; then
-    fetch_release_list "$BASE" "$REL" || die "could not download the signed release list for $VERSION."
+    fetch_release_list "$BASE" "$REL" v1 || die "could not download the signed release list for $VERSION."
   fi
-  got=$(verify_release "$REL") || die "the release list for $VERSION is not signed by a pinned release key. Nothing was installed."
+  checked=$(verify_release "$REL" 2>"$WORK/why") || die "the release list for $VERSION was refused: $(head -1 "$WORK/why"). Nothing was installed."
+  read -r got SIGNED _ <<< "$checked"
   [ "$got" = "$VERSION" ] || die "the signed release list is for $got, not $VERSION. Nothing was installed."
-  want=$(awk -v n="$NAME.tar.gz" '$2 == n && $1 ~ /^[0-9a-f]+$/ && length($1) == 64 { print $1 }' "$REL/release.txt")
+  remember_signed "${SIGNED:-}"
+  LIST="$REL/release2.txt"; [ -f "$LIST" ] || LIST="$REL/release.txt"
+  want=$(awk -v n="$NAME.tar.gz" '$2 == n && $1 ~ /^[0-9a-f]+$/ && length($1) == 64 { print $1 }' "$LIST")
   [ -n "$want" ] || die "the signed release list has no $NAME.tar.gz. Nothing was installed."
   say "Downloading the official $VERSION release for this machine (signed release list checked)"
   curl -q --proto '=https' --tlsv1.2 --max-time 300 -fsSL "$URL" -o "$WORK/r.tar.gz" || die "download failed: $URL"
@@ -347,6 +410,7 @@ for d in "$(dirname "$PREFIX")" "$(dirname "$DATA")" ${LOGS:+"$(dirname "$LOGS")
 done
 install -d -m 0755 -o root "$PREFIX" "$PREFIX/bin"
 root_only "$PREFIX/bin" || die "$PREFIX/bin is not owned by root only. Refusing to continue."
+remember_signed "${SIGNED:-}"
 install -d -m 0700 -o "$SVC_USER" "$DATA"
 # macOS: launchd opens the log as the gate user, so the folder is the gate's own.
 # Linux: no log file at all; output goes to the system journal.

@@ -17,6 +17,23 @@
 //! <64 lowercase hex>  phygital-key-v0.4.0-aarch64-apple-darwin.tar.gz
 //! ...
 //! ```
+//!
+//! Newer releases also carry `release2.txt` (base 0.5.0 on), the same list with the
+//! time it was signed and the time it stops being trusted (so a server that keeps
+//! handing out an old list is found out), signed twice: `release2.txt.sig`
+//! (ECDSA P-256, as above) and `release2.txt.mldsa` (ML-DSA-65, FIPS 204, with the
+//! context string `phygital-key release list v2`), a signature that stays safe if
+//! large quantum computers arrive. When the product pins an ML-DSA key, both
+//! signatures are required.
+//!
+//! ```text
+//! phygital-key release manifest v2
+//! version v0.5.0
+//! signed 1792300000
+//! expires 1807852000
+//! <64 lowercase hex>  phygital-key-v0.5.0-aarch64-apple-darwin.tar.gz
+//! ...
+//! ```
 
 use std::path::{Path, PathBuf};
 
@@ -25,7 +42,19 @@ use p256::ecdsa::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 const HEADER: &str = "phygital-key release manifest v1";
+const HEADER_V2: &str = "phygital-key release manifest v2";
 const MAX_MANIFEST: usize = 8192;
+/// A v2 list is trusted for at most this long after it was signed.
+pub const MAX_LIST_LIFE: i64 = 400 * 86_400;
+/// How far ahead of this machine's clock a list may say it was signed.
+const SIGNED_SKEW: i64 = 86_400;
+/// ML-DSA context string for release lists (FIPS 204 domain separation).
+pub const PQ_CONTEXT: &[u8] = b"phygital-key release list v2";
+const PQ_BEGIN: &str = "-----BEGIN ML-DSA-65 PUBLIC KEY-----";
+const PQ_END: &str = "-----END ML-DSA-65 PUBLIC KEY-----";
+
+/// A pinned ML-DSA-65 release key.
+pub type PqKey = ml_dsa::VerifyingKey<ml_dsa::MlDsa65>;
 
 /// A version `vX.Y.Z`, compared by number.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -63,6 +92,10 @@ impl std::fmt::Display for Version {
 pub struct Manifest {
     /// The release version the signature covers.
     pub version: Version,
+    /// v2 only: when it was signed and when it stops being trusted (Unix seconds).
+    pub signed: Option<i64>,
+    /// See `signed`.
+    pub expires: Option<i64>,
     /// File name and lowercase hex SHA-256, in the signed order.
     pub files: Vec<(String, String)>,
 }
@@ -80,6 +113,110 @@ impl Manifest {
 /// The running product's pinned release keys.
 pub fn pinned_keys() -> Vec<VerifyingKey> {
     keys_from_pem(crate::product().release_keys)
+}
+
+/// The running product's pinned ML-DSA-65 release keys (none until one is made).
+pub fn pinned_pq_keys() -> Vec<PqKey> {
+    pq_keys_from_pem(crate::product().release_keys)
+}
+
+/// Every `ML-DSA-65 PUBLIC KEY` block in `text` (standard base64 of the 1952-byte
+/// encoded key). A block that does not decode to a key is skipped.
+pub fn pq_keys_from_pem(text: &str) -> Vec<PqKey> {
+    use base64::Engine as _;
+    use ml_dsa::KeyInit as _;
+    let mut keys = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find(PQ_BEGIN) {
+        let after = rest.get(start + PQ_BEGIN.len()..).unwrap_or("");
+        let Some(end) = after.find(PQ_END) else {
+            break;
+        };
+        let body: String = after
+            .get(..end)
+            .unwrap_or("")
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != '\'')
+            .collect();
+        if let Ok(raw) = base64::engine::general_purpose::STANDARD.decode(body)
+            && let Ok(k) = PqKey::new_from_slice(&raw)
+        {
+            keys.push(k);
+        }
+        rest = after.get(end..).unwrap_or("");
+    }
+    keys
+}
+
+/// The PEM-style block for an ML-DSA-65 public key.
+pub fn pq_key_block(key: &PqKey) -> String {
+    use base64::Engine as _;
+    use ml_dsa::KeyExport as _;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(key.to_bytes());
+    let mut out = format!("{PQ_BEGIN}\n");
+    for chunk in b64.as_bytes().chunks(64) {
+        out.push_str(std::str::from_utf8(chunk).unwrap_or(""));
+        out.push('\n');
+    }
+    out.push_str(PQ_END);
+    out.push('\n');
+    out
+}
+
+/// True when `sig` is an ML-DSA-65 signature over `text` by one of `keys`.
+pub fn pq_signed(text: &[u8], sig: &[u8], keys: &[PqKey]) -> bool {
+    let Ok(sig) = ml_dsa::Signature::<ml_dsa::MlDsa65>::try_from(sig) else {
+        return false;
+    };
+    keys.iter()
+        .any(|k| k.verify_with_context(text, PQ_CONTEXT, &sig))
+}
+
+/// Check a v2 release list: the P-256 signature, the ML-DSA signature when
+/// `pq_keys` is not empty, the strict format, and that it is in date at `now`.
+pub fn verify_list_v2(
+    text: &[u8],
+    sig_der: &[u8],
+    pq_sig: Option<&[u8]>,
+    keys: &[VerifyingKey],
+    pq_keys: &[PqKey],
+    now: i64,
+) -> Result<Manifest, String> {
+    if text.len() > MAX_MANIFEST {
+        return Err("release list too large".into());
+    }
+    p256_signed(text, sig_der, keys)?;
+    if !pq_keys.is_empty() && !pq_sig.is_some_and(|s| pq_signed(text, s, pq_keys)) {
+        return Err("release list is not signed by the pinned ML-DSA release key".into());
+    }
+    let m = parse_manifest(text)?;
+    let (Some(signed), Some(expires)) = (m.signed, m.expires) else {
+        return Err("release list refused: not the v2 format".into());
+    };
+    if signed > now.saturating_add(SIGNED_SKEW) {
+        return Err(
+            "release list refused: signed in the future (check this machine's clock)".into(),
+        );
+    }
+    if now >= expires {
+        return Err(format!(
+            "the latest signed release list expired on {}: no newer one could be found. Check the Releases page",
+            crate::util::date(expires)
+        ));
+    }
+    Ok(m)
+}
+
+fn p256_signed(text: &[u8], sig_der: &[u8], keys: &[VerifyingKey]) -> Result<(), String> {
+    let sig = Signature::from_der(sig_der).map_err(|_| "release signature is not valid")?;
+    // Accept the signature as made (high or low S): the signer is our own openssl.
+    let signed = keys
+        .iter()
+        .any(|k| k.verify(text, &sig).is_ok() || k.verify(text, &sig.normalize_s()).is_ok());
+    if keys.is_empty() || !signed {
+        return Err("release list is not signed by a pinned release key".into());
+    }
+    Ok(())
 }
 
 /// Every P-256 `PUBLIC KEY` PEM block in `text`.
@@ -121,15 +258,12 @@ pub fn verify_manifest(
     if text.len() > MAX_MANIFEST {
         return Err("release list too large".into());
     }
-    let sig = Signature::from_der(sig_der).map_err(|_| "release signature is not valid")?;
-    // Accept the signature as made (high or low S): the signer is our own openssl.
-    let signed = keys
-        .iter()
-        .any(|k| k.verify(text, &sig).is_ok() || k.verify(text, &sig.normalize_s()).is_ok());
-    if keys.is_empty() || !signed {
-        return Err("release list is not signed by a pinned release key".into());
+    p256_signed(text, sig_der, keys)?;
+    let m = parse_manifest(text)?;
+    if m.signed.is_some() {
+        return Err("release list refused: a v2 list is checked with verify_list_v2".into());
     }
-    parse_manifest(text)
+    Ok(m)
 }
 
 fn parse_manifest(text: &[u8]) -> Result<Manifest, String> {
@@ -141,9 +275,11 @@ fn parse_manifest(text: &[u8]) -> Result<Manifest, String> {
         return bad("must end with a newline");
     };
     let mut lines = body.split('\n');
-    if lines.next() != Some(HEADER) {
-        return bad("unknown format");
-    }
+    let v2 = match lines.next() {
+        Some(HEADER) => false,
+        Some(HEADER_V2) => true,
+        _ => return bad("unknown format"),
+    };
     let Some(version) = lines
         .next()
         .and_then(|l| l.strip_prefix("version "))
@@ -152,6 +288,28 @@ fn parse_manifest(text: &[u8]) -> Result<Manifest, String> {
     else {
         return bad("bad version line");
     };
+    let (mut signed, mut expires) = (None, None);
+    if v2 {
+        let mut time = |label: &str| {
+            lines
+                .next()
+                .and_then(|l| l.strip_prefix(label))
+                .filter(|n| {
+                    !n.is_empty()
+                        && n.len() <= 12
+                        && n.bytes().all(|b| b.is_ascii_digit())
+                        && !n.starts_with('0')
+                })
+                .and_then(|n| n.parse::<i64>().ok())
+        };
+        let (Some(s), Some(e)) = (time("signed "), time("expires ")) else {
+            return bad("bad signed or expires line");
+        };
+        if e <= s || e - s > MAX_LIST_LIFE {
+            return bad("expires must be after signed, and at most 400 days later");
+        }
+        (signed, expires) = (Some(s), Some(e));
+    }
     let prefix = format!("{}-{version}-", crate::product().bin);
     let mut files: Vec<(String, String)> = Vec::new();
     for line in lines {
@@ -174,7 +332,12 @@ fn parse_manifest(text: &[u8]) -> Result<Manifest, String> {
     if files.is_empty() {
         return bad("no files");
     }
-    Ok(Manifest { version, files })
+    Ok(Manifest {
+        version,
+        signed,
+        expires,
+        files,
+    })
 }
 
 /// This machine's release target, e.g. `aarch64-apple-darwin`.
@@ -244,18 +407,35 @@ fn private_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Fetch and check the latest release list.
+/// Fetch and check the latest release list (v2: in date, and signed with ML-DSA
+/// too when the product pins an ML-DSA key).
 fn latest(dir: &Path) -> Result<Manifest, String> {
     let base = format!(
         "https://github.com/{}/releases/latest/download",
         crate::product().repo
     );
-    let (m, s) = (dir.join("release.txt"), dir.join("release.txt.sig"));
-    download(&format!("{base}/release.txt"), &m)?;
-    download(&format!("{base}/release.txt.sig"), &s)?;
+    let (m, s, q) = (
+        dir.join("release2.txt"),
+        dir.join("release2.txt.sig"),
+        dir.join("release2.txt.mldsa"),
+    );
+    download(&format!("{base}/release2.txt"), &m)?;
+    download(&format!("{base}/release2.txt.sig"), &s)?;
+    let pq_keys = pinned_pq_keys();
+    if !pq_keys.is_empty() {
+        download(&format!("{base}/release2.txt.mldsa"), &q)?;
+    }
     let text = std::fs::read(&m).map_err(|e| e.to_string())?;
     let sig = std::fs::read(&s).map_err(|e| e.to_string())?;
-    verify_manifest(&text, &sig, &pinned_keys())
+    let pq = std::fs::read(&q).ok();
+    verify_list_v2(
+        &text,
+        &sig,
+        pq.as_deref(),
+        &pinned_keys(),
+        &pq_keys,
+        crate::util::now(),
+    )
 }
 
 /// `phygital-key update [--check]`: replace this program with the latest signed
@@ -363,13 +543,78 @@ pub fn update(check_only: bool) -> Result<(), String> {
     result
 }
 
-/// `phygital-key release-check`: used by the secure installer when openssl is
-/// missing. Prints the signed version, or fails.
-pub fn release_check(file: &Path, sig: &Path) -> Result<(), String> {
+/// `<program> release-check`: used by the secure installer. A v1 list prints its
+/// version. A v2 list is checked in full (P-256, ML-DSA when a key is pinned, in
+/// date now) and prints `<version> <signed> <expires>`. Fails on any doubt.
+pub fn release_check(file: &Path, sig: &Path, pq_sig: Option<&Path>) -> Result<(), String> {
     let text = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let sig = std::fs::read(sig).map_err(|e| format!("{}: {e}", sig.display()))?;
-    let m = verify_manifest(&text, &sig, &pinned_keys())?;
-    println!("{}", m.version);
+    if text.starts_with(HEADER_V2.as_bytes()) {
+        let pq = match pq_sig {
+            Some(p) => Some(std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))?),
+            None => None,
+        };
+        let m = verify_list_v2(
+            &text,
+            &sig,
+            pq.as_deref(),
+            &pinned_keys(),
+            &pinned_pq_keys(),
+            crate::util::now(),
+        )?;
+        println!(
+            "{} {} {}",
+            m.version,
+            m.signed.unwrap_or(0),
+            m.expires.unwrap_or(0)
+        );
+    } else {
+        let m = verify_manifest(&text, &sig, &pinned_keys())?;
+        println!("{}", m.version);
+    }
+    Ok(())
+}
+
+/// `<program> release-sign-pq`: in the release run only. Signs `file` with the
+/// ML-DSA-65 key whose 32-byte seed is in `RELEASE_MLDSA_KEY` (standard base64),
+/// writes the signature to `out`, and checks it against the pinned keys.
+pub fn release_sign_pq(file: &Path, out: &Path) -> Result<(), String> {
+    use base64::Engine as _;
+    let seed_text = std::env::var("RELEASE_MLDSA_KEY")
+        .map_err(|_| "no RELEASE_MLDSA_KEY in the environment")?;
+    let seed = base64::engine::general_purpose::STANDARD
+        .decode(seed_text.trim())
+        .map_err(|_| "RELEASE_MLDSA_KEY is not base64")?;
+    let seed: [u8; 32] = seed
+        .try_into()
+        .map_err(|_| "RELEASE_MLDSA_KEY is not a 32-byte seed")?;
+    let key = ml_dsa::SigningKey::<ml_dsa::MlDsa65>::from_seed(&seed.into());
+    let text = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let sig = key
+        .expanded_key()
+        .sign_deterministic(&text, PQ_CONTEXT)
+        .map_err(|_| "ML-DSA signing failed")?;
+    let encoded = ml_dsa::signature::SignatureEncoding::to_bytes(&sig);
+    let bytes: &[u8] = encoded.as_slice();
+    if !pq_signed(&text, bytes, &pinned_pq_keys()) {
+        return Err("the ML-DSA signature does not match a key pinned in this program".into());
+    }
+    std::fs::write(out, bytes).map_err(|e| format!("{}: {e}", out.display()))
+}
+
+/// `<program> release-keygen-pq`: once, by the owner (scripts/release-key.sh).
+/// Prints a new ML-DSA-65 seed (standard base64) on standard output, for the
+/// script to hand straight to GitHub, and writes the public key block to `public_out`.
+pub fn release_keygen_pq(public_out: &Path) -> Result<(), String> {
+    use base64::Engine as _;
+    use ml_dsa::signature::Keypair as _;
+    let mut seed = [0u8; 32];
+    getrandom::fill(&mut seed).map_err(|e| e.to_string())?;
+    let key = ml_dsa::SigningKey::<ml_dsa::MlDsa65>::from_seed(&seed.into());
+    std::fs::write(public_out, pq_key_block(&key.verifying_key()))
+        .map_err(|e| format!("{}: {e}", public_out.display()))?;
+    println!("{}", base64::engine::general_purpose::STANDARD.encode(seed));
+    seed.fill(0);
     Ok(())
 }
 
@@ -444,6 +689,184 @@ mod tests {
                 "{bad:?}"
             );
         }
+    }
+
+    fn pq_key(seed: u8) -> ml_dsa::SigningKey<ml_dsa::MlDsa65> {
+        ml_dsa::SigningKey::<ml_dsa::MlDsa65>::from_seed(&[seed; 32].into())
+    }
+
+    fn pq_sign(k: &ml_dsa::SigningKey<ml_dsa::MlDsa65>, text: &str) -> Vec<u8> {
+        let sig = k
+            .expanded_key()
+            .sign_deterministic(text.as_bytes(), PQ_CONTEXT)
+            .unwrap_or_else(|_| unreachable!());
+        ml_dsa::signature::SignatureEncoding::to_bytes(&sig)
+            .as_slice()
+            .to_vec()
+    }
+
+    fn pq_pub(k: &ml_dsa::SigningKey<ml_dsa::MlDsa65>) -> PqKey {
+        ml_dsa::signature::Keypair::verifying_key(k)
+    }
+
+    const NOW: i64 = 1_792_300_000;
+
+    fn v2(signed: i64, expires: i64) -> String {
+        format!(
+            "phygital-key release manifest v2\nversion v0.5.0\nsigned {signed}\nexpires {expires}\n\
+             0000000000000000000000000000000000000000000000000000000000000000  phygital-key-v0.5.0-aarch64-apple-darwin.tar.gz\n"
+        )
+    }
+
+    #[test]
+    fn v2_list_in_date_and_signed_twice_is_accepted() {
+        let (k, q) = (key(7), pq_key(1));
+        let text = v2(NOW - 10, NOW + 180 * 86_400);
+        let m = verify_list_v2(
+            text.as_bytes(),
+            &sign(&k, &text),
+            Some(&pq_sign(&q, &text)),
+            &[*k.verifying_key()],
+            &[pq_pub(&q)],
+            NOW,
+        )
+        .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(m.version, Version(0, 5, 0));
+        assert_eq!(m.signed, Some(NOW - 10));
+        assert_eq!(m.expires, Some(NOW + 180 * 86_400));
+        // Without a pinned ML-DSA key, the P-256 signature alone is enough.
+        assert!(
+            verify_list_v2(
+                text.as_bytes(),
+                &sign(&k, &text),
+                None,
+                &[*k.verifying_key()],
+                &[],
+                NOW
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn v2_list_refused_when_expired_from_the_future_or_missing_a_signature() {
+        let (k, q) = (key(7), pq_key(1));
+        let vk = [*k.verifying_key()];
+        let vq = [pq_pub(&q)];
+        let check = |text: &str, pq: Option<Vec<u8>>, pq_keys: &[PqKey], now: i64| {
+            verify_list_v2(
+                text.as_bytes(),
+                &sign(&k, text),
+                pq.as_deref(),
+                &vk,
+                pq_keys,
+                now,
+            )
+        };
+        let good = v2(NOW - 10, NOW + 100);
+        let pq = Some(pq_sign(&q, &good));
+        assert!(check(&good, pq.clone(), &vq, NOW).is_ok());
+        let expired = check(&good, pq.clone(), &vq, NOW + 100);
+        assert!(expired.is_err_and(|e| e.contains("expired")), "at expires");
+        let future = v2(NOW + 86_401, NOW + 200_000);
+        assert!(check(&future, Some(pq_sign(&q, &future)), &vq, NOW).is_err());
+        assert!(
+            check(&good, None, &vq, NOW).is_err(),
+            "ML-DSA pinned but missing"
+        );
+        assert!(
+            check(&good, Some(pq_sign(&pq_key(2), &good)), &vq, NOW).is_err(),
+            "ML-DSA by another key"
+        );
+        let other = v2(NOW - 11, NOW + 100);
+        assert!(
+            check(&good, Some(pq_sign(&q, &other)), &vq, NOW).is_err(),
+            "ML-DSA over another list"
+        );
+        // A v1 list is not a v2 list, and the v1 check does not take a v2 list.
+        assert!(check(GOOD, None, &[], NOW).is_err());
+        assert!(verify_manifest(good.as_bytes(), &sign(&k, &good), &vk).is_err());
+    }
+
+    #[test]
+    fn v2_strict_format() {
+        let k = key(3);
+        let vk = [*k.verifying_key()];
+        let good = v2(NOW - 10, NOW + 100);
+        for bad in [
+            good.replace("signed ", "signed  "),
+            good.replace(&format!("signed {}", NOW - 10), "signed 01792299990"),
+            good.replace(&format!("signed {}", NOW - 10), "signed -5"),
+            good.replace(
+                &format!("expires {}", NOW + 100),
+                &format!("expires {}", NOW - 10),
+            ),
+            good.replace(
+                &format!("expires {}", NOW + 100),
+                &format!("expires {}", NOW - 10 + MAX_LIST_LIFE + 1),
+            ),
+            good.replace("expires", "expiry"),
+            good.replace(&format!("signed {}\n", NOW - 10), ""),
+        ] {
+            assert!(
+                verify_list_v2(bad.as_bytes(), &sign(&k, &bad), None, &vk, &[], NOW).is_err(),
+                "{bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn pq_keys_are_read_from_their_blocks() {
+        let q = pq_key(4);
+        let block = pq_key_block(&pq_pub(&q));
+        let text =
+            format!("X='-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n{block}'");
+        assert_eq!(pq_keys_from_pem(&text), vec![pq_pub(&q)]);
+        assert!(keys_from_pem(&block).is_empty(), "not read as a P-256 key");
+        assert!(pq_keys_from_pem("nothing").is_empty());
+        assert!(pq_keys_from_pem(&block.replace('A', "B")).len() <= 1);
+    }
+
+    /// Google's Wycheproof ML-DSA-65 verify cases, through the same ML-DSA
+    /// library and calls as `pq_signed` (with each case's own context).
+    #[test]
+    fn wycheproof_mldsa_65() {
+        use ml_dsa::KeyInit as _;
+        let doc: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../test-vectors/wycheproof/mldsa_65_verify_test.json"
+        ))
+        .unwrap_or_default();
+        let hex = |s: &str| -> Vec<u8> {
+            (0..s.len() / 2)
+                .filter_map(|i| s.get(2 * i..2 * i + 2))
+                .filter_map(|b| u8::from_str_radix(b, 16).ok())
+                .collect()
+        };
+        let (mut count, mut failures) = (0, Vec::new());
+        for g in doc["testGroups"].as_array().into_iter().flatten() {
+            let key = PqKey::new_from_slice(&hex(g["publicKey"].as_str().unwrap_or(""))).ok();
+            for t in g["tests"].as_array().into_iter().flatten() {
+                count += 1;
+                let ok = key.as_ref().is_some_and(|k| {
+                    ml_dsa::Signature::<ml_dsa::MlDsa65>::try_from(
+                        hex(t["sig"].as_str().unwrap_or("")).as_slice(),
+                    )
+                    .is_ok_and(|sig| {
+                        k.verify_with_context(
+                            &hex(t["msg"].as_str().unwrap_or("")),
+                            &hex(t["ctx"].as_str().unwrap_or("")),
+                            &sig,
+                        )
+                    })
+                });
+                let want = t["result"].as_str().unwrap_or("");
+                if (want == "valid") != ok && want != "acceptable" {
+                    failures.push(format!("tcId {} {want}: {}", t["tcId"], t["comment"]));
+                }
+            }
+        }
+        assert_eq!(count, doc["numberOfTests"].as_i64().unwrap_or(-1));
+        assert!(failures.is_empty(), "{failures:#?}");
     }
 
     #[test]

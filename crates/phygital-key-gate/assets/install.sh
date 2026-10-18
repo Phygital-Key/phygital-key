@@ -58,8 +58,15 @@ else
 fi
 
 # The release list (file names and SHA-256) must be signed by a pinned release key.
-curl -fsSL "$base/release.txt" -o "$tmp/release.txt" || fail "could not download the signed release list"
-curl -fsSL "$base/release.txt.sig" -o "$tmp/release.txt.sig" || fail "could not download the release signature"
+# release2.txt (newer releases) also says when it was signed and until when it is
+# trusted; an older release named with PHYGITAL_KEY_VERSION may only have release.txt.
+list=release2.txt
+if ! curl -q -fsSL "$base/release2.txt" -o "$tmp/list" 2>/dev/null; then
+  [ -n "$version" ] || fail "could not download the signed release list"
+  list=release.txt
+  curl -q -fsSL "$base/release.txt" -o "$tmp/list" || fail "could not download the signed release list"
+fi
+curl -q -fsSL "$base/$list.sig" -o "$tmp/list.sig" || fail "could not download the release signature"
 need openssl
 printf '%s\n' "$RELEASE_KEYS" | awk -v dir="$tmp" '
   /-----BEGIN PUBLIC KEY-----/ { n++; f = dir "/key-" n ".pem" }
@@ -68,21 +75,34 @@ printf '%s\n' "$RELEASE_KEYS" | awk -v dir="$tmp" '
 signed=no
 for k in "$tmp"/key-*.pem; do
   [ -f "$k" ] || continue
-  openssl dgst -sha256 -verify "$k" -signature "$tmp/release.txt.sig" "$tmp/release.txt" >/dev/null 2>&1 && signed=yes
+  openssl dgst -sha256 -verify "$k" -signature "$tmp/list.sig" "$tmp/list" >/dev/null 2>&1 && signed=yes
 done
 [ "$signed" = yes ] || fail "the release list is not signed by a pinned release key. Nothing was installed."
-[ "$(sed -n 1p "$tmp/release.txt")" = "phygital-key release manifest v1" ] || fail "unknown release list format"
-got="$(sed -n 2p "$tmp/release.txt" | sed -n 's/^version \(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p')"
+first=5
+if [ "$list" = release2.txt ]; then
+  [ "$(sed -n 1p "$tmp/list")" = "phygital-key release manifest v2" ] || fail "unknown release list format"
+  signed_at="$(sed -n 3p "$tmp/list" | sed -n 's/^signed \([1-9][0-9]*\)$/\1/p')"
+  expires="$(sed -n 4p "$tmp/list" | sed -n 's/^expires \([1-9][0-9]*\)$/\1/p')"
+  [ -n "$signed_at" ] && [ -n "$expires" ] || fail "bad release list"
+  now="$(date +%s)"
+  [ "$now" -lt "$expires" ] || fail "the latest signed release list has expired. Check the Releases page: https://github.com/$REPO/releases"
+  [ "$signed_at" -le $((now + 86400)) ] || fail "the release list says it was signed in the future (check this computer's clock)"
+else
+  [ "$(sed -n 1p "$tmp/list")" = "phygital-key release manifest v1" ] || fail "unknown release list format"
+  first=3
+fi
+got="$(sed -n 2p "$tmp/list" | sed -n 's/^version \(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p')"
 [ -n "$got" ] || fail "bad release list"
 [ -z "$version" ] || [ "$got" = "$version" ] || fail "the signed release list is for $got, not $version"
 version="$got"
+sed -n "$first,\$p" "$tmp/list" > "$tmp/files"
 
 name="$P_BIN-$version-$target"
-expected="$(awk -v n="$name.tar.gz" '$2 == n && length($1) == 64 { print $1 }' "$tmp/release.txt")"
+expected="$(awk -v n="$name.tar.gz" '$2 == n && length($1) == 64 { print $1 }' "$tmp/files")"
 [ -n "$expected" ] || fail "the signed release list has no $name.tar.gz"
 
 say "Downloading $name (signed release list checked)"
-curl -fsSL "https://github.com/$REPO/releases/download/$version/$name.tar.gz" -o "$tmp/$name.tar.gz" || fail "download failed"
+curl -q -fsSL "https://github.com/$REPO/releases/download/$version/$name.tar.gz" -o "$tmp/$name.tar.gz" || fail "download failed"
 if command -v sha256sum >/dev/null 2>&1; then
   actual="$(sha256sum "$tmp/$name.tar.gz" | cut -d ' ' -f 1)"
 else

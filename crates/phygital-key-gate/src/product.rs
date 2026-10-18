@@ -30,7 +30,8 @@ pub struct Product {
     pub port: u16,
     /// One line for `--help`.
     pub about: &'static str,
-    /// The product's pinned release keys: P-256 `PUBLIC KEY` PEM blocks.
+    /// The product's pinned release keys: P-256 `PUBLIC KEY` PEM blocks, and
+    /// `ML-DSA-65 PUBLIC KEY` blocks once a post-quantum key is made.
     pub release_keys: &'static str,
 }
 

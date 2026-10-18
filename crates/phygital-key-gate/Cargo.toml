@@ -14,6 +14,7 @@ categories = ["authentication"]
 path = "src/lib.rs"
 
 [dependencies]
+base64.workspace = true
 phygital-key-verify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -28,6 +29,7 @@ hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio", "server", "service"] }
 clap = { version = "4", features = ["derive", "env"] }
 url = "2"
+ml-dsa = "0.1.1"
 
 [dev-dependencies]
 base64.workspace = true

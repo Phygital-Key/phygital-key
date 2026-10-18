@@ -96,6 +96,26 @@ enum Command {
         /// release.txt.sig
         #[arg(long)]
         sig: PathBuf,
+        /// release2.txt.mldsa (v2 lists, needed when an ML-DSA key is pinned)
+        #[arg(long)]
+        pq_sig: Option<PathBuf>,
+    },
+    /// Sign a release list with ML-DSA (the release run, key in RELEASE_MLDSA_KEY).
+    #[command(hide = true)]
+    ReleaseSignPq {
+        /// release2.txt
+        #[arg(long)]
+        file: PathBuf,
+        /// where to write the signature
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Make the ML-DSA release key (scripts/release-key.sh, once, by the owner).
+    #[command(hide = true)]
+    ReleaseKeygenPq {
+        /// where to write the public key block
+        #[arg(long)]
+        public_out: PathBuf,
     },
     /// Print the trusted public key cards (give this to services that verify).
     Keys {
@@ -355,7 +375,11 @@ async fn run_cli(cli: Cli, adapter: Arc<dyn Adapter>) -> Result<(), String> {
             Ok(())
         }
         Command::Update { check } => update::update(check),
-        Command::ReleaseCheck { file, sig } => update::release_check(&file, &sig),
+        Command::ReleaseCheck { file, sig, pq_sig } => {
+            update::release_check(&file, &sig, pq_sig.as_deref())
+        }
+        Command::ReleaseSignPq { file, out } => update::release_sign_pq(&file, &out),
+        Command::ReleaseKeygenPq { public_out } => update::release_keygen_pq(&public_out),
         Command::Token => {
             println!("{}", adapter.connect_hint(&s));
             Ok(())
