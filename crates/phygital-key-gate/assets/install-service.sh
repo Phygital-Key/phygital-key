@@ -465,7 +465,8 @@ listeners_ok() {
   [ -n "\$pids" ] || return 1
   local want u gate=0; want=\$(id -u "$SVC_USER")
   for p in \$pids; do
-    u=\$(ps -o uid= -p "\$p" | tr -d ' ')
+    u=\$(ps -o uid= -p "\$p" 2>/dev/null | tr -d ' ')
+    [ -n "\$u" ] || continue
     # Linux: systemd and its root helper hold the port for the gate (socket activation).
     if [ "$OS" = linux ] && [ "\$u" = 0 ]; then continue; fi
     if [ "$OS" = linux ] && ! grep -qE "^[0-9]+:[^:]*:/system\\.slice/$P_BIN\\.(service|socket)\\$" "/proc/\$p/cgroup" 2>/dev/null; then return 1; fi
@@ -505,7 +506,9 @@ foreign_listener() {
   for p in $(listener_pids "$PORT" || true); do
     # Linux: systemd holds the port for the gate (socket activation).
     ours "$p" && continue
-    u=$(ps -o uid= -p "$p" | tr -d ' ')
+    u=$(ps -o uid= -p "$p" 2>/dev/null | tr -d ' ')
+    # Gone between the two looks (a gate that just exited): it holds nothing now.
+    [ -n "$u" ] || continue
     [ "$u" = "$SVC_UID" ] || { echo "uid $u, pid $p"; return 0; }
   done
   return 1
@@ -514,7 +517,8 @@ foreign_pids() {
   local p u
   for p in $(listener_pids "$PORT" || true); do
     ours "$p" && continue
-    u=$(ps -o uid= -p "$p" | tr -d ' ')
+    u=$(ps -o uid= -p "$p" 2>/dev/null | tr -d ' ')
+    [ -n "$u" ] || continue
     [ "$u" = "$SVC_UID" ] || echo "$p"
   done
 }

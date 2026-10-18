@@ -86,5 +86,14 @@ if ours 32; then fail "the gate user outside the gate's units counted as ours"; 
 OS=mac
 if ours 20; then fail "ours() said yes on macOS"; else pass "on macOS nothing is skipped"; fi
 
+# A listener that is gone by the time it is looked up holds nothing.
+OS=linux; SVC_UID=995
+listener_pids() { echo 4243; }
+ps() { :; }
+sed -n '/^foreign_listener() {$/,/^}$/p' "$src" > "$T/fl.sh"
+# shellcheck source=/dev/null
+. "$T/fl.sh"
+if foreign_listener >/dev/null; then fail "a program that already exited counted as another program"; else pass "a program that already exited is not another program on the port"; fi
+
 echo
 [ "$fails" = 0 ] && echo "update job: all checks passed" || { echo "update job: $fails failed"; exit 1; }

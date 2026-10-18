@@ -8,7 +8,7 @@ Changes to the base. Each product keeps its own changelog for its releases. Entr
 - **Linux: the port is never free during a restart.** systemd now opens the gate's two loopback addresses (a `.socket` unit) and keeps them open while the gate restarts for an update; the gate takes them over. A program trying to take the port through two restarts never gets it (new secure-install check). macOS keeps the earlier defence: a program that takes the port during an update is stopped, 5 times at most, then the gate stops.
 - **Security review 9** (agent-bound approvals and socket activation): 1 high, 2 low, 4 info, all fixed. The high one: the installer counted any process whose control-group path ended in `<program>.service` as the gate's own, and a user can name a unit of their own that way. See [security reviews](docs/security-reviews.md).
 - **Fix: `keys --check` with a fingerprint that starts with `-`** (about one key in 32) was read as an option and failed.
-- **Tests for what had none:** the daily job's wait for standing approvals and its port takeover (`tests/update-job.sh`, 22 checks with stand-ins), staging a fresh file (review 7 L2), and in the products the waiting limit of 50, `audit-check` with a missing log or a damaged keyring, and `trust-service --key @file`.
+- **Tests for what had none:** the daily job's wait for standing approvals and its port takeover (`tests/update-job.sh`, 23 checks with stand-ins), staging a fresh file (review 7 L2), and in the products the waiting limit of 50, `audit-check` with a missing log or a damaged keyring, and `trust-service --key @file`.
 
 ## 0.5.0 (2026-10-18)
 

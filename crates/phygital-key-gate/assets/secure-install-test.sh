@@ -61,6 +61,7 @@ GPID=""
 for p in $(sudo lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t | sort -u); do
   # Linux: systemd holds the port for the gate (socket activation), and its
   # helper holds it for a moment while it starts the gate: both in the gate's units.
+  [ -n "$(ps -o uid= -p "$p" 2>/dev/null | tr -d ' ')" ] || continue
   if [ "$(uname -s)" = Linux ] && [ "$(ps -o uid= -p "$p" | tr -d ' ')" = 0 ]; then continue; fi
   [ "$(ps -o uid= -p "$p" | tr -d ' ')" = "$(id -u "$SVC")" ] || fail "a listener is not the gate user"
   GPID=$p

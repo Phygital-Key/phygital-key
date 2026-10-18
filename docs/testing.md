@@ -34,7 +34,7 @@ This page lists every layer of tests in the Phygital Key base (this repository),
 | Mutation testing | cargo-mutants on the verifier: 341 mutants, every real gap caught | by hand | No |
 | JavaScript checker | 12 tests (3 run every shared vector, 2 run Wycheproof, 1 signs an agent proof) | `verifier-js/test/` | Yes, Linux |
 | Installer release-list check | 22 checks on lists signed with a test key | `crates/phygital-key-gate/tests/release-lists.sh` | Yes, Linux |
-| Update job and port check | 22 checks with stand-ins: the standing-approval wait, the port takeover, which listeners are the gate's own | `crates/phygital-key-gate/tests/update-job.sh` | Yes, Linux |
+| Update job and port check | 23 checks with stand-ins: the standing-approval wait, the port takeover, which listeners are the gate's own | `crates/phygital-key-gate/tests/update-job.sh` | Yes, Linux |
 | Scripts and workflows | ShellCheck on the installers, zizmor on the workflows | `.github/workflows/ci.yml` (lint job) | Yes, Linux |
 | Examples | build and syntax of 3 examples | `examples/` | Yes, Linux |
 | Supply chain | cargo-deny: advisories, licences, bans, sources | `deny.toml` | Yes |
@@ -201,7 +201,7 @@ It found three bugs in the new code before they shipped: an empty array that sto
 
 ## Update job and port check
 
-`crates/phygital-key-gate/tests/update-job.sh` takes three functions out of `assets/install-service.sh` and runs them with stand-ins for curl, kill, ps, systemd and `/proc`. No root, no network. 22 checks:
+`crates/phygital-key-gate/tests/update-job.sh` takes three functions out of `assets/install-service.sh` and runs them with stand-ins for curl, kill, ps, systemd and `/proc`. No root, no network. 23 checks:
 
 - `standing_hold`: the daily job waits while standing approvals are active, says why and how to install now, remembers when it first waited for the installed version, waits at 6 days, goes on after 7, ignores an old record for another version, does not wait with `--now` or when the gate does not answer;
 - `gate_up`: a program that takes the port during an unattended update is stopped with `kill -9` once per grab and named in the result line; after 5 tries the gate is stopped (fail closed); an install by hand refuses instead;
