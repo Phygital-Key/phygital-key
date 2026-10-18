@@ -138,7 +138,7 @@ Scope: the split into the shared base and the two products, the new A2A 1.0 adap
 
 ## The testing round (2026-10-18)
 
-Not a review by a reading agent: outside test suites and tools run against the code, each finding fixed and turned into a test. Details and counts are on [testing](testing.md).
+This round was not a review by a reading agent. Outside test suites and tools ran against the code, and each finding was fixed and turned into a test. Details and counts are on [testing](testing.md).
 
 | Tool or test | What it found | Fix |
 |---|---|---|
