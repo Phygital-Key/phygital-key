@@ -102,11 +102,11 @@ The service's signed answer after acting: `success` or `error`, pointing at the 
 
 ### Release key
 
-The ECDSA P-256 key that signs each release's release list. Each product has its own: the secret `RELEASE_SIGNING_KEY` of the GitHub environment `release` in the product's repository, made once by the repository owner with the product's `scripts/release-key.sh` (which keeps no local copy), and GitHub gives it only to a release run from a `v*` tag, which only repository admins can push (no approval click for now, decision 36). Its public key is pinned in the product's `release-keys.pem`, `install-service.sh` and `install.sh`. The base has none. See [architecture](architecture.md#pinned-release-keys).
+The ECDSA P-256 key that signs each release's release list. Each product has its own: the secret `RELEASE_SIGNING_KEY` of the GitHub environment `release` in the product's repository, made once by the repository owner with the product's `scripts/release-key.sh` (which keeps no local copy), and GitHub gives it only to a release run from a `v*` tag, which only repository admins can push (no approval click for now, decision 36). Its public key is pinned in the product's `release-keys.pem`, `install-service.sh` and `install.sh`. A second release key, ML-DSA-65 (post-quantum), is the secret `RELEASE_MLDSA_KEY`, made with `scripts/release-key.sh --pq`; once pinned, updates need both signatures. The base has none. The fingerprints are also on [Codeberg](https://codeberg.org/Phygital-Key/phygital-key-release-keys). See [architecture](architecture.md#pinned-release-keys).
 
 ### Release list
 
-`release.txt`: each release's version and the SHA-256 of every release file, in an exact line format, with its signature in `release.txt.sig`. Installers and updaters take the SHA-256 only from a signed list. See [architecture](architecture.md#releasetxt).
+`release.txt`: each release's version and the SHA-256 of every release file, in an exact line format, with its signature in `release.txt.sig`. Newer releases also carry `release2.txt`, the same list plus when it was signed and until when it is trusted (180 days), with a P-256 signature (`release2.txt.sig`) and an ML-DSA-65 one (`release2.txt.mldsa`). Installers and updaters take the SHA-256 only from a signed list ([the signed release list](updates.md#the-signed-release-list)). See [architecture](architecture.md#releasetxt).
 
 ### Request
 

@@ -62,7 +62,7 @@ Every name comes from the product's program name (`bin`) and short id (`id`) in 
 | `phygital-key-mcp audit-check` | Checks the audit log's hash chain and prints the last hash. | [cli](cli.md#audit-check), [audit log](audit-log.md) |
 | `phygital-key-mcp help` | Prints the help, or the help of one command. | |
 
-Three hidden commands exist and are not meant to be typed: `release-check --file <release.txt> --sig <release.txt.sig>` (checks a signed release list with the pinned keys and prints its version; the install script uses it when `openssl` is missing), `install-service --auto-update-run` (what the daily update job runs) and `product-files --out <folder>` (writes the product's files made from the base templates; used by the product's CI and `sync-base`).
+Five hidden commands exist and are not meant to be typed: `release-check --file <list> --sig <list.sig> [--pq-sig <list.mldsa>]` (checks a signed release list with the pinned keys; for `release.txt` it prints the version, for `release2.txt` it also checks the ML-DSA signature when a key is pinned and the dates, and prints `<version> <signed> <expires>`; the secure installer uses it), `release-sign-pq --file <release2.txt> --out <release2.txt.mldsa>` (the release run's ML-DSA signature, key from `RELEASE_MLDSA_KEY`), `release-keygen-pq --public-out <file>` (makes the ML-DSA release key for `scripts/release-key.sh --pq`), `install-service --auto-update-run` (what the daily update job runs) and `product-files --out <folder>` (writes the product's files made from the base templates; used by the product's CI and `sync-base`).
 
 ## Global options
 

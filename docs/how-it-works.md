@@ -73,7 +73,7 @@ Each reason below is a mechanism in the code, with the test that proves it.
 | Text in a request is never a yes | A request is data. Only a signature counts. | Vector `prompt_injection_is_data` (`APPROVAL_REQUIRED`) |
 | The AI cannot change the gate | With the secure install, the gate runs as its own system user: the AI, even acting as you, cannot change its program, read its data or write its keys. Only the administrator password can. | Each product's `tests/secure-install.sh`: installs it for real on macOS and Linux in CI on every push to `main` and every pull request, then checks this user cannot change the program, read the data folder or write the keyring |
 
-The full list of the 123 shared vectors is in [test vectors](../test-vectors/README.md). Phygital Key MCP's end-to-end suite (108 checks) drives a real browser with a virtual passkey and the official MCP SDK, and tries each attack an agent can make through the gate and the page. See [testing](testing.md).
+The full list of the 123 shared vectors is in [test vectors](../test-vectors/README.md). Phygital Key MCP's end-to-end suite (111 checks) drives a real browser with a virtual passkey and the official MCP SDK, and tries each attack an agent can make through the gate and the page. See [testing](testing.md).
 
 ## Standing approvals
 

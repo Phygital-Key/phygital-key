@@ -78,9 +78,9 @@ flowchart TD
 
 The gate's unit runs it with:
 
-`NoNewPrivileges=yes`, `ProtectSystem=strict`, `ProtectHome=yes`, `ProtectProc=invisible`, `PrivateTmp=yes`, `PrivateDevices=yes`, `ProtectClock=yes`, `ProtectKernelTunables=yes`, `ProtectKernelModules=yes`, `ProtectKernelLogs=yes`, `ProtectControlGroups=yes`, `ProtectHostname=yes`, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`, `RestrictNamespaces=yes`, `RestrictRealtime=yes`, `RestrictSUIDSGID=yes`, `LockPersonality=yes`, `MemoryDenyWriteExecute=yes`, `SystemCallArchitectures=native`, `SystemCallFilter=@system-service`, `CapabilityBoundingSet=` (no capabilities), `IPAddressDeny=any` with `IPAddressAllow=localhost` (it can only talk to this machine), `ReadWritePaths=/var/lib/<program>` (it can write nowhere else), `UMask=0077`, output to the journal.
+`NoNewPrivileges=yes`, `ProtectSystem=strict`, `ProtectHome=yes`, `ProtectProc=invisible`, `PrivateTmp=yes`, `PrivateDevices=yes`, `ProtectClock=yes`, `ProtectKernelTunables=yes`, `ProtectKernelModules=yes`, `ProtectKernelLogs=yes`, `ProtectControlGroups=yes`, `ProtectHostname=yes`, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`, `RestrictNamespaces=yes`, `RestrictRealtime=yes`, `RestrictSUIDSGID=yes`, `LockPersonality=yes`, `MemoryDenyWriteExecute=yes`, `SystemCallArchitectures=native`, `SystemCallFilter=@system-service`, `CapabilityBoundingSet=` (no capabilities), `IPAddressDeny=any` with `IPAddressAllow=localhost` (it can only talk to this machine), `ReadWritePaths=/var/lib/<program>` (it can write nowhere else), `UMask=0077`, `LimitNOFILE=8192`, output to the journal. On macOS the launchd job raises the open-file limit to 8192 too (`SoftResourceLimits`), so idle connections cannot fill it before the gate closes them after 10 seconds.
 
-The update job runs as root (it must replace the root-owned program), with only `PrivateTmp=yes` and `ProtectHome=yes`, because it needs the network to reach `github.com`.
+The update job runs as root, because it must replace the root-owned program, write the units and restart the gate, so its files stay writable and it needs the network to reach `github.com`. Everything else it never needs is closed: `PrivateTmp=yes`, `ProtectHome=yes`, `NoNewPrivileges=yes`, `PrivateDevices=yes`, `ProtectClock=yes`, `ProtectKernelTunables=yes`, `ProtectKernelModules=yes`, `ProtectKernelLogs=yes`, `ProtectControlGroups=yes`, `ProtectHostname=yes`, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`, `RestrictNamespaces=yes`, `RestrictRealtime=yes`, `RestrictSUIDSGID=yes`, `LockPersonality=yes`, `SystemCallArchitectures=native`, and `Environment=HOME=/root` (launchd: `HOME=/var/root`). CI checks both units' `systemd-analyze security` levels.
 
 </details>
 
@@ -294,7 +294,7 @@ Then [install](#install) the product and enroll your key again. Moving the old k
 - **Root and the machine are trusted.** Whoever is root (or controls the machine) controls the gate and the page it serves. So does malware running as root.
 - **The release keys are trusted.** Updates install whatever a pinned release key of the product signed. The keys come from the installer you first ran. See [the update channel](threat-model.md#the-update-channel).
 - **It contacts GitHub daily** while automatic updates are on ([privacy](privacy.md#what-leaves-your-machine)). The gate itself makes no network calls.
-- **Automatic updates are new.** No product release has been installed by the daily job against GitHub yet. Until then, CI tests the parts on their own (below).
+- **Automatic updates are new.** No product release has been installed by the daily job against GitHub yet. Until then, CI tests the parts on their own (below). Up to MCP 0.4.0 and A2A 0.1.0 the job did not start at all from launchd or systemd (no `HOME`); after the next release, run `<program>-admin update` once to get the fixed job.
 - **Restarts end standing approvals** and drop waiting requests (fail closed). An automatic update restarts the gate at the job's time.
 - **A moment with a free port.** While the gate restarts, its port is free for a moment. A program that takes it during an update is stopped, but a fast one could take it again (and is stopped again). Passing the open port from launchd or systemd to the gate is not built, because the gate forbids unsafe code.
 - **Changing the port** changes the approval page's address, which your keyring is tied to. Enroll a new keyring after such a change ([keys and devices](keys-and-devices.md#the-signed-key-history)).
@@ -309,6 +309,7 @@ Each product's CI installs its gate for real, as a separate user, on macOS and o
 - [x] the install refuses while another program holds the address
 - [x] the gate answers
 - [x] only the gate user listens (IPv4 and IPv6)
+- [x] the gate may open 8192 files
 - [x] the program is owned by root
 - [x] this user cannot change the program
 - [x] this user cannot read the data folder
@@ -324,6 +325,8 @@ Each product's CI installs its gate for real, as a separate user, on macOS and o
 - [x] a release list signed by an unknown key is refused
 - [x] the update job leaves the gate running unless a newer signed release exists
 - [x] the update job records its result
+- [x] the daily update job runs from its service manager (started with `systemctl start` or `launchctl kickstart`, not by hand)
+- [x] Linux: the gate service keeps systemd's sandbox level OK (score 4.9 or less) and the root update service MEDIUM (6.9 or less), read from `systemd-analyze security`
 - [x] root ignores the user's `~/.curlrc`
 - [x] root ignores programs early in the user's `PATH`
 - [x] a new program that does not start is switched back to the previous one
@@ -335,7 +338,7 @@ Each product's CI installs its gate for real, as a separate user, on macOS and o
 - [x] purge removes everything
 - [x] uninstall removes the update job
 
-That is 30 checks. Two of them have honest limits: the update job runs against GitHub, where no newer signed release exists, so it records `up to date`, `update check failed` or `update refused`; and the switch-back check installs a broken program with `--binary`, not through a real update. The base has no program, so it does not run this test itself. See [testing](testing.md) for the other suites.
+That is 34 checks on Linux and 32 on macOS (the two sandbox scores are Linux only). Two of them have honest limits: the update job runs against GitHub, where no newer signed release exists, so it records `up to date`, `update check failed` or `update refused`; and the switch-back check installs a broken program with `--binary`, not through a real update. The base has no program, so it does not run this test itself. See [testing](testing.md) for the other suites.
 
 ## Troubleshooting
 

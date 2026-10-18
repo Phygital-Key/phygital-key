@@ -72,10 +72,29 @@ cd fuzz && cargo +nightly fuzz run verify -- -max_total_time=60
 
 Replace `verify` with `strict_json`, `keyring_history` or `standing` for the others.
 
-JavaScript checker (must pass the same vectors):
+JavaScript checker (must pass the same vectors, and Wycheproof):
 
 ```bash
 cd verifier-js && npm test
+```
+
+Cross-check with SimpleWebAuthn, an independent WebAuthn library:
+
+```bash
+cd crosscheck && npm ci && npm test
+```
+
+The installer scripts (ShellCheck, then the secure installer's release-list check, which needs `openssl`):
+
+```bash
+shellcheck -S warning crates/phygital-key-gate/assets/*.sh crates/phygital-key-gate/tests/*.sh
+crates/phygital-key-gate/tests/release-lists.sh
+```
+
+Mutation testing of the verifier, by hand (about an hour):
+
+```bash
+cargo mutants --package phygital-key-verify
 ```
 
 CI also checks the examples:
@@ -91,8 +110,10 @@ The base has no program, so some checks live in each product's repository and ru
 
 | Check | Phygital Key MCP |
 |---|---|
-| End-to-end and red team (real Chromium, a virtual passkey, the official MCP SDK; 108 checks) | `tests/e2e/run.mjs` |
-| Secure install, for real on macOS and Linux, with its automatic updates (30 checks) | `tests/secure-install.sh` |
+| End-to-end and red team (real Chromium, a virtual passkey, the official MCP SDK; 111 checks) | `tests/e2e/run.mjs` |
+| The approval page in Firefox and WebKit (16 checks) | `tests/e2e/browsers.mjs` |
+| Abuse: floods, huge and slow requests, idle connections (16 checks) | `tests/e2e/abuse.mjs` |
+| Secure install, for real on macOS and Linux, with its automatic updates (34 checks on Linux, 32 on macOS) | `tests/secure-install.sh` |
 | Container image builds and starts | `packaging/container/Dockerfile` |
 | Files made from the base templates are up to date | `phygital-key-mcp product-files --out .` then `git diff --exit-code` |
 

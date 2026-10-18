@@ -136,9 +136,27 @@ Scope: the split into the shared base and the two products, the new A2A 1.0 adap
 | L3 | LOW | Both products sign for the site name `localhost`. | Documented: one verifier, one keyring, one origin per gate. Every gate now refuses any `phygital-key:keyring:` audience, not only its own. |
 | I1 to I4 | INFO | Product values not checked; public routes not enforced as read-only; a `tck` build could be mistaken for a release; one release key for both products would let one sign the other's lists. | Product values are checked at start and in the installers; public routes answer only GET and HEAD; the `tck` feature is never built for releases; each product makes its own release key. |
 
+## The testing round (2026-10-18)
+
+Not a review by a reading agent: outside test suites and tools run against the code, each finding fixed and turned into a test. Details and counts are on [testing](testing.md).
+
+| Tool or test | What it found | Fix |
+|---|---|---|
+| Google's Wycheproof (746 P-256, 210 ML-DSA-65 cases) | Nothing: both verifiers pass every case | Kept as tests in both verifiers |
+| SimpleWebAuthn, an independent WebAuthn library | Nothing: it agrees on every approval vector, except two cases where we are stricter on purpose | Kept as the `crosscheck` CI job |
+| cargo-mutants (341 mutants on the verifier) | 14 checks no test pinned down: exact size limits, store memory at the exact second, revocation lists read from JSON, a keyring swapped into a live verifier, authenticator data one byte short | `tests/edges.rs`; a second run caught all 14 |
+| A new secure-install check that starts the daily update job through systemd and launchd | **The daily update job never ran.** systemd and launchd give it no `HOME`, and the program stops without one. Running the same command by hand with `sudo` worked, which is all the old test did | The units set `HOME`; the test now starts the job the way the timer does |
+| Abuse tests against a live gate | **Idle connections were never closed**, and launchd gives a service 256 open files, so a program on the same computer could keep the approval page from loading | A 10-second header timeout on every connection, idle ones included; 8192 open files |
+| GitHub settings | Private vulnerability reporting was off in both products, although their security policies point to it | Turned on |
+| zizmor (workflow analysis) | 0 high. Medium: Dependabot took new versions at once; the sync job kept git credentials on disk; a third-party action ran in the job that holds the release key; broad Scorecard permissions. The A2A product had no Dependabot file | All fixed; zizmor runs in CI |
+| ShellCheck | No real bug; three unquoted names | Quoted; ShellCheck runs in CI |
+| `systemd-analyze security` | The root update service had 2 sandbox settings | 16 now; CI keeps both units at their level |
+| The installer's release-list check, run on its own (`tests/release-lists.sh`) | Three bugs in the new v2 code before it shipped: an empty array that stops macOS's bash 3.2, a missing memory file that stopped the script, and a `grep -q` in a pipe that could make a refused ML-DSA check look like an older program | Fixed before release |
+| Firefox and WebKit, 10-minute fuzzing per target, SLSA provenance check | Nothing | Kept: browsers job, weekly fuzzing |
+
 ## The documentation review
 
-While this documentation was written for v0.3.0, its pages were checked claim by claim against the code. That is not one of the seven security reviews, but it found one fail-open bug and several places where the program and its docs disagreed. All were fixed in the code before the release (see the 0.3.0 entry in the [changelog](../CHANGELOG.md)).
+While this documentation was written for v0.3.0, its pages were checked claim by claim against the code. That is not one of the security reviews, but it found one fail-open bug and several places where the program and its docs disagreed. All were fixed in the code before the release (see the 0.3.0 entry in the [changelog](../CHANGELOG.md)).
 
 | # | Finding | Fix | Proof now |
 |---|---|---|---|
@@ -165,14 +183,15 @@ Nothing confirmed by a review is open without a fix or a documented limit. These
 
 - [ ] An outside, paid security audit (the project stays labeled pre-audit until then)
 - [ ] Approvals are signed, not encrypted (decision 33)
-- [ ] An approval is a bearer for its life (60 s by default, at most 300 s); binding it to the requester's key is not built
+- [ ] An approval is a bearer for its life (60 s by default, at most 300 s); binding it to the requester's key is planned, not built
+- [ ] The gate machine draws the approval page, and authenticators do not show what they sign: a gate machine under someone else's control could show one request and sign another. Approving on a second device that computes the challenge itself is planned, not built
 - [ ] Use tokens already handed out work for up to 60 s after a revoke, until the service picks up the signed revocation
 - [ ] No hardware-attestation check (decision 35)
 - [ ] The audit log detects edits, not a full rewrite or a cut-off end
 - [ ] The limit of 50 waiting requests has no automated test (the 30-a-minute limit now has one: e2e "the 31st request in a minute is refused (flood limit)")
 - [ ] No secure install for Windows
-- [ ] The download path is untested in CI: CI installs the secure install from a root-owned local build (`--binary`), so downloading a published release, checking its signed `release.txt` and its SHA-256, and a real automatic update have not run yet. They can run only once a product publishes signed releases.
-- [ ] Each product's release key is made once by the owner (the product's `scripts/release-key.sh`). Until it is pinned in the product's `release-keys.pem` and installers, every download and update of that product is refused.
+- [ ] The download path is untested in CI: CI installs the secure install from a root-owned local build (`--binary`). Installing from a published, signed release was done by hand for both products, but a real automatic update to a newer release has not run yet, and the ML-DSA signing in a release run has been tried only locally with test keys.
+- [ ] Each product's ML-DSA release key is made once by the owner (`scripts/release-key.sh --pq`). Until it is pinned, release lists carry the P-256 signature only.
 - [ ] The gate's port is free for a moment at each update restart. A program that takes it is killed and the gate started again, but handing the open port from launchd or systemd to the gate is not built (review 7, H2). The kill-and-restart has no CI check.
 - [ ] A person's active standing approval can hold back a security update for up to 7 days (review 7, M1). The waiting logic has no CI check.
 - [ ] The fixes for review 7 L2 and L3 have no automated test.

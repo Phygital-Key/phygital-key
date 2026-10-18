@@ -43,6 +43,7 @@ PRODUCT.md                         product and brand notes for design work
 .github/workflows/ci.yml           CI on every push to main and every pull request (jobs listed below)
 .github/workflows/codeql.yml       CodeQL static analysis
 .github/workflows/scorecard.yml    OpenSSF Scorecard
+.github/workflows/fuzz-weekly.yml  each fuzz target for 30 minutes every Sunday
 .github/dependabot.yml             dependency update pull requests
 .github/ISSUE_TEMPLATE/*.yml       issue forms (bug, feature, question) and their config
 .github/PULL_REQUEST_TEMPLATE.md   pull request checklist
@@ -64,6 +65,8 @@ crates/phygital-key-verify/        the Rust verifier library (pure: no network, 
   tests/vectors.rs                 runs every shared test vector
   tests/props.rs                   property tests: random input never verifies, any change is refused
   tests/units.rs                   small exact checks added where mutation testing found gaps
+  tests/edges.rs                   exact edges from the 2026-10-18 mutation run
+  tests/wycheproof.rs              Google's Wycheproof P-256 cases (DER and raw), plus high-S
 
 crates/phygital-key-gate/          the gate engine every product shares (a library, no binary)
   Cargo.toml                       crate manifest (axum, tokio, clap, RustCrypto)
@@ -71,11 +74,11 @@ crates/phygital-key-gate/          the gate engine every product shares (a libra
   src/product.rs                   Product (name, bin, id, version, repo, port, about, release_keys), the Adapter trait, and the templates filled per product (product_files)
   src/cli.rs                       the shared commands (clap), settings, env names from the product, serve, stdio, demo and the rest
   src/state.rs                     the gate's state: requests, statuses, keyring, enrollment, standing approvals, revocations, receipts, the access token
-  src/web.rs                       the approval page's HTTP routes and JSON API, Host and Origin checks, CSP and other headers
+  src/web.rs                       the approval page's HTTP routes and JSON API, Host and Origin checks, CSP and other headers, the accept loop with a 10 s header timeout
   src/demo.rs                      the demo service: verifies approvals like a real service, signs receipts
   src/audit.rs                     append-only, hash-chained audit log
   src/seen.rs                      file seen store for `verify` (lock file, temp file and rename)
-  src/update.rs                    signed releases: strict release.txt parser, signature check against the product's pinned keys, `update`
+  src/update.rs                    signed releases: strict release.txt and release2.txt parsers, P-256 and ML-DSA-65 checks against the product's pinned keys, expiry, `update`, release-sign-pq, release-keygen-pq
   src/util.rs                      time, randomness, dates, owner-only files
   assets/index.html                home page: trusted keys, fingerprint, remove buttons
   assets/approve.html              approval page for one request
@@ -86,9 +89,10 @@ crates/phygital-key-gate/          the gate engine every product shares (a libra
   assets/brand/*.svg               logo marks used by the pages
   assets/install-service.sh        template: the secure installer (system user, launchd or systemd, daily signed update job, admin helper)
   assets/install.sh                template: the user installer (signed release list and SHA-256 checked, writes ~/.local/bin/<program>)
-  assets/secure-install-test.sh    template: the secure-install CI test (30 checks), published by a product as tests/secure-install.sh
+  assets/secure-install-test.sh    template: the secure-install CI test (34 checks on Linux, 32 on macOS), published by a product as tests/secure-install.sh
   assets/release-key.sh            template: one-time release key setup, published as scripts/release-key.sh
   assets/package-manifests.sh      template: Homebrew, Scoop and winget manifests, published as scripts/package-manifests.sh
+  tests/release-lists.sh           the secure installer's release-list check against lists signed with a test key (22 checks)
 
 crates/phygital-key-testgen/       writes the shared test vectors
   Cargo.toml                       crate manifest
@@ -100,6 +104,7 @@ test-vectors/                      the shared vectors (part of the spec)
   keyrings.json                    key-history cases
   standing.json                    standing-approval cases
   keys/test-keys.json              TEST ONLY private keys (public on purpose; never trust them)
+  wycheproof/                      three Wycheproof files copied unchanged (P-256 DER and raw, ML-DSA-65), with a README; not part of the spec
 
 verifier-js/                       the independent JavaScript verifier (Node 20+ and browsers)
   package.json, README.md, LICENSE, NOTICE
@@ -110,6 +115,9 @@ verifier-js/                       the independent JavaScript verifier (Node 20+
   src/history.js                   signed key history
   src/standing.js                  standing approvals, use tokens, revocations
   test/vectors.test.js             9 tests: every shared vector, single use, strict parsing, and that async seen and use stores are awaited
+  test/wycheproof.test.js          2 tests: every Wycheproof P-256 case through the checker's own signature handling
+
+crosscheck/                        SimpleWebAuthn must agree with our verifiers on every approval vector (npm test, dev only)
 
 fuzz/                              cargo-fuzz targets (nightly)
   Cargo.toml, .gitignore
@@ -195,8 +203,10 @@ CI (`.github/workflows/ci.yml`) runs on every push to `main` and every pull requ
 | examples (build and syntax) | `node --check examples/node-service/server.mjs`, `cargo build --manifest-path examples/rust-service/Cargo.toml`, parses `examples/ci-approval/example-deploy.yml` |
 | fuzz | each of the 4 targets for 60 seconds on nightly |
 | licenses and advisories | `cargo-deny` |
+| scripts and workflows | ShellCheck on the installer templates and test scripts, `crates/phygital-key-gate/tests/release-lists.sh`, zizmor on the workflows |
+| cross-check with SimpleWebAuthn | `npm ci` and `npm test` in `crosscheck` |
 
-`codeql.yml` and `scorecard.yml` run CodeQL and OpenSSF Scorecard. Third-party actions are pinned to a commit; keep them pinned.
+`codeql.yml` and `scorecard.yml` run CodeQL and OpenSSF Scorecard; `fuzz-weekly.yml` fuzzes each target for 30 minutes every Sunday. Third-party actions are pinned to a commit; keep them pinned.
 
 ## How a base change reaches the products
 

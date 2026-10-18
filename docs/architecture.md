@@ -60,7 +60,7 @@ flowchart TD
 | `repo` | GitHub repository with the product's signed releases | `Phygital-Key/phygital-key-mcp` |
 | `port` | Default port of the approval page | `7468` |
 | `about` | One line for `--help` | |
-| `release_keys` | The product's pinned release keys (P-256 `PUBLIC KEY` PEM blocks), from its `release-keys.pem` | |
+| `release_keys` | The product's pinned release keys (P-256 `PUBLIC KEY` PEM blocks, and `ML-DSA-65 PUBLIC KEY` blocks once made), from its `release-keys.pem` | |
 
 `Product::env("PORT")` gives `PHYGITAL_KEY_MCP_PORT`: the program name in capitals with `-` turned into `_`. The shared commands read `<PREFIX>_HOME`, `_PORT`, `_BIND` and `_ORIGIN`.
 
@@ -99,7 +99,7 @@ Each product depends on the base's `main` branch, and its `Cargo.lock` pins the 
 
 1. `cargo update -p phygital-key-gate -p phygital-key-verify`, a release build, then `product-files --out .`.
 2. If nothing changed, it stops.
-3. Otherwise it runs `cargo test --locked` and the product's end-to-end checks (108 for Phygital Key MCP).
+3. Otherwise it runs `cargo test --locked` and the product's end-to-end checks (111 for Phygital Key MCP).
 4. Only if they pass: it commits "Update the base to <commit>", pushes to the product's `main`, and starts the product's full CI (`gh workflow run ci.yml`).
 
 A base change that breaks a product is never pushed to it; the product stays on the last good commit. Releases stay in the product: a base change reaches users only with the product's next signed release.
@@ -449,9 +449,9 @@ Because the file names start with the program name, a release list of one produc
 
 ### Pinned release keys
 
-Each product keeps its public release keys in `release-keys.pem`, as PEM `PUBLIC KEY` blocks. The program compiles that file in (`Product::release_keys`), so `update` and the hidden `release-check` command trust those keys, and `product-files` writes the same keys into the `# BEGIN RELEASE KEYS` block of both installers. The product's CI fails if the installers in its repository differ from what `product-files` writes.
+Each product keeps its public release keys in `release-keys.pem`, as PEM `PUBLIC KEY` blocks (P-256) and `ML-DSA-65 PUBLIC KEY` blocks (the post-quantum key, standard base64 of the 1952-byte key). The program compiles that file in (`Product::release_keys`), so `update` and the hidden `release-check` command trust those keys, and `product-files` writes the same keys into the `# BEGIN RELEASE KEYS` block of both installers. The product's CI fails if the installers in its repository differ from what `product-files` writes.
 
-The product's `scripts/release-key.sh` is run once, by the repository owner, in a terminal (it refuses without one), with `gh` signed in as the owner and `openssl` installed. It makes one P-256 key in a temporary folder, creates the GitHub environment `release` in that repository (deployments only from tags `v*`), stores the private key as that environment's secret `RELEASE_SIGNING_KEY`, deletes the local copy, and pins the public key in `release-keys.pem` and the installers (the owner commits that change). It refuses if a key is already pinned. The private key is then only in GitHub: there is no copy on any computer, no passphrase and no backup key. If the key has to change, a release signed with the old key pins both the old and the new public key, and a later release removes the old one.
+The product's `scripts/release-key.sh` is run once, by the repository owner, in a terminal (it refuses without one), with `gh` signed in as the owner and `openssl` installed. It makes one P-256 key in a temporary folder, creates the GitHub environment `release` in that repository (deployments only from tags `v*`), stores the private key as that environment's secret `RELEASE_SIGNING_KEY`, deletes the local copy, and pins the public key in `release-keys.pem` and the installers (the owner commits that change). It refuses if a key is already pinned. It then makes the ML-DSA-65 key the same way (`scripts/release-key.sh --pq` does only this step): the program builds the key, the private seed goes straight to the secret `RELEASE_MLDSA_KEY` without being written to disk, and the public key is added to `release-keys.pem`. The private keys are then only in GitHub: there is no copy on any computer, no passphrase and no backup key. If the key has to change, a release signed with the old key pins both the old and the new public key, and a later release removes the old one.
 
 > [!IMPORTANT]
 > A product with an empty `release-keys.pem` refuses every install and update: the secure installer says "no release key is pinned in this installer", and `install.sh` and `update` say the release list is not signed by a pinned release key. The release key must be made with the product's `scripts/release-key.sh` before its first release.

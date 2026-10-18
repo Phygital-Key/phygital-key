@@ -58,10 +58,10 @@ Network use happens only where you start it:
 
 | What | Connects to | When |
 |---|---|---|
-| The install script (`install.sh`) | `github.com` (`release.txt`, its signature and the archive) and `raw.githubusercontent.com` (the script itself) | When you run it |
-| `update` | `github.com` (`release.txt`, its signature, and the archive when there is a newer release) | When you run it |
-| The secure install | `github.com` (`release.txt`, its signature and the archive) | When you install or update by hand |
-| The secure install's daily update job | `github.com`: `release.txt` and `release.txt.sig` of the latest release, plus the archive when a newer signed release exists | Once a day, while automatic updates are on |
+| The install script (`install.sh`) | `github.com` (`release2.txt`, or `release.txt` for an older release, with its signatures and the archive) and `raw.githubusercontent.com` (the script itself) | When you run it |
+| `update` | `github.com` (`release2.txt`, or `release.txt` for an older release, with its signatures, and the archive when there is a newer release) | When you run it |
+| The secure install | `github.com` (`release2.txt`, or `release.txt` for an older release, with its signatures and the archive) | When you install or update by hand |
+| The secure install's daily update job | `github.com`: `release2.txt` and its two signatures (`.sig`, `.mldsa`) of the latest release, plus the archive when a newer signed release exists | Once a day, while automatic updates are on |
 | Homebrew, Scoop, cargo | Their own sources | When you install or update |
 | The AI agent | The service it acts on, with your approval | When you approve |
 

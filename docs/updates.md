@@ -244,21 +244,45 @@ Every product release carries two extra files:
 
   $$\text{release.txt.sig} = \mathrm{ECDSA\text{-}P256}_{\text{release key}}\big(\mathrm{SHA256}(\texttt{release.txt})\big)$$
 
-Each product has its own release key: a secret of the GitHub environment `release` in that product's repository (named `RELEASE_SIGNING_KEY`). GitHub hands that secret only to a release run started by a `v*` tag, and a repository ruleset lets only repository admins create, update or delete `v*` tags. For now the environment has no required reviewer: the run signs and publishes by itself as soon as the owner pushes the tag (decision 36 in [decisions](decisions.md)). No copy is kept anywhere else: the product's `scripts/release-key.sh` makes the key in a temporary folder, stores it in GitHub and deletes the local copy. The public key is pinned in the product's `release-keys.pem`, compiled into the program, and in the `# BEGIN RELEASE KEYS` block of its `install-service.sh` and `install.sh`. `product-files` writes those blocks from the same keys, and the product's CI fails if they differ.
+Newer releases also carry `release2.txt`, the same list with two more lines, and two signatures:
+
+```text
+phygital-key release manifest v2
+version v0.5.0
+signed 1792300000
+expires 1807852000
+<64 lowercase hex>  phygital-key-mcp-v0.5.0-aarch64-apple-darwin.tar.gz
+```
+
+- `signed` and `expires` are Unix seconds. A release run sets `expires` 180 days after `signed`; a list good for more than 400 days, or signed more than a day ahead of the machine's clock, is refused.
+- `release2.txt.sig` is the same P-256 signature as above. `release2.txt.mldsa` is a second signature with ML-DSA-65 (FIPS 204), with the context string `phygital-key release list v2`. ML-DSA is believed to stay safe if large quantum computers arrive.
+
+What v2 adds:
+
+| | `release.txt` | `release2.txt` |
+|---|---|---|
+| Who reads it | Installs from before the change | New installs, the daily job, `update` |
+| An old list served again (a freeze) | Reads as `up to date`, for good | Ends in "the latest signed release list expired" after at most 180 days |
+| A list older than one seen before (a rollback) | Not noticed | Refused: the secure install remembers the newest `signed` time it accepted (`<prefix>/release-seen`) |
+| Signatures | P-256 | P-256, plus ML-DSA-65 once the product pins an ML-DSA key |
+
+Who checks the ML-DSA signature: the installed, root-owned program (`release-check`), on every update. A first install has no trusted program yet, so it checks the P-256 signature with `openssl`, as before. Until a product pins an ML-DSA key, the P-256 signature is enough. A release has to come out at least every 180 days, or installs report that the list expired (the gate keeps running).
+
+Each product has its own release key: a secret of the GitHub environment `release` in that product's repository (named `RELEASE_SIGNING_KEY`). GitHub hands that secret only to a release run started by a `v*` tag, and a repository ruleset lets only repository admins create, update or delete `v*` tags. For now the environment has no required reviewer: the run signs and publishes by itself as soon as the owner pushes the tag (decision 36 in [decisions](decisions.md)). No copy is kept anywhere else: the product's `scripts/release-key.sh` makes the key in a temporary folder, stores it in GitHub and deletes the local copy. The ML-DSA key is a second secret, `RELEASE_MLDSA_KEY`, made by `scripts/release-key.sh --pq`: the program makes it and hands the private part straight to GitHub without writing it to disk. The public key is pinned in the product's `release-keys.pem`, compiled into the program, and in the `# BEGIN RELEASE KEYS` block of its `install-service.sh` and `install.sh`. `product-files` writes those blocks from the same keys, and the product's CI fails if they differ.
 
 ```mermaid
 flowchart LR
     Tag["Owner pushes tag vX.Y.Z in the product repository"] --> Build["build job: tests, 5 archives, a build record for each"]
     Build --> Sign["publish job (environment release): computes every SHA-256, writes and signs release.txt, checks it against the pinned key"]
-    Sign --> Pub["Published release with release.txt and release.txt.sig"]
+    Sign --> Pub["Published release with release.txt, release2.txt and their signatures"]
     Pub --> Check["Installer, update job or update: checks the signature with the pinned keys, then the SHA-256"]
 ```
 
 1. A pushed tag `vX.Y.Z` starts the product's `.github/workflows/release.yml`. Its build job runs the tests and builds the archives (and their `.sha256` files) for the 5 targets, and publishes a build provenance attestation for each archive (`actions/attest-build-provenance`: a record signed through Sigstore of which workflow built which file from which commit).
-2. The `publish` job uses the environment `release`, so it gets the key only in a run from a `v*` tag. It does not wait for an approval click while the required reviewer is off. It computes the SHA-256 of every archive itself, writes `release.txt`, signs it, checks the signature against the keys pinned in that commit (it stops if none matches), and publishes the release with every file plus `release.txt` and `release.txt.sig`.
+2. The `publish` job uses the environment `release`, so it gets the key only in a run from a `v*` tag. It does not wait for an approval click while the required reviewer is off. It computes the SHA-256 of every archive itself, writes `release.txt` and `release2.txt`, signs both, checks the signatures against the keys pinned in that commit (it stops if none matches), signs `release2.txt` with ML-DSA using the Linux program it just built (when an ML-DSA key is pinned), has that program check the whole v2 list, and publishes the release with every file and every list and signature.
 3. Every installer and updater checks the signature first and takes the SHA-256 only from the signed list.
 
-The parser in `crates/phygital-key-gate/src/update.rs` refuses anything that is not exactly this form: another header, a version line without `v` or with leading zeros, uppercase hex, one space instead of two, CRLF line ends, a file name for another version or another product, a path, a duplicate file, or a list with no files.
+The parser in `crates/phygital-key-gate/src/update.rs` refuses anything that is not exactly this form (for v2 also a bad `signed` or `expires` line): another header, a version line without `v` or with leading zeros, uppercase hex, one space instead of two, CRLF line ends, a file name for another version or another product, a path, a duplicate file, or a list with no files.
 
 What this protects: someone who swaps a release file on GitHub, runs a download mirror or sits between you and GitHub cannot make an update that installs, because they cannot sign. A stolen workflow token or a pull request cannot read the key either: GitHub gives the environment secret only to runs from `v*` tags, and only repository admins can push those tags. One product's release cannot install as another: its file names start with its own program name, and it is signed with its own key.
 
@@ -303,7 +327,16 @@ curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/v0.4.
 openssl dgst -sha256 -verify release-key-1.pem -signature release.txt.sig release.txt
 ```
 
-It prints `Verified OK` for a key that signed the list (try `release-key-2.pem` if there are two keys). Then compare the archive with the signed list:
+It prints `Verified OK` for a key that signed the list (try `release-key-2.pem` if there are two keys). For a newer release, check `release2.txt` with `release2.txt.sig` the same way.
+
+**Check the pinned key itself.** The fingerprints of every product's release keys are also published off GitHub, on Codeberg: [Phygital-Key/phygital-key-release-keys](https://codeberg.org/Phygital-Key/phygital-key-release-keys). Compare before a first install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/release-keys.pem \
+  | awk '/BEGIN PUBLIC KEY/,/END PUBLIC KEY/' | openssl pkey -pubin -outform DER | shasum -a 256
+```
+
+Then compare the archive with the signed list:
 
 ```bash
 tail -n +3 release.txt | shasum -a 256 -c --ignore-missing     # macOS
@@ -335,10 +368,12 @@ gh attestation verify phygital-key-mcp-v0.4.0-aarch64-apple-darwin.tar.gz --repo
 
 ## Limits
 
-- **Not tested against GitHub yet.** No product release has been installed by the daily job or `update` against a newer signed release on GitHub. Each product's CI tests the parts on their own, on macOS and Linux, on every push to `main` and every pull request (`tests/secure-install.sh`): the update job is installed and root-owned, it is on by default, a release list signed by an unknown key is refused, the job leaves the gate running unless a newer signed release exists and records its result, a new program that does not start is switched back to the previous one, `--no-auto-update` removes the job, the off choice is kept on later installs, `--auto-update` turns it back on, uninstall removes the job, and root ignores a planted `~/.curlrc` and a fake `curl` early in the user's `PATH`. The unit tests in `update.rs` (in the base) cover the signature check, the strict format, version order and reading the pinned keys.
+- **Not tested against GitHub yet.** No product release has been installed by the daily job or `update` against a newer signed release on GitHub, and up to MCP 0.4.0 and A2A 0.1.0 the daily job did not start from launchd or systemd at all (no `HOME`; run `<program>-admin update` once after the next release). Each product's CI tests the parts on their own, on macOS and Linux, on every push to `main` and every pull request (`tests/secure-install.sh`): the update job is installed and root-owned, it is on by default, a release list signed by an unknown key is refused, the job leaves the gate running unless a newer signed release exists and records its result, a new program that does not start is switched back to the previous one, `--no-auto-update` removes the job, the off choice is kept on later installs, `--auto-update` turns it back on, uninstall removes the job, the job runs when its service manager starts it, and root ignores a planted `~/.curlrc` and a fake `curl` early in the user's `PATH`. The unit tests in `update.rs` (in the base) cover the signature checks (P-256 and ML-DSA), the strict v1 and v2 formats, expiry, version order and reading the pinned keys, and `tests/release-lists.sh` runs the installer's own list check. The ML-DSA path in a real release run has been tried only locally with test keys.
 - **One trust root per product.** Everything rests on the product's pinned release keys and the first installer you ran.
 - **A moment with a free port.** During an update restart the gate's port is free for a moment. A program that takes it is stopped and the gate started again, but a fast program could win that moment again (and is stopped again). Handing the open port from launchd or systemd to the gate, so it is never free, is not built: the gate forbids unsafe code.
-- **No expiry on the signed list.** Someone who controls a download mirror could keep serving an old, validly signed `release.txt`. The job then reports `up to date` and never sees the newer release (a freeze). Compare the version in `status` with the product's Releases page now and then.
+- **A freeze shows only when the list expires.** Someone who controls a download mirror could keep serving an old, validly signed `release2.txt`. Until it expires (at most 180 days after it was signed) the job reports `up to date`; after that, it reports that the list expired. Installs from before `release2.txt` read `release.txt`, which has no expiry, until they update once.
+- **A release at least every 180 days.** Otherwise the latest list expires and every install reports it (the gate keeps running, and nothing is installed).
+- **First install: P-256 only.** A first install checks the P-256 signature. The ML-DSA signature is checked by the installed program, from the next update on.
 - **Daily network use.** With automatic updates on, the secure install contacts `github.com` once a day ([privacy](privacy.md#what-leaves-your-machine)). The gate itself still makes no network calls.
 - **Restarts.** An installed update restarts the gate at the job's time, with the effects [above](#what-automatic-updates-need).
 

@@ -293,12 +293,14 @@ The secure install updates itself once a day, and installs a release only if all
 | Layer | Where | What |
 |---|---|---|
 | Shared test vectors | Base | 123 cases (55 approvals, 25 key histories, 43 standing approvals) that the Rust and JavaScript checkers must both pass |
+| Wycheproof | Base | Google's known-hard cases: 746 for P-256 in both checkers, 210 for ML-DSA-65 |
+| Cross-check | Base | SimpleWebAuthn, an independent WebAuthn library, agrees on every approval vector |
 | Property tests | Base | 6 properties, 2000 random cases each |
-| Fuzzing | Base | 4 targets (verifier, strict parser, key history, standing), 60 s each in CI |
-| Mutation testing | Base | `cargo-mutants` on the verifier; surviving mutants became tests |
-| Supply chain | Base | `cargo-deny`: advisories and a licence allowlist |
-| End to end | Each product | Phygital Key MCP: 108 checks with real Chromium, a virtual passkey and the official MCP SDK, including attacks |
-| Secure install | Each product | 30 checks: installed for real on macOS and Linux in the product's CI, then attacked as the user; update job, signature refusal, a planted `~/.curlrc` and `PATH`, and switch-back checked |
+| Fuzzing | Base | 4 targets (verifier, strict parser, key history, standing), 60 s each in CI, 30 min each every week |
+| Mutation testing | Base | `cargo-mutants` on the verifier: 341 mutants, every real gap now caught by a test |
+| Supply chain | Base | `cargo-deny`: advisories and a licence allowlist; ShellCheck on the installers, zizmor on the workflows |
+| End to end | Each product | Phygital Key MCP: 111 checks with real Chromium, a virtual passkey and the official MCP SDK, including attacks; 16 more in Firefox and WebKit; 16 abuse checks (floods, huge and slow requests) |
+| Secure install | Each product | 34 checks on Linux, 32 on macOS: installed for real in the product's CI, then attacked as the user; update job (started by systemd and launchd), signature refusal, a planted `~/.curlrc` and `PATH`, switch-back and the sandbox score checked |
 
 The base CI runs on every push on Linux, macOS and Windows. Each product's CI runs its own checks on every push, and again after each daily base update. Details: [testing](docs/testing.md), [security reviews](docs/security-reviews.md), [threat model](docs/threat-model.md). Found a problem? [Report it privately](SECURITY.md).
 
