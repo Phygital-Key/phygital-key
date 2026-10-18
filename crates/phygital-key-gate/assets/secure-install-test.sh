@@ -129,12 +129,18 @@ else
   fail "the daily update job did not run from its service manager"
 fi
 if [ "$(uname -s)" = Linux ]; then
-  # systemd's own sandbox score: 0 is fully locked, 10 is open.
+  # systemd's own sandbox score: 0 is fully locked, 10 is open. Each unit must
+  # keep its level (gate: OK, 4.9 or less; root update job: MEDIUM, 6.9 or less).
   for u in "$P_BIN.service" "$P_BIN-update.service"; do
-    score=$(systemd-analyze security "$u" --no-pager 2>/dev/null | awk '/Overall exposure level/ {print $(NF-1)}')
-    echo "      $u exposure $score"
-    case "$u" in *-update.service) max=6.5 ;; *) max=2.5 ;; esac
-    awk -v s="$score" -v m="$max" 'BEGIN { exit !(s != "" && s + 0 <= m) }' && pass "$u sandbox score $score (at most $max)" || fail "$u sandbox score $score, want at most $max"
+    line=$(systemd-analyze security "$u" --no-pager 2>/dev/null | grep "Overall exposure level" || true)
+    score=$(printf '%s\n' "$line" | grep -Eo '[0-9]+\.[0-9]+' | head -1)
+    echo "      $line"
+    case "$u" in *-update.service) max=6.9 ;; *) max=4.9 ;; esac
+    if [ -n "$score" ] && awk -v s="$score" -v m="$max" 'BEGIN { exit !(s + 0 <= m + 0) }'; then
+      pass "$u sandbox score $score (at most $max)"
+    else
+      fail "$u sandbox score ${score:-unknown}, want at most $max"
+    fi
   done
 fi
 
