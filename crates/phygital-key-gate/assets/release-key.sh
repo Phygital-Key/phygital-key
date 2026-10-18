@@ -13,9 +13,6 @@
 #      release run for a v* tag can read it. Then it deletes the local copy.
 #   4. Pins the public key in release-keys.pem and the installers (commit that change).
 # From then on, only releases signed by that key install or update.
-#
-# Protect your GitHub account well (two-factor sign-in, ideally a passkey): whoever
-# controls it can push a release tag.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # Generated for one product from the template in Phygital-Key/phygital-key.

@@ -35,7 +35,7 @@ Each product signs its own releases, in its own repository, with its own key. Th
 3. The job computes every SHA-256 itself, signs `release.txt`, checks the signature against the keys pinned in that commit, and publishes the release with `release.txt` and `release.txt.sig`.
 4. After that, the `container` job builds the container image from the two Linux archives of the same release, pushes it as `vX.Y.Z` and `latest`, and publishes a build provenance attestation for it: `gh attestation verify oci://ghcr.io/phygital-key/phygital-key-mcp:vX.Y.Z --repo Phygital-Key/phygital-key-mcp`. The image itself is not in `release.txt` and is not signed with the release key.
 
-The release key exists only as that GitHub secret: no copy on any computer, no passphrase. So a swapped file, a mirror, a stolen workflow token or a pull request cannot make an update that installs. Someone who takes over the owner's GitHub account, or a token with admin rights, can: while the approval step is off, one `v*` tag push is enough. The owner's GitHub sign-in (two-factor) is what stands in the way, and you can turn automatic updates off. See [docs/updates.md](docs/updates.md), and [the update channel](docs/threat-model.md#the-update-channel) for what the signature protects and what it does not.
+The release key exists only as that GitHub secret: no copy on any computer, no passphrase. So a swapped file, a mirror, a stolen workflow token or a pull request cannot make an update that installs. You can turn automatic updates off. See [docs/updates.md](docs/updates.md), and [the update channel](docs/threat-model.md#the-update-channel) for what the signature protects and what it does not.
 
 ## Reporting a problem
 
@@ -87,7 +87,7 @@ In scope:
 
 Out of scope:
 
-- What the [threat model](docs/threat-model.md) lists as trusted or as a known limit: a compromised device, authenticator or gate machine; the 60-second window after a revoke; signed-not-encrypted requests; no hardware attestation; an audit log rewritten in full; updates held back (a freeze); a bad release that was signed with a release key and starts; a release made by someone in control of the owner's GitHub account.
+- What the [threat model](docs/threat-model.md) lists as trusted or as a known limit: a compromised device, authenticator or gate machine; the 60-second window after a revoke; signed-not-encrypted requests; no hardware attestation; an audit log rewritten in full; updates held back (a freeze); a bad release that was signed with a release key and starts.
 - A service that does not call the verifier, or calls it with the agent's idea of the audience, request or level.
 - A person approving a harmful request after reading it.
 - An AI model following instructions hidden in data. Phygital Key's answer is that text never counts as a yes; better page warnings are welcome as normal issues.

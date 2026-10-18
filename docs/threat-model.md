@@ -94,7 +94,7 @@ Each arrow that crosses a box is a trust boundary:
 2. **Gate to person.** The approval page shows the canonical request built by the gate, never text written by the agent. The page computes the challenge itself and refuses to sign if the claims differ from what it shows.
 3. **Person's device.** The key signs inside the authenticator. WebAuthn binds it to the approval page's domain (the RP ID).
 4. **Agent to service.** The service trusts nothing the agent says. It decides the audience, the exact request it is about to run, and the level, then checks the approval against its own keyring copy and records the id so it works once. See [how it works](how-it-works.md) and [architecture](architecture.md).
-5. **Release channel to gate machine.** GitHub's download servers, mirrors and anything in between are not trusted: only a signature by a release key pinned in the program already installed lets new code in. The release key itself is held by GitHub, so the owner's GitHub account is trusted. The next section covers it.
+5. **Release channel to gate machine.** GitHub's download servers, mirrors and anything in between are not trusted: only a signature by a release key pinned in the program already installed lets new code in. The release key itself is held by GitHub. The next section covers it.
 
 ## The update channel
 
@@ -136,7 +136,6 @@ What the daily job does, in order (from the template `crates/phygital-key-gate/a
 | Attacker | What they can do | What they cannot do | Proved by |
 |---|---|---|---|
 | Someone who takes over a download mirror or the connection | Replace archives, `.sha256` files and `release.txt` | Make a list that verifies: they have no release key. The update is refused and recorded as `update refused`. | Secure install "refuses a release list signed by an unknown key"; Rust test `refused_when_changed_wrong_key_or_unsigned` |
-| Someone who takes over the owner's GitHub account or an admin token (or a repository admin) | Push a `v*` tag and get a signed release with any code they put in that commit, with no second step while the approval is off. Every secure install with automatic updates on installs it within about a day | Hide it: the release is public, and its build record shows which workflow built each file from which commit (`gh attestation verify`). Install an older version (the version check). Reach a machine with automatic updates off | Nothing in code stops this. What protects: the owner's GitHub sign-in (two-factor, ideally a passkey). The approval step that also stood here is off for now (decision 36) |
 | Someone with a stolen workflow token, or a pull request | Run workflows, or change files in a pull request | Read `RELEASE_SIGNING_KEY`: GitHub gives environment secrets only to runs from `v*` tags (the environment's tag rule set by `scripts/release-key.sh`), and only repository admins can push those tags | `environment: release` in the product's `release.yml`; the environment settings in the product's `scripts/release-key.sh` (from the base template `assets/release-key.sh`); the tag ruleset (a repository setting, not in code); not run in CI |
 | A program running as you on the gate machine | Plant a `~/.curlrc` (sudo keeps `HOME` on macOS) that makes root's `curl` write any file, or a fake `curl`, `awk` or `openssl` in a folder early in your `PATH` (such as `/opt/homebrew/bin`), then wait for `curl ... \| sudo bash`, `sudo ... install-service` or `phygital-key-mcp-admin update` | Steer root: the script runs from an empty environment, resets `PATH` and `HOME`, clears the variables curl, OpenSSL, bash and the loader read, and starts every `curl` with `-q` | Secure install "root ignores the user's ~/.curlrc", "root ignores programs early in the user's PATH" |
 | A program running as you on the gate machine | Wait for an update restart, take the gate's port in the moment it is free, and serve a look-alike page | Keep the address: during the unattended update, a listener that is not the gate user is killed and the gate started again, up to 5 times; then the gate is stopped (fail closed). The result line names every program it stopped | The code in `install-service.sh` (`gate_up`); no CI check yet |
@@ -146,13 +145,12 @@ What the daily job does, in order (from the template `crates/phygital-key-gate/a
 | A bad release that was signed (a bug, or an owner mistake) | Reach every secure install with updates on | Stay installed if the new gate does not start: the previous program comes back. A signed release that starts and answers is trusted and stays. | Secure install "a failed update switches back to the previous program" |
 
 > [!CAUTION]
-> Automatic updates move trust to the release key, and so to the owner's GitHub account, which can push a `v*` tag that is signed and published with no further step. A release signed with a pinned key that starts and answers is installed as root on every secure install with updates on, within about a day (macOS: at a random time chosen at install; Linux: daily, with up to 6 hours of random delay). If you would rather review each version first, install with `--no-auto-update` and update by hand with `phygital-key-mcp-admin update` or `install-service --release vX.Y.Z`.
+> Automatic updates move trust to the release key. A release signed with a pinned key that starts and answers is installed as root on every secure install with updates on, within about a day (macOS: at a random time chosen at install; Linux: daily, with up to 6 hours of random delay). If you would rather review each version first, install with `--no-auto-update` and update by hand with `phygital-key-mcp-admin update` or `install-service --release vX.Y.Z`.
 
 Limits of the update channel, plainly:
 
 - **A freeze cannot be seen from the machine.** The signed list has no expiry date. `phygital-key-mcp-admin status` shows the latest signed release it found; compare it with the [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) page.
-- **The owner's GitHub account can ship a signed update.** The key lives in GitHub, by the owner's choice ([decision 36](decisions.md)). Whoever can push a `v*` tag with an admin account (the owner, or anything holding the owner's GitHub sign-in or token) can publish a signed release that machines with automatic updates install, with no second step: the approval click on the run is off for now. What still protects: the owner's GitHub sign-in (two-factor, ideally a passkey), the tag ruleset, the public build record, the version check, and your choice to turn automatic updates off.
-- **The first install trusts what it downloads.** The pinned keys arrive inside the install script. Someone who controls the GitHub account could serve a changed script to new installs. Machines already installed keep the keys they have.
+- **The first install trusts what it downloads.** The pinned keys arrive inside the install script. Machines already installed keep the keys they have.
 - **What the workflow builds.** A poisoned action the workflow uses could change a file before it is signed. The actions in the workflow are pinned by commit SHA to make that harder.
 - **The port is free for a moment at each update restart.** A program fast enough could win that moment again after it was killed (and would be killed again, up to 5 times, then the gate stops). Handing the open port from launchd or systemd to the gate (socket activation), so it is never free, is not built, because the gate forbids unsafe code.
 - **A standing approval delays updates.** A person's active standing approval can hold back a security update for up to 7 days. An agent cannot start this on its own.
@@ -173,7 +171,7 @@ gh attestation verify oci://ghcr.io/phygital-key/phygital-key-mcp:v0.4.0 --repo 
 
 What that does and does not cover:
 
-- **The image is not signed with the release key**, and it is not in `release.txt`. Its record of origin is the attestation: which workflow built which image digest from which commit. Trust in it rests on the owner's GitHub account and the tag ruleset, as for the release itself.
+- **The image is not signed with the release key**, and it is not in `release.txt`. Its record of origin is the attestation: which workflow built which image digest from which commit. Trust in it rests on the tag ruleset, as for the release itself.
 - **Nothing updates a container by itself.** A new release, good or bad, reaches a container only when you pull a new image and start it. Pin a `vX.Y.Z` tag to choose when.
 - **Inside the container** the gate runs as uid 65532 on a base with no shell, and its data is in the `/data` volume. Whoever controls the Docker daemon on that machine controls the container and the volume ([where to run it](#where-to-run-it)).
 
@@ -204,7 +202,7 @@ Names in the last column are real: vectors from `test-vectors/` (shared by both 
 | A revoked standing approval still used | Uses collected before the revoke | The gate throws the use key away at once. The person then signs a [revocation](glossary.md), published at `/.well-known/phygital-key-revoked.json`; services refuse with `REVOKED`. Revocations bypass the request limits and can be retried. Junk in the list is ignored. | Vectors `revoked`, `revoked_among_others`, `revocation_by_untrusted_key`, `revocation_for_other_service`; JS test "junk in a revocation list is ignored, never thrown"; e2e "revoked: no new uses, even before the revocation is signed", "after the person signs the revocation, the service refuses the standing approval" |
 | A made-up receipt | The agent reports "done" with a fake [receipt](glossary.md) | The gate records a receipt only if it is signed by the service's pinned receipt key and names the same approval, request and service. | Rust tests `round_trip_and_refusals`, `use_receipts_are_bound_to_the_use`; e2e "a receipt the agent made up is refused (signature checked)", "receipt for another approval is refused", "a receipt is recorded only once" |
 | Someone editing the record | Changes a line of the audit log | Each line holds the SHA-256 of the line before it; `phygital-key-mcp audit-check` finds the break. | Rust test `chain_detects_changes`; e2e "audit log chain is intact" |
-| Someone who controls a mirror, the connection or the release files | Replaces a release so the secure install runs their program as root | Only a release list signed by a pinned release key, for a newer version, with a matching SHA-256, is installed. Someone who controls the owner's GitHub account can get a release signed: details in [the update channel](#the-update-channel). | Secure install "refuses a release list signed by an unknown key"; Rust tests `refused_when_changed_wrong_key_or_unsigned`, `strict_format`, `versions_compare_by_number` |
+| Someone who controls a mirror, the connection or the release files | Replaces a release so the secure install runs their program as root | Only a release list signed by a pinned release key, for a newer version, with a matching SHA-256, is installed. Details in [the update channel](#the-update-channel). | Secure install "refuses a release list signed by an unknown key"; Rust tests `refused_when_changed_wrong_key_or_unsigned`, `strict_format`, `versions_compare_by_number` |
 | A crash or damage to the used-ids file | The command-line verifier forgets an id and accepts it twice | Lock file, temp file and rename, directory fsync; any damaged line refuses everything; ids kept 30 s past expiry. | Rust test `remembers_until_expiry_and_fails_closed` |
 
 ## What we trust
@@ -216,7 +214,7 @@ Names in the last column are real: vectors from `test-vectors/` (shared by both 
 | The verifier's keyring copy | It decides which keys count | Whoever can write it decides who can approve |
 | The verifier's seen store and use store | They make each approval and each use count once | A store that forgets, or is not shared between instances, allows a second use |
 | The person's judgement | They read the request and decide | A person who approves a harmful request gets a valid approval for it |
-| The release key and the owner's GitHub account | A signature by a pinned release key is what lets an update install, and a `v*` tag pushed by a repository admin is what lets a run sign | Whoever controls the owner's GitHub account can ship a program that the daily job installs as root on every secure install with updates on |
+| The release key | A signature by a pinned release key is what lets an update install, and a `v*` tag pushed by a repository admin is what lets a run sign | A release signed with it that starts is installed as root on every secure install with updates on |
 
 ## Where to run it
 
@@ -246,7 +244,7 @@ The guarantees hold only if **the agent cannot change the gate's program, the ga
 - **The audit log catches edits, not a full rewrite.** The hash chain has no secret key: someone who can write the file can rebuild every hash, or cut off the end. Keep the last hash somewhere else (a backup, a ticket) to detect that.
 - **Used ids on one machine.** The command-line verifier's `seen-ids.jsonl` serves one machine. Several instances need a shared store (use the library).
 - **Memory only.** Pending requests and standing approvals live in the gate's memory. A restart ends them all (the answer becomes no), and an automatic update is a restart.
-- **Updates trust the release key and the owner's GitHub account.** A signed release that starts is installed; the owner pushing the tag is the only review (the approval click is off for now), and the signed list has no expiry. See [the update channel](#the-update-channel).
+- **Updates trust the release key.** A signed release that starts is installed, and the signed list has no expiry. See [the update channel](#the-update-channel).
 - **A container on a desktop is not a boundary.** If your user can run `docker`, so can an agent acting as you, and it can then control the container. Use the secure install on a desktop and the container on servers.
 - **Look-alike highlighting is a help.** The real protection is that exact bytes are signed and compared.
 - **Request limits are a nuisance limit, not a fatigue cure.** A person can still be asked many times.
@@ -257,7 +255,6 @@ The guarantees hold only if **the agent cannot change the gate's program, the ga
 - An agent that can do the action without going through a verifier (for example one that already holds production credentials). Phygital Key protects services that check approvals.
 - A service that does not call `verify` or `verify_use`, or calls it with the agent's idea of the audience, request or level.
 - A compromised authenticator, person's device, or gate machine administrator.
-- A release made by someone in control of the owner's GitHub account. It is a known limit, not something the code stops (see [the update channel](#the-update-channel)).
 - A request the person reads and approves, even if it is harmful.
 - Denial of service by a program on the gate machine (it can deny, cancel or fill limits; it cannot approve).
 - Not built, by decision: encrypted requests (decision 33), hardware-attestation checks (decision 35), AP2 or SD-JWT export (decision 28, mapping in [AP2](ap2.md)), 2-of-3 approvers (the format is ready), a Windows secure install.

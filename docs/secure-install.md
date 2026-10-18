@@ -292,7 +292,7 @@ Then [install](#install) the product and enroll your key again. Moving the old k
 - **This machine only.** The service serves `http://localhost:<port>` and, on Linux, may only talk to this machine. To approve from other devices over https, see [own server](own-server.md) (without the secure install's protections for now).
 - **The token is readable by the AI.** The access token ends up in your AI app's settings. It keeps other programs out, not the agent; the agent can only ask anyway.
 - **Root and the machine are trusted.** Whoever is root (or controls the machine) controls the gate and the page it serves. So does malware running as root.
-- **The release keys are trusted.** Updates install whatever a pinned release key of the product signed. The keys come from the installer you first ran. The release key is held by GitHub, so whoever controls the repository owner's GitHub account (or a token with admin rights) can push a `v*` tag and ship a signed update, with no approval step for now ([the update channel](threat-model.md#the-update-channel)).
+- **The release keys are trusted.** Updates install whatever a pinned release key of the product signed. The keys come from the installer you first ran. See [the update channel](threat-model.md#the-update-channel).
 - **It contacts GitHub daily** while automatic updates are on ([privacy](privacy.md#what-leaves-your-machine)). The gate itself makes no network calls.
 - **Automatic updates are new.** No product release has been installed by the daily job against GitHub yet. Until then, CI tests the parts on their own (below).
 - **Restarts end standing approvals** and drop waiting requests (fail closed). An automatic update restarts the gate at the job's time.
