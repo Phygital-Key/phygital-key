@@ -117,3 +117,55 @@ jobs:
             dist/release.txt
             dist/release.txt.sig
           generate_release_notes: true
+
+  container:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write       # push ghcr.io/phygital-key/phygital-key
+      id-token: write       # build provenance for the image
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          merge-multiple: true
+          path: dist
+      - name: Unpack the released Linux binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="$GITHUB_REF_NAME"
+          ctx=packaging/container
+          mkdir -p "$ctx/data" "$ctx/bin/amd64" "$ctx/bin/arm64"
+          for pair in "amd64 x86_64" "arm64 aarch64"; do
+            set -- $pair
+            n="phygital-key-$V-$2-unknown-linux-gnu"
+            tar --no-same-owner -xzf "dist/$n.tar.gz" -C "$RUNNER_TEMP"
+            install -m 0755 "$RUNNER_TEMP/$n/phygital-key" "$ctx/bin/$1/phygital-key"
+          done
+          cp NOTICE LICENSE "$ctx/"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: packaging/container
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/phygital-key/phygital-key:${{ github.ref_name }}
+            ghcr.io/phygital-key/phygital-key:latest
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/phygital-key/phygital-key
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

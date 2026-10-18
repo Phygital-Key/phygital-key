@@ -5,3 +5,7 @@ node_modules/
 *.log
 /examples/*/target
 /examples/*/Cargo.lock
+packaging/container/bin/
+packaging/container/data/
+packaging/container/NOTICE
+packaging/container/LICENSE

@@ -53,6 +53,34 @@ phygital-key --origin https://approve.example.com enroll
 phygital-key --origin https://approve.example.com mcp-token
 ```
 
+## Run it in a container
+
+From v0.3.0 each release also ships a container image, `ghcr.io/phygital-key/phygital-key` (Linux, amd64 and arm64). The release workflow builds it from the same Linux binaries the signed release contains, after the owner's approval, and publishes a build provenance record for it. It runs as an unprivileged user (uid 65532) on a distroless base, with the data folder at `/data`.
+
+```bash
+docker run -d --name phygital-key --restart unless-stopped \
+  -p 127.0.0.1:7468:7468 \
+  -e PHYGITAL_KEY_ORIGIN=https://approve.example.com \
+  -v phygital-key:/data \
+  ghcr.io/phygital-key/phygital-key:latest
+docker exec -it phygital-key phygital-key enroll
+docker exec -it phygital-key phygital-key mcp-token
+```
+
+| Point | Why |
+|---|---|
+| `-p 127.0.0.1:7468:7468` | Publish the port on loopback only, and let the TLS proxy below reach it. Inside the container the gate listens on all addresses so Docker can forward to it |
+| `-e PHYGITAL_KEY_ORIGIN=...` | The public `https` address. `docker exec` uses the same environment, so the enrollment link and the MCP line come out right |
+| `-v phygital-key:/data` | Keyring, audit log, MCP token and revocations live in this volume. Back it up like the data folder below |
+| `:latest` or `:v0.3.0` | Pin a version tag for a server you update on purpose |
+
+Update by pulling the new image and starting a new container on the same volume: `docker pull ghcr.io/phygital-key/phygital-key:latest`, then `docker rm -f phygital-key` and the `docker run` line again. The secure install's automatic updates do not apply to containers, and `phygital-key update` cannot replace the program inside the image.
+
+Check where an image came from: `gh attestation verify oci://ghcr.io/phygital-key/phygital-key:v0.3.0 --repo Phygital-Key/phygital-key-mcp`.
+
+> [!WARNING]
+> On your own computer, a container does not keep the gate out of the AI's reach: if your user can run `docker`, so can an agent acting as you, and Docker access is as strong as administrator access. On a desktop, use the [secure install](secure-install.md). The container is for servers where AI agents do not run.
+
 ## The TLS proxy
 
 The proxy ends TLS and forwards plain HTTP to the gate on the same machine. The gate checks two headers on everything it receives, so the proxy must pass them through as the browser sent them:

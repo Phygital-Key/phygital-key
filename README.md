@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/brand/phygital-key-mark.svg" alt="Phygital Key logo: a key inside a round seal, with two wires ending in coral sparks" width="96"></p>
+<p align="center"><img src="docs/images/promo/hero.png" alt="Phygital Key. The AI can ask. Only you can approve. Beside the headline, a service checks a deploy request: the agent asks, you approve with a fingerprint, eight checks pass, and the agent resending a changed version is refused with REQUEST_MISMATCH." width="100%"></p>
 
 <h1 align="center">Phygital Key</h1>
 
@@ -67,6 +67,8 @@ Phygital Key gives the service proof it can check:
 
 ## How it works
 
+<p align="center"><img src="docs/images/promo/how.png" alt="Four roles, one signed yes: the agent asks, the gate shows every field and can never approve, you approve with your fingerprint, face, PIN or key, the service checks the signed yes offline and acts." width="100%"></p>
+
 ```mermaid
 sequenceDiagram
     participant A as AI agent
@@ -104,6 +106,7 @@ Install (pick one):
 | macOS, Linux (script) | `curl -fsSL https://raw.githubusercontent.com/Phygital-Key/phygital-key-mcp/main/install.sh \| sh` |
 | Windows (Scoop) | `scoop bucket add phygital-key https://github.com/Phygital-Key/phygital-key-mcp` then `scoop install phygital-key` |
 | Anywhere with Rust | `cargo install --locked --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key` |
+| Server (Docker) | `docker run -d -p 127.0.0.1:7468:7468 -v phygital-key:/data ghcr.io/phygital-key/phygital-key` ([details](docs/own-server.md#run-it-in-a-container)) |
 | Manual | Download from [Releases](https://github.com/Phygital-Key/phygital-key-mcp/releases) (each file has a `.sha256`) |
 
 The script checks that the release's file list is signed by a pinned release key and that the download matches its SHA-256, then writes only `~/.local/bin/phygital-key` (it needs `openssl`). Update it later with `phygital-key update`.
@@ -167,6 +170,8 @@ The agent gets six tools. It can ask, wait, cancel and report. It can never appr
 For agent builders: [agents guide](docs/agents.md), [tool reference](docs/tools.md), [prompt snippets](examples/agent-prompts.md).
 
 ## Check approvals in your service
+
+<p align="center"><img src="docs/images/promo/check.png" alt="Check it anywhere: the same check in Rust, in JavaScript with no dependencies, and from the command line with exit code 0 for ok and 1 for a refusal such as REPLAYED." width="100%"></p>
 
 The service is the verifier. It checks the approval against the request **it** is about to run, built from its own data.
 
@@ -250,6 +255,8 @@ phygital-key keys --check <fingerprint> --file new.json --signed-on https://appr
 
 ### Out of the AI's reach
 
+<p align="center"><img src="docs/images/promo/reach.png" alt="Out of the AI's reach: you, and any AI acting as you, are refused when trying to change the gate's program, read its data, write its keys or serve a fake page on its port. Only the administrator password crosses into the gate's own user." width="100%"></p>
+
 An AI agent on your computer runs as you, so it could edit files you own. The secure install moves the gate out of that reach (macOS and Linux). From a fresh terminal:
 
 ```bash
@@ -296,6 +303,8 @@ The secure install updates itself once a day, and installs a release only if all
 Every push runs all of it on Linux, macOS and Windows. Details: [testing](docs/testing.md), [security reviews](docs/security-reviews.md), [threat model](docs/threat-model.md). Found a problem? [Report it privately](SECURITY.md).
 
 ## Standing approvals
+
+<p align="center"><img src="docs/images/promo/standing.png" alt="Say yes once, with limits: a signed, active standing approval to pay ACME Ltd in EUR, 1 to 2000 cents, at most 5 uses in 7 days, used 2 of 5; an amount of 5000 is refused with NOT_ALLOWED." width="100%"></p>
 
 For small repeated actions, approve once, with limits:
 

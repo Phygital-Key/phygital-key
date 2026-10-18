@@ -27,6 +27,7 @@ phygital-key 0.3.0
 | cargo | When you run the command | `phygital-key update`, or build again: `cargo install --locked --force --git https://github.com/Phygital-Key/phygital-key-mcp phygital-key` |
 | Homebrew | With Homebrew | `brew update` then `brew upgrade phygital-key` |
 | Scoop (Windows) | With Scoop | `scoop update` then `scoop update phygital-key` |
+| Container (`ghcr.io/phygital-key/phygital-key`) | When you pull a new image | `docker pull ghcr.io/phygital-key/phygital-key:latest`, then start a new container on the same volume ([how](own-server.md#run-it-in-a-container)) |
 | By hand | When you download it | Download the new archive, [check it](#check-a-download-yourself), replace the program file |
 
 Each install is updated on its own. Updating your own `phygital-key` (Homebrew, the script, cargo) does not update the secure install, which runs its own locked copy, and the other way round.

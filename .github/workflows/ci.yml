@@ -81,6 +81,32 @@ jobs:
       - run: cargo build --manifest-path examples/rust-service/Cargo.toml
       - run: ruby -ryaml -e 'YAML.safe_load(File.read("examples/ci-approval/example-deploy.yml"))'
 
+  container:
+    name: container image (build and start)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - run: cargo build --release --locked -p phygital-key
+      - name: Build the image and start the gate in it
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctx=packaging/container
+          mkdir -p "$ctx/bin/amd64" "$ctx/data"
+          install -m 0755 target/release/phygital-key "$ctx/bin/amd64/phygital-key"
+          cp NOTICE LICENSE "$ctx/"
+          docker build --platform linux/amd64 -t pk-ci "$ctx"
+          docker run --rm pk-ci --version
+          docker run -d --name pk -p 127.0.0.1:7468:7468 pk-ci
+          for _ in $(seq 1 30); do curl -fsS http://localhost:7468/api/status >/dev/null && break; sleep 1; done
+          curl -fsS http://localhost:7468/api/status
+          [ "$(docker inspect --format '{{.Config.User}}' pk-ci)" = 65532:65532 ] || { echo "image does not run as the nonroot user"; exit 1; }
+          docker exec pk phygital-key enroll | grep -q 'http://localhost:7468/enroll#token='
+          docker rm -f pk
+
   e2e:
     name: end-to-end and red team
     runs-on: ubuntu-latest
