@@ -42,11 +42,16 @@ make_pq_key() {
   if grep -q -- "-----BEGIN ML-DSA-65 PUBLIC KEY-----" release-keys.pem 2>/dev/null; then
     echo "An ML-DSA release key is already pinned. Not making another one."; return 0
   fi
-  echo "Building the program to make the ML-DSA key"
-  cargo build -q --release --locked
+  echo "Building the program and making the ML-DSA key"
+  # cargo run finds the program wherever cargo builds it. The seed stays in this
+  # shell's memory only, and is checked before anything is stored.
+  seed=$(cargo run -q --release --locked -- release-keygen-pq --public-out "$T/pq.pem") || seed=""
+  if ! [[ "$seed" =~ ^[A-Za-z0-9+/]{43}=$ ]] || ! grep -q "BEGIN ML-DSA-65 PUBLIC KEY" "$T/pq.pem" 2>/dev/null; then
+    seed=""; echo "Making the ML-DSA key failed. Nothing was stored or pinned."; exit 1
+  fi
   echo "Storing the ML-DSA key as the secret RELEASE_MLDSA_KEY of the environment \"release\""
-  "target/release/$P_BIN" release-keygen-pq --public-out "$T/pq.pem" |
-    gh secret set RELEASE_MLDSA_KEY --env release --repo "$REPO"
+  printf '%s' "$seed" | gh secret set RELEASE_MLDSA_KEY --env release --repo "$REPO"
+  seed=""
   cat "$T/pq.pem" >> release-keys.pem
   echo "Pinned the ML-DSA public key in release-keys.pem; writing the installers again"
   cargo run -q --release -- product-files --out .
