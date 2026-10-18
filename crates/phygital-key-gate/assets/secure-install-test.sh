@@ -188,8 +188,13 @@ if [ -e /tmp/pka-path-planted ]; then fail "root ran a program from the user's P
 # A new program that does not start is switched back to the previous one.
 printf '#!/bin/sh\nexit 1\n' > /tmp/pka-broken
 sudo install -m 0755 -o root /tmp/pka-broken "$CI_DIR/broken"; rm -f /tmp/pka-broken
-if sudo "$CI_DIR/$P_BIN" install-service --binary "$CI_DIR/broken" >/dev/null 2>&1; then fail "installed a program that does not start"; fi
-[ "$("$BIN" --version)" = "$before" ] && curl -fsS "http://localhost:$PORT/api/status" >/dev/null && pass "a failed update switches back to the previous program" || fail "no switch back after a failed update"
+if out=$(sudo "$CI_DIR/$P_BIN" install-service --binary "$CI_DIR/broken" 2>&1); then fail "installed a program that does not start"; fi
+if [ "$("$BIN" --version)" = "$before" ] && curl -fsS "http://localhost:$PORT/api/status" >/dev/null; then
+  pass "a failed update switches back to the previous program"
+else
+  echo "--- the installer said:"; printf '%s\n' "${out:-}"
+  fail "no switch back after a failed update"
+fi
 
 # Turning updates off is remembered on the next install.
 "${INSTALL[@]}" --no-auto-update >/dev/null

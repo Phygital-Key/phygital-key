@@ -120,7 +120,8 @@ enum Command {
     /// Print the trusted public key cards (give this to services that verify).
     Keys {
         /// Check a keyring's signed history against the first key's fingerprint.
-        #[arg(long, value_name = "FINGERPRINT")]
+        // base64url: a fingerprint can start with '-', which is not an option here.
+        #[arg(long, value_name = "FINGERPRINT", allow_hyphen_values = true)]
         check: Option<String>,
         /// Keyring file to print or check [default: <home>/keyring.json].
         #[arg(long)]
@@ -728,5 +729,25 @@ pub fn run(p: &'static Product, adapter: impl Adapter) -> ! {
             eprintln!("{}: {e}", p.bin);
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A base64url fingerprint can start with '-'; it is the value, not an option.
+    #[test]
+    fn a_fingerprint_starting_with_a_dash_is_a_value() {
+        let cli = Cli::try_parse_from([
+            "prog",
+            "keys",
+            "--check",
+            "-0Mvl9wRvwrucZ4ALYRJ8-Qh29dXAMshfN_gMEuXXhg",
+        ]);
+        assert!(
+            matches!(cli.map(|c| c.command), Ok(Command::Keys { check: Some(ref f), .. }) if f.starts_with("-0Mvl")),
+            "parsed as the fingerprint"
+        );
     }
 }
