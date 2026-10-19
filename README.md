@@ -46,9 +46,6 @@
 <a href="#all-the-guides">All guides</a>
 </p>
 
-> [!WARNING]
-> **Not audited yet.** No outside security company has checked it so far. It has had nine separate AI security reviews, and every problem they found was fixed or written down as a known limit. It is tested on every change. Before you rely on it, read the [threat model](docs/threat-model.md) (what it protects against, and what it doesn't).
-
 <p align="center">
 <img src="docs/images/approve-dark-desktop.png" alt="The approval page in the dark theme: a deploy request for service api, version 2.4.1, environment production, with every field listed, the SHA-256 fingerprint of the exact text being signed, and Approve and Deny buttons" width="640">
 </p>
